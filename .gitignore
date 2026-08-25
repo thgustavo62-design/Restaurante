@@ -1,0 +1,17 @@
+# Banco de dados local de desenvolvimento (binários do Postgres + dados) — nunca versionar
+.devdb/
+
+# Dependências (quando o scaffold Vite/React for criado)
+node_modules/
+dist/
+build/
+
+# Variáveis de ambiente com segredos
+.env
+.env.local
+.env.*.local
+
+# Logs e arquivos de sistema
+*.log
+.DS_Store
+Thumbs.db
