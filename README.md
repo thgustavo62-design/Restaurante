@@ -31,17 +31,27 @@ caminhos usuais de instalação não existem em `PATH` nem em
 não precisam de Node para existir —, mas a partir da próxima fase (scaffold
 Vite/React) será necessário instalar o Node.js (LTS) antes de continuar.
 
-## Como aplicar as migrations (quando o projeto Supabase existir)
+## Status do Supabase
+
+As 5 migrations da Fase 0 já foram aplicadas no projeto Supabase real
+(`empresas`, `usuarios`, `papeis_permissoes`, `auditoria`, RLS e o seed de
+60 permissões do RBAC). Credenciais em `.env` (não versionado — copie de
+`.env.example`).
+
+Pendente, feito só pelo painel (não por SQL): **Authentication → Hooks →
+Custom Access Token**, apontando para `public.custom_access_token_hook` —
+é isso que injeta `empresa_id` e `papel` no JWT usados pelas policies de
+RLS.
+
+Para reaplicar/atualizar migrations futuras:
 
 ```powershell
-# com a Supabase CLI instalada e o projeto vinculado
+# via psql direto (connection string em .env, senha via Project Settings → Database)
+psql "postgresql://postgres.<ref>:<senha>@aws-0-us-west-2.pooler.supabase.com:5432/postgres" -f supabase/migrations/000X_arquivo.sql
+
+# ou, quando a Supabase CLI estiver instalada e o projeto vinculado:
 supabase db push
 ```
-
-Depois de aplicar, habilite manualmente no painel do Supabase (não é feito
-por SQL): **Authentication → Hooks → Custom Access Token**, apontando para
-`public.custom_access_token_hook` — é isso que injeta `empresa_id` e
-`papel` no JWT usados pelas policies de RLS.
 
 ## Próximos passos (após validação)
 
