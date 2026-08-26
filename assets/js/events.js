@@ -47,6 +47,7 @@ function bindEvents(){
     if(action==="toggle-mobile-catalog"){ state.draft.mobileCatalog = !state.draft.mobileCatalog; render(); return; }
     if(action==="picker-cat"){ state.draft.categoria = el.dataset.cat; render(); return; }
     if(action==="draft-mais"){ draftAlterar(el.dataset.produto, 1); return; }
+    if(action==="draft-ingrediente-toggle"){ draftToggleIngrediente(el.dataset.produto, el.dataset.nome); return; }
     if(action==="draft-menos"){ draftAlterar(el.dataset.produto, -1); return; }
     if(action==="pedido-revisar-abrir"){ state.modal={type:"revisarPedido", comandaId:state.draft.comandaId}; render(); return; }
     if(action==="pedido-revisar-voltar"){ state.modal=null; render(); return; }

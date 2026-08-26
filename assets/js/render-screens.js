@@ -148,6 +148,12 @@ function renderComanda(){
   var draftHtml = draftCount>0 ? Object.keys(state.draft.itens).map(function(pid){
     var p = state.produtos.find(function(x){ return x.id===pid; });
     var d = state.draft.itens[pid];
+    var chipsHtml = '<div class="ingrediente-chips">'+INGREDIENTES_COMUNS.map(function(nome){
+      var ativo = (d.semItens||[]).indexOf(nome)!==-1;
+      return '<button type="button" class="ingrediente-chip '+(ativo?"ativo":"")+'" data-action="draft-ingrediente-toggle" data-produto="'+pid+'" data-nome="'+nome+'">'+
+        (ativo?'SEM ':'')+escapeHtml(nome)+
+      '</button>';
+    }).join("")+'</div>';
     return '<div class="draft-line">'+
       '<div class="draft-line-top"><div class="nome">'+escapeHtml(p.nome)+'</div>'+
         '<div class="qty-ctrl">'+
@@ -155,7 +161,8 @@ function renderComanda(){
           '<span>'+d.qtd+'</span>'+
           '<button data-action="draft-mais" data-produto="'+pid+'">'+icon("plus",13)+'</button>'+
         '</div></div>'+
-      '<input class="obs-input" id="obs-'+pid+'" data-action="draft-obs" data-produto="'+pid+'" placeholder="Observação (ex: sem cebola)" value="'+escapeHtml(d.obs)+'">'+
+      chipsHtml+
+      '<input class="obs-input" id="obs-'+pid+'" data-action="draft-obs" data-produto="'+pid+'" placeholder="Observação extra (ex: ponto da carne)" value="'+escapeHtml(d.obs)+'">'+
     '</div>';
   }).join("") : '<div class="empty-hint" style="padding:16px;">Toque num produto para adicionar.</div>';
 

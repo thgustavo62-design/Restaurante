@@ -29,9 +29,10 @@ function renderRevisarPedidoModal(m){
     var d = itens[pid];
     var subtotal = p.precoCentavos * d.qtd;
     total += subtotal;
+    var obsFinal = draftObsFinal(pid, d);
     return '<div class="item-row">'+
       '<div class="info"><div class="nome">'+d.qtd+'x '+escapeHtml(p.nome)+'</div>'+
-      (d.obs ? '<div class="obs">'+escapeHtml(d.obs)+'</div>' : '')+
+      (obsFinal ? '<div class="obs">'+escapeHtml(obsFinal)+'</div>' : '')+
       '</div>'+
       '<div class="preco">'+brl(subtotal)+'</div>'+
     '</div>';

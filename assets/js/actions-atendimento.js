@@ -58,11 +58,25 @@ function draftAlterar(produtoId, delta){
   var atual = d[produtoId] ? d[produtoId].qtd : 0;
   var novo = Math.max(0, atual + delta);
   if(novo===0) delete d[produtoId];
-  else d[produtoId] = {qtd:novo, obs:(d[produtoId]&&d[produtoId].obs)||""};
+  else d[produtoId] = {qtd:novo, obs:(d[produtoId]&&d[produtoId].obs)||"", semItens:(d[produtoId]&&d[produtoId].semItens)||[]};
   render();
 }
 function draftObs(produtoId, texto){
   if(state.draft.itens[produtoId]) state.draft.itens[produtoId].obs = texto;
+}
+function draftToggleIngrediente(produtoId, nome){
+  var d = state.draft.itens[produtoId];
+  if(!d) return;
+  if(!d.semItens) d.semItens = [];
+  var idx = d.semItens.indexOf(nome);
+  if(idx===-1) d.semItens.push(nome); else d.semItens.splice(idx,1);
+  render();
+}
+function draftObsFinal(produtoId, d){
+  var partes = [];
+  if((d.semItens||[]).length) partes.push("SEM "+d.semItens.join(", ").toUpperCase());
+  if((d.obs||"").trim()) partes.push(d.obs.trim());
+  return partes.join(" · ");
 }
 async function enviarPedido(){
   var comanda = state.comandas.find(function(c){ return c.id===state.draft.comandaId; });
@@ -71,7 +85,7 @@ async function enviarPedido(){
     var produto = state.produtos.find(function(p){ return p.id===produtoId; });
     return {
       comanda_id: comanda.id, produto_id: produtoId, nome: produto.nome,
-      observacao: (itens[produtoId].obs||"").trim(), quantidade: itens[produtoId].qtd,
+      observacao: draftObsFinal(produtoId, itens[produtoId]), quantidade: itens[produtoId].qtd,
       preco_unit_centavos: produto.precoCentavos, status:"PENDENTE", usuario_id: state.usuarioAtualId
     };
   });

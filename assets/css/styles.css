@@ -239,6 +239,14 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .qty-ctrl button{width:28px; height:28px; border-radius:3px; border:1px solid var(--border); background:var(--surface-03); color:var(--text-primary); cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center;}
 .qty-ctrl span{min-width:16px; text-align:center; font-weight:700; font-size:13px;}
 .draft-line .obs-input{width:100%; margin-top:8px; background:var(--surface-03); border:1px solid var(--border); border-radius:3px; color:var(--text-primary); font-size:11.5px; padding:6px 8px;}
+.ingrediente-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+.ingrediente-chip{
+  background:var(--surface-03); border:1px solid var(--border); color:var(--text-secondary);
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
+  padding:5px 10px; border-radius:12px; cursor:pointer;
+}
+.ingrediente-chip:hover{border-color:var(--danger);}
+.ingrediente-chip.ativo{background:rgba(216,58,50,.15); border-color:var(--danger); color:var(--danger); text-decoration:line-through;}
 
 .item-row{display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--border); font-size:12.5px;}
 .item-row:last-child{border-bottom:none;}

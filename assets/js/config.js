@@ -6,6 +6,7 @@ var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: true }
 });
 var PIN_LEN = 4;
+var INGREDIENTES_COMUNS = ["Cebola","Tomate","Alface","Pimenta","Molho","Maionese","Coentro","Alho","Queijo","Bacon"];
 function limiteDescontoPct(){ return state.config.limiteDescontoPct; }
 function limiteDiferencaCentavos(){ return state.config.limiteDiferencaCentavos; }
 
