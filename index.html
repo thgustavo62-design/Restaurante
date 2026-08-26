@@ -372,6 +372,23 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .empty-hint{color:var(--text-muted); font-size:13px; text-align:center; padding:36px 12px;}
 .empty-hint svg{display:block; margin:0 auto 10px; color:var(--text-muted); opacity:.6;}
 
+/* ---------- impressão (comprovante / fechamento) ---------- */
+.print-only{display:none;}
+.receipt-preview{background:#fff; color:#111; font-family:'Courier New',monospace; font-size:11.5px; line-height:1.5; padding:16px; border-radius:4px; max-width:320px; margin:0 auto;}
+.receipt-preview hr{border:none; border-top:1px dashed #111; margin:8px 0;}
+.receipt-preview .center{text-align:center;}
+.receipt-preview .bold{font-weight:700;}
+.receipt-preview .line{display:flex; justify-content:space-between; gap:8px;}
+@media print{
+  @page{ margin:4mm; }
+  body *{ visibility:hidden; }
+  .print-only, .print-only *{ visibility:visible; }
+  .print-only{
+    display:block; position:absolute; top:0; left:0; width:100%;
+    background:#fff; color:#000; font-family:'Courier New',monospace; font-size:11px; line-height:1.4;
+  }
+}
+
 /* ---------- toasts ---------- */
 .toast-wrap{position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index:200; max-width:320px;}
 @media(max-width:759px){ .toast-wrap{left:16px; right:16px; bottom:76px; max-width:none;} }
@@ -395,11 +412,16 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 <body>
 <div id="app"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 (function(){
 "use strict";
 
-var STORAGE_KEY = "restauranteProtoState_v3";
+var SUPABASE_URL = "https://enmfjfhqqvezyaieotjb.supabase.co";
+var SUPABASE_KEY = "sb_publishable_2JWVIHWn7VxrbnAnWrfLWg_y-TLYZ2o";
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: true }
+});
 var PIN_LEN = 4;
 function limiteDescontoPct(){ return state.config.limiteDescontoPct; }
 function limiteDiferencaCentavos(){ return state.config.limiteDiferencaCentavos; }
@@ -502,101 +524,19 @@ function diasA(n){
   return d.toISOString().slice(0,10);
 }
 
-function seed(){
-  var usuarios = [
-    {id:"u1", nome:"Ana", papel:"ADMIN", pin:"1234", ativo:true},
-    {id:"u2", nome:"Bruno", papel:"GERENTE", pin:"1234", ativo:true},
-    {id:"u3", nome:"Carla", papel:"CAIXA", pin:"1234", ativo:true},
-    {id:"u4", nome:"Diego", papel:"GARCOM", pin:"1234", ativo:true},
-    {id:"u5", nome:"Eva", papel:"COZINHA", pin:"1234", ativo:true}
-  ];
+function emailInterno(nome){
+  return nome.trim().toLowerCase().replace(/[^a-z0-9]/g,"") + "@fogo.internal";
+}
 
-  var categorias = ["Entradas","Carnes","Acompanhamentos","Saladas","Bebidas","Drinks","Sobremesas"];
-  var produtos = [
-    {id:"p1", nome:"Pão de Alho na Brasa", categoria:"Entradas", precoCentavos:1800},
-    {id:"p2", nome:"Carpaccio de Picanha", categoria:"Entradas", precoCentavos:3400},
-    {id:"p3", nome:"Bolinho de Costela (8un)", categoria:"Entradas", precoCentavos:3200},
-    {id:"p4", nome:"Provolone na Chapa", categoria:"Entradas", precoCentavos:2900},
-    {id:"p5", nome:"Torresmo de Barriga", categoria:"Entradas", precoCentavos:2600},
-
-    {id:"p6", nome:"Picanha na Brasa (300g)", categoria:"Carnes", precoCentavos:8900},
-    {id:"p7", nome:"Costela Bovina 12h", categoria:"Carnes", precoCentavos:7900},
-    {id:"p8", nome:"Fraldinha Grelhada", categoria:"Carnes", precoCentavos:6900},
-    {id:"p9", nome:"Ancho Premium", categoria:"Carnes", precoCentavos:9400},
-    {id:"p10", nome:"Linguiça Artesanal", categoria:"Carnes", precoCentavos:3800},
-    {id:"p11", nome:"Frango Caipira na Brasa", categoria:"Carnes", precoCentavos:5200},
-    {id:"p12", nome:"Cupim Desfiado", categoria:"Carnes", precoCentavos:7400},
-
-    {id:"p13", nome:"Farofa de Bacon", categoria:"Acompanhamentos", precoCentavos:1600},
-    {id:"p14", nome:"Arroz Carreteiro", categoria:"Acompanhamentos", precoCentavos:1800},
-    {id:"p15", nome:"Vinagrete da Casa", categoria:"Acompanhamentos", precoCentavos:1200},
-    {id:"p16", nome:"Mandioca Frita", categoria:"Acompanhamentos", precoCentavos:2200},
-    {id:"p17", nome:"Batata Rústica", categoria:"Acompanhamentos", precoCentavos:2400},
-
-    {id:"p18", nome:"Salada Caesar", categoria:"Saladas", precoCentavos:3200},
-    {id:"p19", nome:"Salada Tropical", categoria:"Saladas", precoCentavos:2800},
-
-    {id:"p20", nome:"Água Mineral", categoria:"Bebidas", precoCentavos:600},
-    {id:"p21", nome:"Água com Gás", categoria:"Bebidas", precoCentavos:700},
-    {id:"p22", nome:"Refrigerante Lata", categoria:"Bebidas", precoCentavos:700},
-    {id:"p23", nome:"Suco Natural", categoria:"Bebidas", precoCentavos:1200},
-    {id:"p24", nome:"Cerveja Long Neck", categoria:"Bebidas", precoCentavos:1400},
-    {id:"p25", nome:"Chopp Artesanal 500ml", categoria:"Bebidas", precoCentavos:1800},
-
-    {id:"p26", nome:"Caipirinha", categoria:"Drinks", precoCentavos:2200},
-    {id:"p27", nome:"Caipirinha de Frutas", categoria:"Drinks", precoCentavos:2500},
-    {id:"p28", nome:"Gin Tônica", categoria:"Drinks", precoCentavos:2800},
-
-    {id:"p29", nome:"Petit Gateau com Sorvete", categoria:"Sobremesas", precoCentavos:2600},
-    {id:"p30", nome:"Pudim de Leite", categoria:"Sobremesas", precoCentavos:1800},
-    {id:"p31", nome:"Abacaxi na Brasa com Canela", categoria:"Sobremesas", precoCentavos:2000},
-    {id:"p32", nome:"Doce de Leite com Queijo", categoria:"Sobremesas", precoCentavos:2200}
-  ].map(function(p){ p.ativo = true; p.esgotado = false; return p; });
-
-  var mesas = [];
-  var caps = [2,2,4,4,4,6,2,4,6,8];
-  for(var i=1;i<=25;i++){
-    var area = i<=10 ? "Salão" : (i<=18 ? "Varanda" : "Área Externa");
-    mesas.push({id:"m"+i, numero:i, capacidade:caps[(i-1)%caps.length], area:area});
-  }
-
-  var insumos = [
-    {id:"i1", nome:"Picanha", unidade:"kg", estoqueAtual:22, estoqueMinimo:10, custoMedioCentavos:4200},
-    {id:"i2", nome:"Costela Bovina", unidade:"kg", estoqueAtual:18, estoqueMinimo:10, custoMedioCentavos:3200},
-    {id:"i3", nome:"Fraldinha", unidade:"kg", estoqueAtual:15, estoqueMinimo:8, custoMedioCentavos:3400},
-    {id:"i4", nome:"Ancho", unidade:"kg", estoqueAtual:9, estoqueMinimo:8, custoMedioCentavos:4600},
-    {id:"i5", nome:"Linguiça Artesanal", unidade:"kg", estoqueAtual:12, estoqueMinimo:6, custoMedioCentavos:2400},
-    {id:"i6", nome:"Frango Caipira", unidade:"kg", estoqueAtual:20, estoqueMinimo:10, custoMedioCentavos:1800},
-    {id:"i7", nome:"Cupim", unidade:"kg", estoqueAtual:6, estoqueMinimo:6, custoMedioCentavos:3000},
-    {id:"i8", nome:"Carvão", unidade:"kg", estoqueAtual:40, estoqueMinimo:20, custoMedioCentavos:800},
-    {id:"i9", nome:"Gás de Cozinha", unidade:"un", estoqueAtual:3, estoqueMinimo:2, custoMedioCentavos:12000},
-    {id:"i10", nome:"Óleo de Cozinha", unidade:"L", estoqueAtual:14, estoqueMinimo:8, custoMedioCentavos:900},
-    {id:"i11", nome:"Sal Grosso", unidade:"kg", estoqueAtual:8, estoqueMinimo:5, custoMedioCentavos:500}
-  ];
-
-  var fichaTecnica = [
-    {produtoId:"p6", insumoId:"i1", quantidade:0.3},
-    {produtoId:"p7", insumoId:"i2", quantidade:0.4},
-    {produtoId:"p8", insumoId:"i3", quantidade:0.35},
-    {produtoId:"p9", insumoId:"i4", quantidade:0.32},
-    {produtoId:"p10", insumoId:"i5", quantidade:0.25},
-    {produtoId:"p11", insumoId:"i6", quantidade:0.4},
-    {produtoId:"p12", insumoId:"i7", quantidade:0.3}
-  ];
-
-  var contas = [
-    {id:"ct1", tipo:"PAGAR", descricao:"Fornecedor de carnes — Frigorífico Bom Boi", categoria:"Insumos", valorCentavos:458000, vencimento:diasA(5), pagoEm:null},
-    {id:"ct2", tipo:"PAGAR", descricao:"Aluguel do salão", categoria:"Instalações", valorCentavos:650000, vencimento:diasA(10), pagoEm:null},
-    {id:"ct3", tipo:"PAGAR", descricao:"Conta de energia elétrica", categoria:"Utilidades", valorCentavos:189000, vencimento:diasA(-2), pagoEm:null},
-    {id:"ct4", tipo:"RECEBER", descricao:"Evento corporativo — Empresa XPTO", categoria:"Eventos", valorCentavos:320000, vencimento:diasA(7), pagoEm:null}
-  ];
-
+function estadoVazio(){
   return {
     usuarioAtualId:null,
+    empresaId:null,
     view:"dashboard",
     viewParams:{},
     modal:null,
     toasts:[],
+    printHtml:null,
     loginSelectedUserId:null,
     pinBuffer:"",
     pinError:"",
@@ -606,32 +546,172 @@ function seed(){
     financeiroFiltro:"TODAS",
     relatorioPeriodo:"HOJE",
     draft:null,
+    carregando:false,
+    usuariosLogin:[],
     config:{
-      empresaNome:"Fogo Gestão Restaurante & Bar",
-      empresaCnpj:"12.345.678/0001-90",
-      taxaServicoPctPadrao:10,
-      limiteDescontoPct:10,
-      limiteDiferencaCentavos:500
+      empresaNome:"", empresaCnpj:"", taxaServicoPctPadrao:10, limiteDescontoPct:10,
+      limiteDiferencaCentavos:500, impressoraLargura:"80mm", reciboRodape:"",
+      horarioAbertura:"18:00", horarioFechamento:"00:00", chavePix:""
     },
-    usuarios:usuarios, categorias:categorias, produtos:produtos, mesas:mesas,
-    insumos:insumos, fichaTecnica:fichaTecnica, estoqueMovimentos:[], contas:contas,
-    comandas:[], caixaSessao:null, caixaMovimentos:[], auditoria:[]
+    usuarios:[], categorias:[], categoriaIdPorNome:{}, produtos:[], mesas:[],
+    insumos:[], fichaTecnica:[], estoqueMovimentos:[], contas:[],
+    comandas:[], caixaSessao:null, caixaMovimentos:[], caixaSessoesHistorico:[], auditoria:[]
   };
 }
 
-function load(){
-  try{
-    var raw = localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      var s = JSON.parse(raw);
-      s.modal = null; s.toasts = s.toasts||[]; s.draft = null;
-      return s;
-    }
-  }catch(e){}
-  return seed();
+// ---------- mapeamento snake_case (Supabase) <-> camelCase (app) ----------
+function mapProduto(row, catNomePorId){
+  return {id:row.id, nome:row.nome, categoria:(catNomePorId&&catNomePorId[row.categoria_id])||"", categoriaId:row.categoria_id, precoCentavos:row.preco_centavos, ativo:row.ativo, esgotado:row.esgotado};
 }
-function save(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function mapInsumo(row){
+  return {id:row.id, nome:row.nome, unidade:row.unidade, estoqueAtual:Number(row.estoque_atual), estoqueMinimo:Number(row.estoque_minimo), custoMedioCentavos:row.custo_medio_centavos};
+}
+function mapMesa(row){
+  return {id:row.id, numero:row.numero, capacidade:row.capacidade, area:row.area};
+}
+function mapComanda(row){
+  return {id:row.id, codigo:row.codigo, mesaId:row.mesa_id, tipo:row.tipo, status:row.status,
+    abertura:row.abertura, fechamento:row.fechamento, usuarioAbertura:row.usuario_abertura,
+    taxaServicoAtiva:row.taxa_servico_ativa, descontoCentavos:row.desconto_centavos,
+    trocoCentavos:row.troco_centavos, itens:[], pagamentos:[]};
+}
+function mapItem(row){
+  return {id:row.id, comandaId:row.comanda_id, produtoId:row.produto_id, nome:row.nome, observacao:row.observacao||"",
+    quantidade:Number(row.quantidade), precoUnitCentavos:row.preco_unit_centavos, status:row.status,
+    usuarioId:row.usuario_id, enviadoEm:row.enviado_em};
+}
+function mapCaixaSessao(row){
+  return {id:row.id, terminal:row.terminal, usuarioAbertura:row.usuario_abertura, aberturaEm:row.abertura_em,
+    saldoInicialCentavos:row.saldo_inicial_centavos, usuarioFechamento:row.usuario_fechamento,
+    fechamentoEm:row.fechamento_em, saldoCalculadoCentavos:row.saldo_calculado_centavos,
+    saldoInformadoCentavos:row.saldo_informado_centavos, diferencaCentavos:row.diferenca_centavos,
+    fechamentoDetalhe:row.fechamento_detalhe, status:row.status};
+}
+function mapMovimento(row){
+  return {id:row.id, sessaoId:row.sessao_id, tipo:row.tipo, valorCentavos:row.valor_centavos,
+    formaPagamento:row.forma_pagamento, comandaId:row.comanda_id, usuarioId:row.usuario_id,
+    motivo:row.motivo, createdAt:row.created_at};
+}
+function mapConta(row){
+  return {id:row.id, tipo:row.tipo, descricao:row.descricao, categoria:row.categoria,
+    valorCentavos:row.valor_centavos, vencimento:row.vencimento, pagoEm:row.pago_em};
+}
+function mapUsuario(row){
+  return {id:row.id, nome:row.nome, papel:row.papel, ativo:row.ativo};
+}
+function mapEstoqueMov(row){
+  return {id:row.id, insumoId:row.insumo_id, tipo:row.tipo, quantidade:Number(row.quantidade),
+    motivo:row.motivo, origem:row.origem, origemId:row.origem_id, usuarioId:row.usuario_id, createdAt:row.created_at};
+}
+function mapAuditoria(row){
+  return {id:row.id, entidade:row.entidade, entidadeId:row.entidade_id, acao:row.acao,
+    usuarioId:row.usuario_id, motivo:row.motivo, createdAt:row.created_at};
+}
+
+function decodeJwt(token){
+  try{
+    var payload = token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+    while(payload.length % 4) payload += "=";
+    return JSON.parse(atob(payload));
+  }catch(e){ return {}; }
+}
+
+async function carregarUsuariosLogin(){
+  try{
+    var res = await sb.from("usuarios_login").select("id,nome").order("nome");
+    state.usuariosLogin = res.data || [];
+  }catch(e){ state.usuariosLogin = []; }
+  render();
+}
+
+async function carregarTudo(){
+  var erros = [];
+  function checar(res, nome){ if(res && res.error){ erros.push(nome+": "+res.error.message); return null; } return res ? res.data : null; }
+
+  var catRes = await sb.from("categorias").select("*").order("ordem");
+  var prodRes = await sb.from("produtos").select("*");
+  var mesasRes = await sb.from("mesas").select("*").order("numero");
+  var insRes = await sb.from("insumos").select("*").order("nome");
+  var fichaRes = await sb.from("ficha_tecnica").select("*");
+  var usrRes = await sb.from("usuarios").select("*").order("nome");
+  var empRes = await sb.from("empresas").select("*").eq("id", state.empresaId).single();
+
+  var catData = checar(catRes,"categorias") || [];
+  var catPorId = {};
+  state.categorias = catData.map(function(c){ catPorId[c.id]=c.nome; return c.nome; });
+  state.categoriaIdPorNome = {};
+  catData.forEach(function(c){ state.categoriaIdPorNome[c.nome]=c.id; });
+  state.produtos = (checar(prodRes,"produtos")||[]).map(function(p){ return mapProduto(p, catPorId); });
+  state.mesas = (checar(mesasRes,"mesas")||[]).map(mapMesa);
+  state.insumos = (checar(insRes,"insumos")||[]).map(mapInsumo);
+  state.fichaTecnica = (checar(fichaRes,"ficha_tecnica")||[]).map(function(f){ return {produtoId:f.produto_id, insumoId:f.insumo_id, quantidade:Number(f.quantidade)}; });
+  state.usuarios = (checar(usrRes,"usuarios")||[]).map(mapUsuario);
+  var emp = checar(empRes,"empresas");
+  if(emp){
+    state.config = Object.assign({}, state.config, emp.config||{}, {empresaNome:emp.nome, empresaCnpj:emp.cnpj||""});
+  }
+
+  var comRes = await sb.from("comandas").select("*, comanda_itens(*)").neq("status","PAGA");
+  state.comandas = (checar(comRes,"comandas")||[]).map(function(c){
+    var m = mapComanda(c);
+    m.itens = (c.comanda_itens||[]).map(mapItem);
+    return m;
+  });
+
+  var sessRes = await sb.from("caixa_sessoes").select("*").eq("status","ABERTA").order("abertura_em",{ascending:false}).limit(1);
+  var sessData = checar(sessRes,"caixa_sessoes");
+  state.caixaSessao = (sessData && sessData[0]) ? mapCaixaSessao(sessData[0]) : null;
+
+  if(state.caixaSessao){
+    var movRes = await sb.from("caixa_movimentos").select("*").eq("sessao_id", state.caixaSessao.id);
+    state.caixaMovimentos = (checar(movRes,"caixa_movimentos")||[]).map(mapMovimento);
+  } else {
+    state.caixaMovimentos = [];
+  }
+
+  var histRes = await sb.from("caixa_sessoes").select("*").eq("status","FECHADA").order("fechamento_em",{ascending:false}).limit(10);
+  state.caixaSessoesHistorico = (checar(histRes,"historico")||[]).slice().reverse().map(mapCaixaSessao);
+
+  var contasRes = await sb.from("contas").select("*").order("vencimento");
+  state.contas = (checar(contasRes,"contas")||[]).map(mapConta);
+
+  var estMovRes = await sb.from("estoque_movimentos").select("*").order("created_at",{ascending:false}).limit(50);
+  state.estoqueMovimentos = (checar(estMovRes,"estoque_movimentos")||[]).map(mapEstoqueMov).reverse();
+
+  var audRes = await sb.from("auditoria").select("*").order("created_at",{ascending:false}).limit(50);
+  state.auditoria = (checar(audRes,"auditoria")||[]).map(mapAuditoria);
+
+  if(erros.length) toast("err","ERRO AO CARREGAR DADOS", erros.join(" · "));
+  render();
+}
+
+var realtimeChannel = null;
+var refreshTimer = null;
+function agendarRefresh(){
+  if(refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(function(){ carregarTudo(); }, 400);
+}
+function configurarRealtime(){
+  try{
+    desligarRealtime();
+    if(!state.empresaId) return;
+    if(typeof window.WebSocket === "undefined"){ console.error("WebSocket indisponível — realtime desativado."); return; }
+    var eq = "empresa_id=eq."+state.empresaId;
+    realtimeChannel = sb.channel("empresa-"+state.empresaId)
+      .on("postgres_changes", {event:"*", schema:"public", table:"comandas", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"comanda_itens"}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"caixa_sessoes", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"caixa_movimentos"}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"produtos", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"insumos", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"contas", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"public", table:"usuarios", filter:eq}, agendarRefresh)
+      .subscribe();
+  }catch(e){ console.error("realtime indisponível:", e.message); }
+}
+function desligarRealtime(){
+  if(realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if(refreshTimer){ clearTimeout(refreshTimer); refreshTimer = null; }
 }
 
 function usuarioAtual(){
@@ -643,16 +723,31 @@ function can(permissao){
   var lista = MATRIZ[u.papel] || [];
   return lista.indexOf(permissao) !== -1;
 }
-function findSupervisor(pin, permissaoNecessaria){
-  return state.usuarios.find(function(u){
-    return u.pin===pin && (MATRIZ[u.papel]||[]).indexOf(permissaoNecessaria)!==-1;
+async function verificarSupervisor(pin, permissaoNecessaria){
+  var candidatos = state.usuarios.filter(function(u){
+    return u.ativo && (MATRIZ[u.papel]||[]).indexOf(permissaoNecessaria)!==-1;
   });
+  var temp = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}});
+  for(var i=0;i<candidatos.length;i++){
+    try{
+      var res = await temp.auth.signInWithPassword({email:emailInterno(candidatos[i].nome), password:pin});
+      if(!res.error){
+        await temp.auth.signOut();
+        return candidatos[i];
+      }
+    }catch(e){}
+  }
+  return null;
 }
 function registrarAuditoria(entidade, entidadeId, acao, usuarioId, motivo){
   state.auditoria.unshift({
     id:uid("aud"), entidade:entidade, entidadeId:entidadeId, acao:acao,
     usuarioId:usuarioId, motivo:motivo||null, createdAt:new Date().toISOString()
   });
+  sb.from("auditoria").insert({
+    empresa_id: state.empresaId, entidade: entidade, entidade_id: entidadeId,
+    acao: acao, usuario_id: usuarioId, motivo: motivo||null
+  }).then(function(res){ if(res.error) console.error("auditoria:", res.error.message); });
 }
 function toast(tipo, titulo, desc){
   var id = uid("toast");
@@ -694,45 +789,50 @@ function totaisComanda(comanda){
 
 // ---------- ações ----------
 
-function login(userId, pin){
-  var u = state.usuarios.find(function(x){ return x.id===userId; });
-  if(u && !u.ativo){
-    state.pinBuffer = "";
-    state.pinError = "Usuário desativado.";
-    render();
-    return;
-  }
-  if(u && u.pin===pin){
-    state.usuarioAtualId = u.id;
+async function login(userId, pin){
+  var candidato = state.usuariosLogin.find(function(x){ return x.id===userId; });
+  if(!candidato) return;
+  state.carregando = true;
+  render();
+  try{
+    var res = await sb.auth.signInWithPassword({email:emailInterno(candidato.nome), password:pin});
+    if(res.error) throw res.error;
+    var claims = decodeJwt(res.data.session.access_token);
+    if(!claims.empresa_id){ throw new Error("Usuário sem empresa vinculada."); }
+    state.usuarioAtualId = res.data.user.id;
+    state.empresaId = claims.empresa_id;
     state.loginSelectedUserId = null;
-    state.pinBuffer = "";
-    state.pinError = "";
-    state.view = (u.papel==="COZINHA") ? "kds" : (u.papel==="GARCOM"||u.papel==="CAIXA") ? "salao" : "dashboard";
-    save(); render();
-  } else {
+    state.pinBuffer = ""; state.pinError = "";
+    await carregarTudo();
+    state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "dashboard";
+    configurarRealtime();
+  } catch(e){
     state.pinBuffer = "";
     state.pinError = "PIN incorreto.";
-    render();
   }
-}
-function logout(){
-  state.usuarioAtualId = null;
-  state.loginSelectedUserId = null;
-  state.pinBuffer = "";
-  state.modal = null;
+  state.carregando = false;
   render();
 }
+async function logout(){
+  desligarRealtime();
+  try{ await sb.auth.signOut(); }catch(e){}
+  state = estadoVazio();
+  render();
+  carregarUsuariosLogin();
+}
 
-function abrirComanda(mesaId){
-  var comanda = {
-    id:uid("cmd"), codigo:"C"+(state.comandas.length+1).toString().padStart(3,"0"),
-    mesaId:mesaId, tipo:"MESA", status:"ABERTA",
-    abertura:new Date().toISOString(), usuarioAbertura:state.usuarioAtualId,
-    taxaServicoAtiva:true, descontoCentavos:0, itens:[], pagamentos:[]
+async function abrirComanda(mesaId){
+  var payload = {
+    empresa_id: state.empresaId, codigo: "C"+Date.now().toString(36).toUpperCase(),
+    mesa_id: mesaId, tipo: "MESA", status: "ABERTA",
+    usuario_abertura: state.usuarioAtualId, taxa_servico_ativa: true, desconto_centavos: 0
   };
+  var res = await sb.from("comandas").insert(payload).select().single();
+  if(res.error){ toast("err","ERRO AO ABRIR COMANDA", res.error.message); return; }
+  var comanda = mapComanda(res.data);
   state.comandas.push(comanda);
   irParaComanda(comanda.id);
-  save(); render();
+  render();
 }
 function irParaComanda(comandaId){
   state.view = "comanda"; state.viewParams = {comandaId:comandaId};
@@ -751,23 +851,26 @@ function draftAlterar(produtoId, delta){
 function draftObs(produtoId, texto){
   if(state.draft.itens[produtoId]) state.draft.itens[produtoId].obs = texto;
 }
-function enviarPedido(){
+async function enviarPedido(){
   var comanda = state.comandas.find(function(c){ return c.id===state.draft.comandaId; });
   var itens = state.draft.itens;
-  var n = 0;
-  Object.keys(itens).forEach(function(produtoId){
+  var payload = Object.keys(itens).map(function(produtoId){
     var produto = state.produtos.find(function(p){ return p.id===produtoId; });
-    comanda.itens.push({
-      id:uid("item"), produtoId:produtoId, nome:produto.nome, observacao:(itens[produtoId].obs||"").trim(),
-      quantidade:itens[produtoId].qtd, precoUnitCentavos:produto.precoCentavos,
-      status:"PENDENTE", usuarioId:state.usuarioAtualId, enviadoEm:new Date().toISOString()
-    });
-    n++;
+    return {
+      comanda_id: comanda.id, produto_id: produtoId, nome: produto.nome,
+      observacao: (itens[produtoId].obs||"").trim(), quantidade: itens[produtoId].qtd,
+      preco_unit_centavos: produto.precoCentavos, status:"PENDENTE", usuario_id: state.usuarioAtualId
+    };
   });
+  if(!payload.length) return;
+  var res = await sb.from("comanda_itens").insert(payload).select();
+  if(res.error){ toast("err","ERRO AO ENVIAR PEDIDO", res.error.message); return; }
+  var novos = res.data.map(mapItem);
+  comanda.itens = comanda.itens.concat(novos);
   state.draft.itens = {};
   state.draft.mobileCatalog = false;
-  save(); render();
-  toast("ok","PEDIDO ENVIADO", n+" ite"+(n===1?"m":"ns")+" para a cozinha");
+  render();
+  toast("ok","PEDIDO ENVIADO", novos.length+" ite"+(novos.length===1?"m":"ns")+" para a cozinha");
 }
 
 function pedirSupervisor(permissaoNecessaria, motivo, onConfirm){
@@ -777,18 +880,20 @@ function pedirSupervisor(permissaoNecessaria, motivo, onConfirm){
   };
   render();
 }
-function supervisorDigit(d){
+async function supervisorDigit(d){
   var m = state.modal;
   if(m.buffer.length>=PIN_LEN) return;
   m.buffer += d;
   if(m.buffer.length===PIN_LEN){
-    var sup = findSupervisor(m.buffer, m.permissao);
+    m.verificando = true; render();
+    var sup = await verificarSupervisor(m.buffer, m.permissao);
+    if(state.modal!==m) return;
     if(sup){
       var cb = m.onConfirm;
       state.modal = null;
       cb(sup);
     } else {
-      m.buffer = ""; m.error = "PIN inválido ou sem permissão.";
+      m.buffer = ""; m.error = "PIN inválido ou sem permissão."; m.verificando = false;
     }
   }
   render();
@@ -801,24 +906,28 @@ function abrirCancelarItem(comandaId, itemId){
   state.modal = {type:"cancelarItem", comandaId:comandaId, itemId:itemId, item:item, mesaNum:mesa?mesa.numero:"?", motivo:"", buffer:"", error:""};
   render();
 }
-function cancelarItemDigit(d){
+async function cancelarItemDigit(d){
   var m = state.modal;
   if(!m.motivo.trim()){ m.error = "Informe o motivo antes do PIN."; render(); return; }
   if(m.buffer.length>=PIN_LEN) return;
   m.error = "";
   m.buffer += d;
   if(m.buffer.length===PIN_LEN){
-    var sup = findSupervisor(m.buffer, PERM.ITEM_CANCELAR);
+    m.verificando = true; render();
+    var sup = await verificarSupervisor(m.buffer, PERM.ITEM_CANCELAR);
+    if(state.modal!==m) return;
     if(sup){
       var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
       var item = comanda.itens.find(function(i){ return i.id===m.itemId; });
+      var res = await sb.from("comanda_itens").update({status:"CANCELADO"}).eq("id", m.itemId);
+      if(res.error){ toast("err","ERRO AO CANCELAR", res.error.message); render(); return; }
       item.status = "CANCELADO";
       registrarAuditoria("comanda_itens", m.itemId, "CANCELAR_ITEM", sup.id, m.motivo.trim()+" (aprovado por "+sup.nome+")");
       state.modal = null;
-      save(); render();
+      render();
       toast("err","ITEM CANCELADO", item.nome);
     } else {
-      m.buffer=""; m.error = "PIN inválido ou sem permissão.";
+      m.buffer=""; m.error = "PIN inválido ou sem permissão."; m.verificando = false;
       render();
     }
   } else render();
@@ -828,10 +937,12 @@ function aplicarDesconto(comandaId, percentInformado){
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
   var t = totaisComanda(comanda);
   var descontoCentavos = Math.round((t.subtotal) * percentInformado / 100);
-  function aplicar(){
+  async function aplicar(){
+    var res = await sb.from("comandas").update({desconto_centavos:descontoCentavos}).eq("id", comandaId);
+    if(res.error){ toast("err","ERRO AO APLICAR DESCONTO", res.error.message); return; }
     comanda.descontoCentavos = descontoCentavos;
     state.modal = null;
-    save(); render();
+    render();
   }
   if(percentInformado > limiteDescontoPct()){
     pedirSupervisor(PERM.DESCONTO_APLICAR, "Desconto de "+percentInformado+"% acima do limite de "+limiteDescontoPct()+"%", function(supervisor){
@@ -843,11 +954,35 @@ function aplicarDesconto(comandaId, percentInformado){
   }
 }
 
-function abrirFecharConta(comandaId){
+async function abrirFecharConta(comandaId){
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
+  var res = await sb.from("comandas").update({status:"FECHANDO"}).eq("id", comandaId);
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
   comanda.status = "FECHANDO";
-  state.modal = {type:"pagamento", comandaId:comandaId, linhas:[]};
-  save(); render();
+  state.modal = {type:"pagamento", comandaId:comandaId, linhas:[], dividirPessoas:1};
+  render();
+}
+function pixCodigoSimulado(comanda, valorCentavos){
+  var base = comanda.codigo + "-" + valorCentavos;
+  var hash = 0;
+  for(var i=0;i<base.length;i++){ hash = ((hash<<5)-hash+base.charCodeAt(i))|0; }
+  return "PIX-SIMULADO-"+comanda.codigo+"-"+Math.abs(hash).toString(36).toUpperCase();
+}
+function pixQrGridHtml(seedStr){
+  var hash = 0;
+  for(var i=0;i<seedStr.length;i++){ hash = ((hash*31)+seedStr.charCodeAt(i))>>>0; }
+  var cells = "";
+  var n = 9;
+  for(var r=0;r<n;r++){
+    for(var c=0;c<n;c++){
+      var bit = (hash >> ((r*n+c)%24)) & 1;
+      var onEdge = (r===0||c===0||r===n-1||c===n-1);
+      var on = onEdge || bit;
+      cells += '<div style="width:9px; height:9px; background:'+(on?'#111':'#fff')+';"></div>';
+      hash = (hash*1103515245+12345)>>>0;
+    }
+  }
+  return '<div style="display:grid; grid-template-columns:repeat('+n+',9px); gap:1px; background:#fff; padding:8px; margin:8px auto; width:fit-content;">'+cells+'</div>';
 }
 function pagamentoAddMetodo(forma){
   var comanda = state.comandas.find(function(c){ return c.id===state.modal.comandaId; });
@@ -865,7 +1000,7 @@ function pagamentoRemoveLinha(idx){
   state.modal.linhas.splice(idx,1);
   render();
 }
-function confirmarPagamento(){
+async function confirmarPagamento(){
   if(!state.caixaSessao || state.caixaSessao.status!=="ABERTA"){
     state.modal.erro = "Abra o caixa antes de registrar pagamentos.";
     render(); return;
@@ -877,54 +1012,78 @@ function confirmarPagamento(){
     state.modal.erro = "Faltam "+brl(t.total-soma)+" para cobrir o total.";
     render(); return;
   }
+  state.modal.confirmando = true; render();
   var troco = soma - t.total;
+  var fechamento = new Date().toISOString();
+
+  var upd = await sb.from("comandas").update({
+    status:"PAGA", fechamento:fechamento, troco_centavos:troco
+  }).eq("id", comanda.id);
+  if(upd.error){ state.modal.erro = upd.error.message; state.modal.confirmando=false; render(); return; }
+
+  var pagamentosPayload = state.modal.linhas.map(function(l){
+    return {comanda_id:comanda.id, sessao_id:state.caixaSessao.id, forma:l.forma, valor_centavos:l.valorCentavos};
+  });
+  await sb.from("pagamentos").insert(pagamentosPayload);
+
+  var movimentosPayload = [];
+  var trocoRestante = troco;
+  state.modal.linhas.forEach(function(l){
+    var valor = l.valorCentavos;
+    if(l.forma==="DINHEIRO" && trocoRestante>0){ valor = Math.max(0, valor - trocoRestante); trocoRestante = 0; }
+    if(valor<=0) return;
+    movimentosPayload.push({
+      sessao_id:state.caixaSessao.id, tipo:"VENDA", valor_centavos:valor,
+      forma_pagamento:l.forma, comanda_id:comanda.id, usuario_id:state.usuarioAtualId
+    });
+  });
+  var movRes = await sb.from("caixa_movimentos").insert(movimentosPayload).select();
+  if(!movRes.error) state.caixaMovimentos = state.caixaMovimentos.concat(movRes.data.map(mapMovimento));
+
   comanda.pagamentos = state.modal.linhas.map(function(l){ return {forma:l.forma, valorCentavos:l.valorCentavos}; });
   comanda.trocoCentavos = troco;
   comanda.status = "PAGA";
-  comanda.fechamento = new Date().toISOString();
-  baixarEstoqueDaVenda(comanda);
+  comanda.fechamento = fechamento;
 
-  state.modal.linhas.forEach(function(l){
-    var valor = l.valorCentavos;
-    if(l.forma==="DINHEIRO" && troco>0){ valor = Math.max(0, valor - troco); troco = 0; }
-    if(valor<=0) return;
-    state.caixaMovimentos.push({
-      id:uid("mov"), sessaoId:state.caixaSessao.id, tipo:"VENDA",
-      valorCentavos:valor, formaPagamento:l.forma, comandaId:comanda.id,
-      usuarioId:state.usuarioAtualId, createdAt:new Date().toISOString()
-    });
-  });
+  await baixarEstoqueDaVenda(comanda);
 
-  state.modal = null;
   state.view = "salao"; state.viewParams = {};
-  save(); render();
+  state.modal = {type:"recibo", comanda: JSON.parse(JSON.stringify(comanda))};
+  render();
   toast("ok","PAGAMENTO CONFIRMADO", comanda.codigo+" · "+brl(t.total));
 }
 
-function kdsSetStatus(comandaId, itemId, novoStatus){
+async function kdsSetStatus(comandaId, itemId, novoStatus){
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
-  var item = comanda.itens.find(function(i){ return i.id===itemId; });
+  var item = comanda ? comanda.itens.find(function(i){ return i.id===itemId; }) : null;
   if(!item) return;
+  var anterior = item.status;
   item.status = novoStatus;
-  save(); render();
+  render();
+  var res = await sb.from("comanda_itens").update({status:novoStatus}).eq("id", itemId);
+  if(res.error){ item.status = anterior; toast("err","ERRO", res.error.message); render(); }
 }
 
-function abrirCaixa(saldoInicialCentavos){
-  state.caixaSessao = {
-    id:uid("sess"), terminal:"Terminal 1", usuarioAbertura:state.usuarioAtualId,
-    aberturaEm:new Date().toISOString(), saldoInicialCentavos:saldoInicialCentavos, status:"ABERTA"
-  };
-  save(); render();
+async function abrirCaixa(saldoInicialCentavos){
+  var res = await sb.from("caixa_sessoes").insert({
+    empresa_id: state.empresaId, terminal:"Terminal 1", usuario_abertura: state.usuarioAtualId,
+    saldo_inicial_centavos: saldoInicialCentavos, status:"ABERTA"
+  }).select().single();
+  if(res.error){ toast("err","ERRO AO ABRIR CAIXA", res.error.message); return; }
+  state.caixaSessao = mapCaixaSessao(res.data);
+  state.caixaMovimentos = [];
+  render();
   toast("ok","CAIXA ABERTO", "Saldo inicial "+brl(saldoInicialCentavos));
 }
-function registrarMovimento(tipo, valorCentavos, motivo){
-  state.caixaMovimentos.push({
-    id:uid("mov"), sessaoId:state.caixaSessao.id, tipo:tipo, valorCentavos:valorCentavos,
-    formaPagamento:"DINHEIRO", comandaId:null, usuarioId:state.usuarioAtualId,
-    motivo:motivo, createdAt:new Date().toISOString()
-  });
+async function registrarMovimento(tipo, valorCentavos, motivo){
+  var res = await sb.from("caixa_movimentos").insert({
+    sessao_id: state.caixaSessao.id, tipo:tipo, valor_centavos:valorCentavos,
+    forma_pagamento:"DINHEIRO", usuario_id: state.usuarioAtualId, motivo:motivo
+  }).select().single();
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  state.caixaMovimentos.push(mapMovimento(res.data));
   state.modal = null;
-  save(); render();
+  render();
   toast("ok", tipo, brl(valorCentavos)+" · "+motivo);
 }
 function movimentosDaSessao(){
@@ -958,7 +1117,7 @@ function esperadoPorForma(forma){
   if(forma==="DINHEIRO") return saldoDinheiroEsperado();
   return totaisPorForma()[forma] || 0;
 }
-function confirmarFechamento(justificativa){
+async function confirmarFechamento(justificativa){
   var informados = state.modal.informados;
   var esperados = {}; var diffs = {};
   formasDaSessao().forEach(function(f){
@@ -969,8 +1128,16 @@ function confirmarFechamento(justificativa){
   if(Math.abs(diferencaDinheiro) > limiteDiferencaCentavos() && !justificativa){
     render(); return;
   }
+  var fechamentoEm = new Date().toISOString();
+  var res = await sb.from("caixa_sessoes").update({
+    status:"FECHADA", fechamento_em:fechamentoEm, usuario_fechamento:state.usuarioAtualId,
+    saldo_calculado_centavos:esperados.DINHEIRO, saldo_informado_centavos:informados.DINHEIRO||0,
+    diferenca_centavos:diferencaDinheiro, fechamento_detalhe:{esperados:esperados, informados:informados, diffs:diffs}
+  }).eq("id", state.caixaSessao.id);
+  if(res.error){ toast("err","ERRO AO FECHAR CAIXA", res.error.message); return; }
+
   state.caixaSessao.status = "FECHADA";
-  state.caixaSessao.fechamentoEm = new Date().toISOString();
+  state.caixaSessao.fechamentoEm = fechamentoEm;
   state.caixaSessao.usuarioFechamento = state.usuarioAtualId;
   state.caixaSessao.saldoCalculadoCentavos = esperados.DINHEIRO;
   state.caixaSessao.saldoInformadoCentavos = informados.DINHEIRO||0;
@@ -979,8 +1146,9 @@ function confirmarFechamento(justificativa){
   if(justificativa){
     registrarAuditoria("caixa_sessoes", state.caixaSessao.id, "DIFERENCA_JUSTIFICADA", state.usuarioAtualId, justificativa);
   }
-  state.modal = null;
-  save(); render();
+  state.caixaSessoesHistorico.push(state.caixaSessao);
+  state.modal.stage = "concluido";
+  render();
   toast(diferencaDinheiro===0?"ok":"err","CAIXA FECHADO", "Diferença "+brl(diferencaDinheiro));
 }
 
@@ -992,70 +1160,185 @@ function abrirProdutoForm(produtoId){
     nome: p?p.nome:"", categoria: p?p.categoria:state.categorias[0], precoCentavos: p?p.precoCentavos:0};
   render();
 }
-function salvarProduto(produtoId, nome, categoria, precoCentavos){
+async function salvarProduto(produtoId, nome, categoria, precoCentavos){
   if(!nome.trim() || !categoria.trim() || !(precoCentavos>0)) return;
-  if(state.categorias.indexOf(categoria)===-1) state.categorias.push(categoria);
+  var categoriaId = state.categoriaIdPorNome[categoria];
+  if(!categoriaId){
+    var catRes = await sb.from("categorias").insert({empresa_id:state.empresaId, nome:categoria.trim(), ordem:state.categorias.length}).select().single();
+    if(catRes.error){ toast("err","ERRO AO CRIAR CATEGORIA", catRes.error.message); return; }
+    categoriaId = catRes.data.id;
+    state.categorias.push(catRes.data.nome);
+    state.categoriaIdPorNome[catRes.data.nome] = categoriaId;
+  }
   if(produtoId){
+    var upd = await sb.from("produtos").update({nome:nome.trim(), categoria_id:categoriaId, preco_centavos:precoCentavos}).eq("id", produtoId);
+    if(upd.error){ toast("err","ERRO", upd.error.message); return; }
     var p = state.produtos.find(function(x){ return x.id===produtoId; });
-    p.nome = nome.trim(); p.categoria = categoria.trim(); p.precoCentavos = precoCentavos;
+    p.nome = nome.trim(); p.categoria = categoria.trim(); p.categoriaId = categoriaId; p.precoCentavos = precoCentavos;
   } else {
-    state.produtos.push({id:uid("p"), nome:nome.trim(), categoria:categoria.trim(), precoCentavos:precoCentavos, ativo:true, esgotado:false});
+    var insRes = await sb.from("produtos").insert({empresa_id:state.empresaId, categoria_id:categoriaId, nome:nome.trim(), preco_centavos:precoCentavos}).select().single();
+    if(insRes.error){ toast("err","ERRO", insRes.error.message); return; }
+    var catPorId = {}; catPorId[categoriaId] = categoria.trim();
+    state.produtos.push(mapProduto(insRes.data, catPorId));
   }
   state.modal = null;
-  save(); render();
+  render();
   toast("ok", produtoId?"PRODUTO ATUALIZADO":"PRODUTO CRIADO", nome.trim());
 }
-function toggleEsgotado(produtoId){
+async function toggleEsgotado(produtoId){
   var p = state.produtos.find(function(x){ return x.id===produtoId; });
-  p.esgotado = !p.esgotado;
-  save(); render();
+  var novo = !p.esgotado;
+  p.esgotado = novo;
+  render();
+  var res = await sb.from("produtos").update({esgotado:novo}).eq("id", produtoId);
+  if(res.error){ p.esgotado = !novo; toast("err","ERRO", res.error.message); render(); }
 }
 
 function abrirInsumoMov(tipo, insumoId){
   state.modal = {type:"insumoMov", tipo:tipo, insumoId:insumoId||state.insumos[0].id};
   render();
 }
-function confirmarInsumoMov(tipo, insumoId, quantidade, motivo){
+async function confirmarInsumoMov(tipo, insumoId, quantidade, motivo){
   if(!(quantidade>0) || !motivo.trim()) return;
   var insumo = state.insumos.find(function(i){ return i.id===insumoId; });
-  if(tipo==="ENTRADA") insumo.estoqueAtual += quantidade;
-  else insumo.estoqueAtual = Math.max(0, insumo.estoqueAtual - quantidade);
-  state.estoqueMovimentos.push({id:uid("est"), insumoId:insumoId, tipo:tipo, quantidade:quantidade,
-    motivo:motivo.trim(), origem:"MANUAL", usuarioId:state.usuarioAtualId, createdAt:new Date().toISOString()});
+  var novoEstoque = tipo==="ENTRADA" ? insumo.estoqueAtual+quantidade : Math.max(0, insumo.estoqueAtual-quantidade);
+  var upd = await sb.from("insumos").update({estoque_atual:novoEstoque}).eq("id", insumoId);
+  if(upd.error){ toast("err","ERRO", upd.error.message); return; }
+  insumo.estoqueAtual = novoEstoque;
+  var movRes = await sb.from("estoque_movimentos").insert({
+    empresa_id: state.empresaId, insumo_id:insumoId, tipo:tipo, quantidade:quantidade,
+    motivo:motivo.trim(), origem:"MANUAL", usuario_id: state.usuarioAtualId
+  }).select().single();
+  if(!movRes.error) state.estoqueMovimentos.unshift(mapEstoqueMov(movRes.data));
   state.modal = null;
-  save(); render();
+  render();
   toast("ok", tipo==="ENTRADA"?"ENTRADA REGISTRADA":"SAÍDA REGISTRADA", insumo.nome+" — "+quantidade+" "+insumo.unidade);
 }
-function baixarEstoqueDaVenda(comanda){
-  comanda.itens.forEach(function(it){
-    if(it.status==="CANCELADO") return;
-    state.fichaTecnica.filter(function(f){ return f.produtoId===it.produtoId; }).forEach(function(f){
-      var insumo = state.insumos.find(function(i){ return i.id===f.insumoId; });
-      if(!insumo) return;
+async function baixarEstoqueDaVenda(comanda){
+  for(var i=0;i<comanda.itens.length;i++){
+    var it = comanda.itens[i];
+    if(it.status==="CANCELADO") continue;
+    var fichas = state.fichaTecnica.filter(function(f){ return f.produtoId===it.produtoId; });
+    for(var j=0;j<fichas.length;j++){
+      var f = fichas[j];
+      var insumo = state.insumos.find(function(i2){ return i2.id===f.insumoId; });
+      if(!insumo) continue;
       var qtd = f.quantidade * it.quantidade;
-      insumo.estoqueAtual = Math.max(0, insumo.estoqueAtual - qtd);
-      state.estoqueMovimentos.push({id:uid("est"), insumoId:insumo.id, tipo:"VENDA", quantidade:qtd,
-        motivo:null, origem:"comanda", origemId:comanda.id, usuarioId:state.usuarioAtualId, createdAt:new Date().toISOString()});
-    });
-  });
+      var novoEstoque = Math.max(0, insumo.estoqueAtual - qtd);
+      await sb.from("insumos").update({estoque_atual:novoEstoque}).eq("id", insumo.id);
+      insumo.estoqueAtual = novoEstoque;
+      var movRes = await sb.from("estoque_movimentos").insert({
+        empresa_id: state.empresaId, insumo_id: insumo.id, tipo:"VENDA", quantidade: qtd,
+        motivo:null, origem:"comanda", origem_id: comanda.id, usuario_id: state.usuarioAtualId
+      }).select().single();
+      if(!movRes.error) state.estoqueMovimentos.unshift(mapEstoqueMov(movRes.data));
+    }
+  }
+}
+
+// ---------- impressão (comprovante não fiscal / fechamento de caixa) ----------
+
+function imprimir(html){
+  state.printHtml = html;
+  render();
+  setTimeout(function(){
+    window.print();
+  }, 50);
+}
+
+function buildReciboHtml(comanda){
+  var mesa = state.mesas.find(function(m){ return m.id===comanda.mesaId; });
+  var t = totaisComanda(comanda);
+  var atendente = state.usuarios.find(function(u){ return u.id===comanda.usuarioAbertura; });
+  var largura = state.config.impressoraLargura==="58mm" ? "58mm" : "80mm";
+  var itensHtml = comanda.itens.filter(function(it){ return it.status!=="CANCELADO"; }).map(function(it){
+    return '<div class="line"><span>'+it.quantidade+'x '+escapeHtml(it.nome)+'</span><span>'+brl(it.precoUnitCentavos*it.quantidade)+'</span></div>';
+  }).join("");
+  var pagamentosHtml = (comanda.pagamentos||[]).map(function(p){
+    return '<div class="line"><span>'+p.forma+'</span><span>'+brl(p.valorCentavos)+'</span></div>';
+  }).join("");
+  return '<div class="receipt-preview" style="width:'+largura+'; max-width:'+largura+';">'+
+    '<div class="center bold">'+escapeHtml(state.config.empresaNome)+'</div>'+
+    '<div class="center">'+escapeHtml(state.config.empresaCnpj)+'</div>'+
+    '<hr>'+
+    '<div class="center bold">COMPROVANTE DE PAGAMENTO</div>'+
+    '<div class="center">NÃO É DOCUMENTO FISCAL</div>'+
+    '<hr>'+
+    '<div class="line"><span>Comanda</span><span>'+comanda.codigo+'</span></div>'+
+    '<div class="line"><span>Mesa</span><span>'+(mesa?mesa.numero:"-")+'</span></div>'+
+    '<div class="line"><span>Data</span><span>'+new Date(comanda.fechamento).toLocaleString("pt-BR")+'</span></div>'+
+    '<div class="line"><span>Atendente</span><span>'+(atendente?escapeHtml(atendente.nome):"-")+'</span></div>'+
+    '<hr>'+
+    itensHtml+
+    '<hr>'+
+    '<div class="line"><span>Subtotal</span><span>'+brl(t.subtotal)+'</span></div>'+
+    (t.desconto>0 ? '<div class="line"><span>Desconto</span><span>-'+brl(t.desconto)+'</span></div>' : '')+
+    '<div class="line"><span>Taxa de serviço ('+t.taxaPct+'%)</span><span>'+brl(t.taxa)+'</span></div>'+
+    '<div class="line bold"><span>TOTAL</span><span>'+brl(t.total)+'</span></div>'+
+    '<hr>'+
+    pagamentosHtml+
+    (comanda.trocoCentavos>0 ? '<div class="line"><span>Troco</span><span>'+brl(comanda.trocoCentavos)+'</span></div>' : '')+
+    '<hr>'+
+    '<div class="center">'+escapeHtml(state.config.reciboRodape)+'</div>'+
+  '</div>';
+}
+
+function buildFechamentoHtml(sessao){
+  var abertura = state.usuarios.find(function(u){ return u.id===sessao.usuarioAbertura; });
+  var fechador = state.usuarios.find(function(u){ return u.id===sessao.usuarioFechamento; });
+  var movs = state.caixaMovimentos.filter(function(m){ return m.sessaoId===sessao.id; });
+  var det = sessao.fechamentoDetalhe || {esperados:{}, informados:{}, diffs:{}};
+  var formas = Object.keys(det.esperados);
+  var sangrias = movs.filter(function(m){ return m.tipo==="SANGRIA"; });
+  var suprimentos = movs.filter(function(m){ return m.tipo==="SUPRIMENTO"; });
+  var largura = state.config.impressoraLargura==="58mm" ? "58mm" : "80mm";
+  return '<div class="receipt-preview" style="width:'+largura+'; max-width:'+largura+';">'+
+    '<div class="center bold">'+escapeHtml(state.config.empresaNome)+'</div>'+
+    '<div class="center bold">FECHAMENTO DE CAIXA</div>'+
+    '<hr>'+
+    '<div class="line"><span>Terminal</span><span>'+escapeHtml(sessao.terminal)+'</span></div>'+
+    '<div class="line"><span>Abertura</span><span>'+new Date(sessao.aberturaEm).toLocaleString("pt-BR")+'</span></div>'+
+    '<div class="line"><span>Fechamento</span><span>'+new Date(sessao.fechamentoEm).toLocaleString("pt-BR")+'</span></div>'+
+    '<div class="line"><span>Aberto por</span><span>'+(abertura?escapeHtml(abertura.nome):"-")+'</span></div>'+
+    '<div class="line"><span>Fechado por</span><span>'+(fechador?escapeHtml(fechador.nome):"-")+'</span></div>'+
+    '<hr><div class="bold">VENDAS POR FORMA</div>'+
+    formas.map(function(f){ return '<div class="line"><span>'+f+'</span><span>'+brl(det.esperados[f])+'</span></div>'; }).join("")+
+    '<hr>'+
+    '<div class="line"><span>Saldo inicial</span><span>'+brl(sessao.saldoInicialCentavos)+'</span></div>'+
+    (sangrias.length ? '<div class="line"><span>Sangrias ('+sangrias.length+')</span><span>-'+brl(sangrias.reduce(function(s,m){return s+m.valorCentavos;},0))+'</span></div>' : '')+
+    (suprimentos.length ? '<div class="line"><span>Suprimentos ('+suprimentos.length+')</span><span>+'+brl(suprimentos.reduce(function(s,m){return s+m.valorCentavos;},0))+'</span></div>' : '')+
+    '<hr>'+
+    '<div class="line"><span>Esperado (dinheiro)</span><span>'+brl(det.esperados.DINHEIRO||0)+'</span></div>'+
+    '<div class="line"><span>Informado (dinheiro)</span><span>'+brl(det.informados.DINHEIRO||0)+'</span></div>'+
+    '<div class="line bold"><span>Diferença</span><span>'+brl(sessao.diferencaCentavos||0)+'</span></div>'+
+    '<hr>'+
+    '<div class="center">Relatório gerado localmente — conferência interna</div>'+
+  '</div>';
 }
 
 function abrirContaForm(){
   state.modal = {type:"contaForm"};
   render();
 }
-function salvarConta(tipo, descricao, categoria, valorCentavos, vencimento){
+async function salvarConta(tipo, descricao, categoria, valorCentavos, vencimento){
   if(!descricao.trim() || !(valorCentavos>0) || !vencimento) return;
-  state.contas.push({id:uid("ct"), tipo:tipo, descricao:descricao.trim(), categoria:(categoria.trim()||"Geral"),
-    valorCentavos:valorCentavos, vencimento:vencimento, pagoEm:null});
+  var res = await sb.from("contas").insert({
+    empresa_id: state.empresaId, tipo:tipo, descricao:descricao.trim(), categoria:(categoria.trim()||"Geral"),
+    valor_centavos:valorCentavos, vencimento:vencimento
+  }).select().single();
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  state.contas.push(mapConta(res.data));
   state.modal = null;
-  save(); render();
+  render();
   toast("ok","CONTA CRIADA", descricao.trim());
 }
-function marcarContaPaga(contaId){
+async function marcarContaPaga(contaId){
   var c = state.contas.find(function(x){ return x.id===contaId; });
-  c.pagoEm = new Date().toISOString();
-  save(); render();
+  var agora = new Date().toISOString();
+  var res = await sb.from("contas").update({pago_em:agora}).eq("id", contaId);
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  c.pagoEm = agora;
+  render();
   toast("ok","CONTA PAGA", c.descricao);
 }
 
@@ -1063,28 +1346,56 @@ function abrirUsuarioForm(){
   state.modal = {type:"usuarioForm", erro:""};
   render();
 }
-function salvarUsuario(nome, papel, pin){
+async function salvarUsuario(nome, papel, pin){
   if(!nome.trim()){ state.modal.erro = "Informe o nome."; render(); return; }
   if(!/^[0-9]{4}$/.test(pin)){ state.modal.erro = "PIN deve ter exatamente 4 dígitos."; render(); return; }
-  state.usuarios.push({id:uid("u"), nome:nome.trim(), papel:papel, pin:pin, ativo:true});
+  state.modal.salvando = true; render();
+  var res = await sb.rpc("criar_funcionario", {p_nome:nome.trim(), p_papel:papel, p_pin:pin});
+  if(res.error){ state.modal.erro = res.error.message; state.modal.salvando = false; render(); return; }
+  state.usuarios.push({id:res.data, nome:nome.trim(), papel:papel, ativo:true});
   state.modal = null;
-  save(); render();
+  render();
   toast("ok","USUÁRIO CRIADO", nome.trim()+" · "+papel);
 }
-function toggleUsuarioAtivo(usuarioId){
+async function toggleUsuarioAtivo(usuarioId){
   var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
-  u.ativo = !u.ativo;
-  save(); render();
+  var novo = !u.ativo;
+  u.ativo = novo;
+  render();
+  var res = await sb.from("usuarios").update({ativo:novo}).eq("id", usuarioId);
+  if(res.error){ u.ativo = !novo; toast("err","ERRO", res.error.message); render(); }
 }
 
-function salvarConfig(nome, cnpj, taxaPct, descontoPct, diferencaCentavos){
-  state.config.empresaNome = nome.trim() || state.config.empresaNome;
-  state.config.empresaCnpj = cnpj.trim();
-  state.config.taxaServicoPctPadrao = Math.max(0, taxaPct||0);
-  state.config.limiteDescontoPct = Math.max(0, descontoPct||0);
-  state.config.limiteDiferencaCentavos = Math.max(0, diferencaCentavos||0);
-  save(); render();
+async function salvarConfig(campos){
+  var c = state.config;
+  var novoConfig = Object.assign({}, c, {
+    taxaServicoPctPadrao: Math.max(0, campos.taxaPct||0),
+    limiteDescontoPct: Math.max(0, campos.descontoPct||0),
+    limiteDiferencaCentavos: Math.max(0, campos.diferencaCentavos||0),
+    impressoraLargura: campos.impressoraLargura==="58mm" ? "58mm" : "80mm",
+    reciboRodape: campos.reciboRodape.trim(),
+    horarioAbertura: campos.horarioAbertura || c.horarioAbertura,
+    horarioFechamento: campos.horarioFechamento || c.horarioFechamento,
+    chavePix: campos.chavePix.trim()
+  });
+  delete novoConfig.empresaNome; delete novoConfig.empresaCnpj;
+  var res = await sb.from("empresas").update({
+    nome: campos.nome.trim() || c.empresaNome, cnpj: campos.cnpj.trim(), config: novoConfig
+  }).eq("id", state.empresaId);
+  if(res.error){ toast("err","ERRO AO SALVAR", res.error.message); return; }
+  state.config = Object.assign({}, novoConfig, {empresaNome: campos.nome.trim()||c.empresaNome, empresaCnpj: campos.cnpj.trim()});
+  render();
   toast("ok","CONFIGURAÇÕES SALVAS", "");
+}
+function estaAberto(){
+  var c = state.config;
+  var agora = new Date();
+  var hm = String(agora.getHours()).padStart(2,"0")+":"+String(agora.getMinutes()).padStart(2,"0");
+  if(c.horarioAbertura===c.horarioFechamento) return true;
+  if(c.horarioAbertura < c.horarioFechamento){
+    return hm >= c.horarioAbertura && hm < c.horarioFechamento;
+  }
+  return hm >= c.horarioAbertura || hm < c.horarioFechamento;
 }
 
 // ---------- dashboard helpers ----------
@@ -1132,6 +1443,10 @@ function render(){
     bindEvents();
     return;
   }
+  if(state.carregando || !usuarioAtual()){
+    app.innerHTML = '<div class="login-wrap"><div class="login-card">'+icon("flame",40)+'<h1>CARREGANDO</h1><p>Sincronizando com o Supabase...</p></div></div>';
+    return;
+  }
   var html = '<div class="shell">'+
       renderSidebar()+
       '<div class="main-col">'+
@@ -1140,7 +1455,8 @@ function render(){
         renderBottomNav()+
       '</div>'+
     '</div>'+
-    renderToasts();
+    renderToasts()+
+    '<div class="print-only">'+(state.printHtml||"")+'</div>';
   if(state.modal) html += renderModal();
   app.innerHTML = html;
   bindEvents();
@@ -1180,11 +1496,17 @@ function renderSidebar(){
 function renderTopbar(){
   var u = usuarioAtual();
   var title = PAGE_TITLES[state.view] || "";
+  var aberto = estaAberto();
   return '<div class="topbar">'+
     '<button class="icon-btn" data-action="toggle-sidebar">'+icon("menu",18)+'</button>'+
     '<div class="topbar-title">'+title+'</div>'+
     '<div class="topbar-spacer"></div>'+
-    '<div class="status-pill"><span class="status-dot"></span>LOCAL <span style="color:var(--text-muted);">· dados neste navegador</span></div>'+
+    '<div class="status-pill">'+
+      '<span class="status-dot" style="background:'+(aberto?"var(--success)":"var(--danger)")+';"></span>'+
+      (aberto?"ABERTO":"FECHADO")+
+      ' <span style="color:var(--text-muted);">· '+state.config.horarioAbertura+'–'+state.config.horarioFechamento+'</span>'+
+    '</div>'+
+    '<div class="status-pill"><span class="status-dot" style="background:'+(navigator.onLine?"var(--success)":"var(--danger)")+';"></span>'+(navigator.onLine?"SUPABASE":"SEM CONEXÃO")+' <span style="color:var(--text-muted);">· '+(navigator.onLine?"sincronizado em tempo real":"reconectando...")+'</span></div>'+
     '<div class="user-chip">'+
       '<div class="avatar">'+escapeHtml(u.nome.charAt(0))+'</div>'+
       '<div class="meta"><div class="nome">'+escapeHtml(u.nome)+'</div><div class="papel">'+u.papel+'</div></div>'+
@@ -1234,16 +1556,15 @@ function renderLogin(){
       '<div class="login-flame">'+icon("flame",40)+'</div>'+
       '<h1>FOGO GESTÃO</h1><p>Selecione seu usuário para entrar</p>'+
       '<div class="user-grid">'+
-        state.usuarios.filter(function(u){ return u.ativo; }).map(function(u){
+        (state.usuariosLogin.length ? state.usuariosLogin.map(function(u){
           return '<div class="user-card" data-action="login-select" data-uid="'+u.id+'">'+
             '<div class="nome">'+escapeHtml(u.nome)+'</div>'+
-            '<div class="papel">'+u.papel+'</div>'+
           '</div>';
-        }).join("")+
+        }).join("") : '<div class="empty-hint">Conectando ao Supabase...</div>')+
       '</div>'+
     '</div></div>';
   }
-  var u = state.usuarios.find(function(x){ return x.id===state.loginSelectedUserId; });
+  var u = state.usuariosLogin.find(function(x){ return x.id===state.loginSelectedUserId; });
   var dots = "";
   for(var i=0;i<PIN_LEN;i++) dots += '<div class="pin-dot '+(i<state.pinBuffer.length?"filled":"")+'"></div>';
   var keys = ["1","2","3","4","5","6","7","8","9","","0","back"];
@@ -1519,6 +1840,7 @@ function renderCaixa(){
       (ultima ? '<div class="alert-row '+(ultima.diferencaCentavos?"danger":"")+'">'+icon("alert",16)+'<div><span class="t">ÚLTIMO FECHAMENTO</span><span class="d">Diferença de '+brl(ultima.diferencaCentavos||0)+'</span></div></div>' : '')+
       '<div class="field"><label>Saldo inicial (troco)</label><input type="number" id="saldoInicialInput" placeholder="0,00" min="0" step="0.01"></div>'+
       '<button class="btn btn-primary btn-lg btn-block" data-action="caixa-abrir-confirmar">Abrir caixa</button>'+
+      (state.caixaSessoesHistorico.length ? '<button class="btn btn-block" style="margin-top:10px;" data-action="fechamento-imprimir" data-sessao="'+state.caixaSessoesHistorico[state.caixaSessoesHistorico.length-1].id+'">'+icon("book",15)+' Reimprimir último fechamento</button>' : '')+
       '</div>';
   }
   var s = state.caixaSessao;
@@ -1713,7 +2035,7 @@ function renderEquipe(){
     state.usuarios.map(function(u){
       return '<div class="data-row">'+
         '<div class="main"><div class="nome">'+escapeHtml(u.nome)+' '+(!u.ativo?'<span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
-        '<div class="sub">'+u.papel+' · PIN '+u.pin+'</div></div>'+
+        '<div class="sub">'+u.papel+'</div></div>'+
         (podeEditar ? '<div class="acts">'+
           '<button class="btn btn-sm" data-action="usuario-toggle-ativo" data-usuario="'+u.id+'">'+(u.ativo?"Desativar":"Reativar")+'</button>'+
         '</div>' : '')+
@@ -1724,15 +2046,36 @@ function renderEquipe(){
 
 function renderConfiguracoes(){
   var c = state.config;
-  return '<div class="page-header"><div><div class="page-title">Configurações</div><div class="page-sub">Dados fiscais, limites e taxas</div></div></div>'+
-    '<div class="card" style="max-width:520px;">'+
+  return '<div class="page-header"><div><div class="page-title">Configurações</div><div class="page-sub">Dados fiscais, limites, impressão e funcionamento</div></div></div>'+
+    '<div class="grid-2">'+
+    '<div class="card">'+
+      '<div class="card-title">Empresa</div>'+
       '<div class="field"><label>Nome da empresa</label><input id="cfgNome" value="'+escapeHtml(c.empresaNome)+'"></div>'+
       '<div class="field"><label>CNPJ</label><input id="cfgCnpj" value="'+escapeHtml(c.empresaCnpj)+'"></div>'+
+      '<div class="field"><label>Chave PIX (recebimento)</label><input id="cfgChavePix" value="'+escapeHtml(c.chavePix)+'"></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Horário de funcionamento</label>'+
+        '<div style="display:flex; gap:8px;">'+
+          '<input id="cfgHorarioAbertura" type="time" value="'+c.horarioAbertura+'">'+
+          '<input id="cfgHorarioFechamento" type="time" value="'+c.horarioFechamento+'">'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Limites e operação</div>'+
       '<div class="field"><label>Taxa de serviço padrão (%)</label><input id="cfgTaxa" type="number" min="0" max="30" step="1" value="'+c.taxaServicoPctPadrao+'"></div>'+
       '<div class="field"><label>Limite de desconto sem supervisor (%)</label><input id="cfgDesconto" type="number" min="0" max="100" step="1" value="'+c.limiteDescontoPct+'"></div>'+
-      '<div class="field"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
-      '<button class="btn btn-primary btn-lg btn-block" data-action="config-salvar">Salvar configurações</button>'+
-    '</div>';
+      '<div class="field" style="margin-bottom:0;"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Impressão de comprovantes</div>'+
+      '<div class="field"><label>Largura da impressora</label><select id="cfgImpressora">'+
+        '<option value="80mm" '+(c.impressoraLargura==="80mm"?"selected":"")+'>80mm</option>'+
+        '<option value="58mm" '+(c.impressoraLargura==="58mm"?"selected":"")+'>58mm</option>'+
+      '</select></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Mensagem de rodapé do recibo</label><input id="cfgRodape" value="'+escapeHtml(c.reciboRodape)+'"></div>'+
+    '</div>'+
+    '</div>'+
+    '<button class="btn btn-primary btn-lg" style="margin-top:16px;" data-action="config-salvar">Salvar configurações</button>';
 }
 
 function renderModal(){
@@ -1747,7 +2090,21 @@ function renderModal(){
   if(m.type==="insumoMov") return renderInsumoMovModal(m);
   if(m.type==="contaForm") return renderContaFormModal(m);
   if(m.type==="usuarioForm") return renderUsuarioFormModal(m);
+  if(m.type==="recibo") return renderReciboModal(m);
   return "";
+}
+
+function renderReciboModal(m){
+  var comanda = m.comanda;
+  if(!comanda) return "";
+  return '<div class="modal-overlay"><div class="modal-box" style="text-align:center;">'+
+    '<h2>Pagamento confirmado</h2><div class="modal-sub">'+comanda.codigo+' · '+brl(totaisComanda(comanda).total)+'</div>'+
+    buildReciboHtml(comanda)+
+    '<div class="action-row" style="margin-top:16px;">'+
+      '<button class="btn" data-action="recibo-imprimir">'+icon("book",15)+' Imprimir comprovante</button>'+
+      '<button class="btn btn-primary btn-block" data-action="recibo-fechar">Concluir</button>'+
+    '</div>'+
+  '</div></div>';
 }
 
 function renderProdutoFormModal(m){
@@ -1865,14 +2222,35 @@ function renderPagamentoModal(m){
   var soma = m.linhas.reduce(function(s,l){ return s+l.valorCentavos; },0);
   var restante = t.total - soma;
   var formas = ["DINHEIRO","PIX","DEBITO","CREDITO","VOUCHER","FIADO"];
+  var pessoas = m.dividirPessoas||1;
+  var partes = splitCentavos(t.total, pessoas);
+  var temPix = m.linhas.some(function(l){ return l.forma==="PIX"; });
+  var pixValor = temPix ? m.linhas.filter(function(l){ return l.forma==="PIX"; }).reduce(function(s,l){ return s+l.valorCentavos; },0) : 0;
   return '<div class="modal-overlay"><div class="modal-box">'+
     '<h2>Fechar conta</h2><div class="modal-sub">'+comanda.codigo+' · Total <b style="color:var(--text-primary); font-size:15px;">'+brl(t.total)+'</b></div>'+
+    '<div class="field" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">'+
+      '<label style="margin:0;">Dividir entre</label>'+
+      '<div class="qty-ctrl">'+
+        '<button data-action="pagamento-dividir-menos">'+icon("minus",13)+'</button>'+
+        '<span>'+pessoas+' pessoa'+(pessoas>1?"s":"")+'</span>'+
+        '<button data-action="pagamento-dividir-mais">'+icon("plus",13)+'</button>'+
+      '</div>'+
+    '</div>'+
+    (pessoas>1 ? '<div class="modal-sub" style="margin-top:0;">Cada pessoa paga '+brl(partes[partes.length-1])+
+      (partes[0]!==partes[partes.length-1] ? ' ('+partes.filter(function(v){return v===partes[0];}).length+' pessoa(s) paga(m) '+brl(partes[0])+', 1 centavo a mais por causa do arredondamento)' : '')+
+    '</div>' : '')+
     '<div class="pay-methods">'+formas.map(function(f){ return '<button class="pay-method-btn" data-action="pagamento-metodo" data-forma="'+f+'">'+f+'</button>'; }).join("")+'</div>'+
     (m.linhas.length ? m.linhas.map(function(l,idx){
       return '<div class="pagamento-linha"><span class="forma">'+l.forma+'</span>'+
         '<input type="number" id="payval-'+idx+'" min="0" step="0.01" value="'+(l.valorCentavos/100).toFixed(2)+'" data-action="pagamento-valor" data-idx="'+idx+'">'+
         '<button class="icon-btn" data-action="pagamento-remover" data-idx="'+idx+'" style="color:var(--danger);">'+icon("x",14)+'</button></div>';
     }).join("") : '')+
+    (temPix ? '<div class="receipt-preview" style="margin:10px auto;">'+
+      '<div class="center bold">PIX — '+brl(pixValor)+'</div>'+
+      pixQrGridHtml(comanda.codigo+pixValor)+
+      '<div class="center" style="word-break:break-all; font-size:9.5px;">'+pixCodigoSimulado(comanda,pixValor)+'</div>'+
+      '<div class="center" style="color:#a00; font-size:9.5px; margin-top:4px;">SIMULAÇÃO — não processa pagamento real</div>'+
+    '</div>' : '')+
     '<div class="totais-box">'+
       '<div class="totais-linha"><span>Pago até agora</span><span>'+brl(soma)+'</span></div>'+
       '<div class="totais-linha total" style="color:'+(restante>0?"var(--warning)":"var(--success)")+';"><span>'+(restante>0?"RESTANTE":"TROCO")+'</span><span>'+brl(Math.abs(restante))+'</span></div>'+
@@ -1900,6 +2278,18 @@ function renderCaixaMovModal(m){
 
 function renderCaixaFecharModal(m){
   var formas = formasDaSessao();
+  if(m.stage==="concluido"){
+    var sessao = state.caixaSessoesHistorico[state.caixaSessoesHistorico.length-1];
+    var cls2 = sessao.diferencaCentavos===0 ? "zero" : (sessao.diferencaCentavos>0 ? "pos" : "neg");
+    return '<div class="modal-overlay"><div class="modal-box" style="text-align:center;">'+
+      '<h2>Caixa fechado</h2>'+
+      '<div class="diff-box '+cls2+'"><div class="lbl">Diferença final</div><div class="valor">'+brl(sessao.diferencaCentavos||0)+'</div></div>'+
+      '<div class="action-row">'+
+        '<button class="btn" data-action="fechamento-imprimir" data-sessao="'+sessao.id+'">'+icon("book",15)+' Imprimir relatório</button>'+
+        '<button class="btn btn-primary btn-block" data-action="caixa-fechar-ok">Concluir</button>'+
+      '</div>'+
+    '</div></div>';
+  }
   if(!m.stage || m.stage==="contar"){
     return '<div class="modal-overlay"><div class="modal-box">'+
       '<h2>Conferência de caixa</h2><div class="modal-sub">Informe os valores contados. Os valores esperados só aparecem depois de confirmar.</div>'+
@@ -1945,6 +2335,7 @@ function renderCaixaFecharModal(m){
 
 function bindEvents(){
   app.onclick = function(e){
+   try{
     var el = e.target.closest("[data-action]");
     if(!el) return;
     var action = el.dataset.action;
@@ -1960,7 +2351,7 @@ function bindEvents(){
     if(action==="login-pin-back"){ state.pinBuffer = state.pinBuffer.slice(0,-1); render(); return; }
     if(action==="logout"){ logout(); return; }
     if(action==="toggle-sidebar"){ state.sidebarCollapsed = !state.sidebarCollapsed; render(); return; }
-    if(action==="nav-goto"){ state.view = el.dataset.view; state.viewParams={}; save(); render(); return; }
+    if(action==="nav-goto"){ state.view = el.dataset.view; state.viewParams={}; render(); return; }
     if(action==="salao-filtro"){ state.salaoFiltro = el.dataset.f; render(); return; }
 
     if(action==="mesa-open"){
@@ -1969,11 +2360,11 @@ function bindEvents(){
       if(abertas.length===0){
         if(can(PERM.COMANDA_ABRIR)) abrirComanda(mesaId);
       } else {
-        irParaComanda(abertas[0].id); save(); render();
+        irParaComanda(abertas[0].id); render();
       }
       return;
     }
-    if(action==="comanda-open"){ irParaComanda(el.dataset.comanda); save(); render(); return; }
+    if(action==="comanda-open"){ irParaComanda(el.dataset.comanda); render(); return; }
 
     if(action==="toggle-mobile-catalog"){ state.draft.mobileCatalog = !state.draft.mobileCatalog; render(); return; }
     if(action==="picker-cat"){ state.draft.categoria = el.dataset.cat; render(); return; }
@@ -2002,11 +2393,20 @@ function bindEvents(){
     if(action==="pagamento-cancelar"){
       var comanda = state.comandas.find(function(c){ return c.id===state.modal.comandaId; });
       comanda.status = "ABERTA";
-      state.modal=null; save(); render(); return;
+      state.modal=null; render();
+      sb.from("comandas").update({status:"ABERTA"}).eq("id", comanda.id);
+      return;
     }
     if(action==="pagamento-metodo"){ pagamentoAddMetodo(el.dataset.forma); return; }
     if(action==="pagamento-remover"){ pagamentoRemoveLinha(parseInt(el.dataset.idx,10)); return; }
     if(action==="pagamento-confirmar"){ confirmarPagamento(); return; }
+    if(action==="pagamento-dividir-mais"){ state.modal.dividirPessoas = (state.modal.dividirPessoas||1)+1; render(); return; }
+    if(action==="pagamento-dividir-menos"){ state.modal.dividirPessoas = Math.max(1,(state.modal.dividirPessoas||1)-1); render(); return; }
+    if(action==="recibo-imprimir"){
+      if(state.modal && state.modal.comanda) imprimir(buildReciboHtml(state.modal.comanda));
+      return;
+    }
+    if(action==="recibo-fechar"){ state.modal = null; render(); return; }
 
     if(action==="kds-set"){ kdsSetStatus(el.dataset.comanda, el.dataset.item, el.dataset.status); return; }
 
@@ -2039,6 +2439,12 @@ function bindEvents(){
       return;
     }
     if(action==="caixa-fechar-confirmar-final"){ confirmarFechamento(null); return; }
+    if(action==="fechamento-imprimir"){
+      var sessaoImp = state.caixaSessoesHistorico.find(function(s){ return s.id===el.dataset.sessao; });
+      if(sessaoImp) imprimir(buildFechamentoHtml(sessaoImp));
+      return;
+    }
+    if(action==="caixa-fechar-ok"){ state.modal = null; render(); return; }
 
     if(action==="cardapio-filtro"){ state.cardapioFiltro = el.dataset.f; render(); return; }
     if(action==="produto-novo"){ abrirProdutoForm(null); return; }
@@ -2092,22 +2498,35 @@ function bindEvents(){
     if(action==="usuario-toggle-ativo"){ toggleUsuarioAtivo(el.dataset.usuario); return; }
 
     if(action==="config-salvar"){
-      salvarConfig(
-        document.getElementById("cfgNome").value,
-        document.getElementById("cfgCnpj").value,
-        parseFloat(document.getElementById("cfgTaxa").value||"0"),
-        parseFloat(document.getElementById("cfgDesconto").value||"0"),
-        Math.round(parseFloat(document.getElementById("cfgDiferenca").value||"0")*100)
-      );
+      salvarConfig({
+        nome: document.getElementById("cfgNome").value,
+        cnpj: document.getElementById("cfgCnpj").value,
+        taxaPct: parseFloat(document.getElementById("cfgTaxa").value||"0"),
+        descontoPct: parseFloat(document.getElementById("cfgDesconto").value||"0"),
+        diferencaCentavos: Math.round(parseFloat(document.getElementById("cfgDiferenca").value||"0")*100),
+        impressoraLargura: document.getElementById("cfgImpressora").value,
+        reciboRodape: document.getElementById("cfgRodape").value,
+        horarioAbertura: document.getElementById("cfgHorarioAbertura").value,
+        horarioFechamento: document.getElementById("cfgHorarioFechamento").value,
+        chavePix: document.getElementById("cfgChavePix").value
+      });
       return;
     }
+   } catch(err){
+     console.error("erro no clique:", err.message, err.stack);
+     toast("err","ERRO INESPERADO", err.message);
+   }
   };
 
   app.onchange = function(e){
     if(e.target.dataset.action==="toggle-taxa"){
       var comanda = state.comandas.find(function(c){ return c.id===state.viewParams.comandaId; });
-      comanda.taxaServicoAtiva = e.target.checked;
-      save(); render();
+      var ativa = e.target.checked;
+      comanda.taxaServicoAtiva = ativa;
+      render();
+      sb.from("comandas").update({taxa_servico_ativa:ativa}).eq("id", comanda.id).then(function(res){
+        if(res.error){ comanda.taxaServicoAtiva = !ativa; toast("err","ERRO", res.error.message); render(); }
+      });
     }
   };
 
@@ -2165,8 +2584,15 @@ document.addEventListener("keydown", function(e){
   }
 });
 
-state = load();
+window.addEventListener("online", function(){
+  render();
+  if(state.usuarioAtualId) carregarTudo();
+});
+window.addEventListener("offline", render);
+
+state = estadoVazio();
 render();
+carregarUsuariosLogin();
 })();
 </script>
 </body>
