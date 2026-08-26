@@ -1,62 +1,88 @@
-# Sistema de Gestão para Restaurante/Bar
+# Sistema de Gestão para Restaurante/Bar — Fogo Gestão
 
-PWA de atendimento, caixa e administração para food service (React + TS +
-Vite + Supabase). Ver a especificação completa que originou este repositório
-no histórico de conversa / prompt mestre.
+Sistema de atendimento, cozinha (KDS), caixa, estoque, financeiro e
+administração para restaurante/bar, rodando **100% sobre o Supabase**
+(Postgres + Auth + Realtime) — sem `localStorage`, sem estado local como
+fonte de verdade. Qualquer dispositivo autenticado lê e escreve direto no
+banco, e fica sincronizado com os demais via Realtime.
 
-## Estado atual — Fase 0, entregáveis "COMECE AQUI"
+## Estado atual
 
-Antes de gerar código de aplicação, foram produzidos os três entregáveis
-pedidos:
+O front-end é um único arquivo estático (`index.html`, ~2.900 linhas,
+JavaScript puro + `@supabase/supabase-js` via CDN) — deliberadamente sem
+build step, pronto para hospedagem estática (Vercel, GitHub Pages, etc.).
+Ele cobre: login por PIN (autenticação real), mapa de mesas, comandas e
+lançamento de pedidos, KDS em Kanban, caixa com conferência cega, cardápio,
+estoque com baixa automática por ficha técnica, financeiro, relatórios,
+equipe e configurações.
 
-1. **Diagrama ER completo** → [`docs/ER.md`](docs/ER.md)
-2. **Rotas + matriz de permissão por papel** → [`docs/rotas-permissoes.md`](docs/rotas-permissoes.md)
-3. **Migrations da Fase 0** → [`supabase/migrations/`](supabase/migrations/)
-   - `0001_extensions_tipos.sql` — extensões, enum `papel_usuario`, helper `set_updated_at()`
-   - `0002_nucleo_tabelas.sql` — `empresas`, `usuarios`, `papeis_permissoes`, `auditoria` + trigger de auditoria genérica
-   - `0003_funcoes_auth.sql` — `jwt_empresa_id()`, `jwt_papel()`, `tem_permissao()`, `custom_access_token_hook()`
-   - `0004_rls_policies.sql` — RLS por `empresa_id` + permissão em todas as tabelas do núcleo
-   - `0005_seed_papeis_permissoes.sql` — catálogo RBAC (5 papéis × 23 permissões)
+### Backend (Supabase) — schema completo aplicado
 
-Nenhum código de aplicação (React, Zustand, Dexie etc.) foi criado ainda —
-conforme instrução do prompt mestre, o projeto **para aqui e aguarda
-validação** antes de seguir para a Fase 0 restante (setup do front-end,
-auth, layout base) e Fase 1 (cardápio + mesas + comanda).
+- **Fase 0**: `empresas`, `usuarios`, `papeis_permissoes`, `auditoria`, RLS,
+  RBAC (5 papéis × 23 permissões).
+- **Fase 1**: `categorias`, `produtos`, `insumos`, `ficha_tecnica`,
+  `estoque_movimentos`, `mesas`, `comandas`, `comanda_itens`,
+  `caixa_sessoes`, `caixa_movimentos`, `pagamentos`, `contas` — todas com
+  RLS por `empresa_id` + permissão do papel.
+- Todas as migrations estão em [`supabase/migrations/`](supabase/migrations/),
+  numeradas e aplicadas em ordem.
 
-## Pré-requisito ainda pendente nesta máquina
+### Autenticação real (não é mock)
 
-Não encontrei **Node.js/npm** instalado neste ambiente (`node`, `npx` e os
-caminhos usuais de instalação não existem em `PATH` nem em
-`Program Files`/`AppData`). Os artefatos desta fase são só SQL e Markdown —
-não precisam de Node para existir —, mas a partir da próxima fase (scaffold
-Vite/React) será necessário instalar o Node.js (LTS) antes de continuar.
+Cada funcionário é uma conta real do Supabase Auth. O PIN de 4 dígitos que
+aparece na tela **é a senha** por trás de um e-mail interno gerado
+(`nome@fogo.internal`). O JWT emitido no login carrega `empresa_id` e
+`papel` via um *Custom Access Token Hook* (`public.custom_access_token_hook`,
+`SECURITY DEFINER`) — é isso que a RLS usa para isolar os dados por empresa
+e por papel em toda tabela.
 
-## Status do Supabase
+Criar um novo funcionário (tela Equipe) chama a função
+`public.criar_funcionario` (RPC, `SECURITY DEFINER`), que valida a
+permissão do chamador, lê a chave de serviço do **Supabase Vault**
+(nunca do código do cliente) e cria a conta via Admin API do GoTrue. A
+chave secreta nunca é exposta ao navegador.
 
-As 5 migrations da Fase 0 já foram aplicadas no projeto Supabase real
-(`empresas`, `usuarios`, `papeis_permissoes`, `auditoria`, RLS e o seed de
-60 permissões do RBAC). Credenciais em `.env` (não versionado — copie de
-`.env.example`).
+### Sincronização multi-dispositivo
 
-Pendente, feito só pelo painel (não por SQL): **Authentication → Hooks →
-Custom Access Token**, apontando para `public.custom_access_token_hook` —
-é isso que injeta `empresa_id` e `papel` no JWT usados pelas policies de
-RLS.
+`supabase-js` mantém um canal Realtime (`postgres_changes`) por empresa,
+escutando `comandas`, `comanda_itens`, `caixa_sessoes`, `caixa_movimentos`,
+`produtos`, `insumos`, `contas` e `usuarios`. Qualquer mudança em um
+dispositivo dispara um recarregamento (debounced) nos demais. Se
+`WebSocket` não estiver disponível no ambiente, o app degrada com
+graça (sem Realtime, mas CRUD continua funcionando normalmente).
 
-Para reaplicar/atualizar migrations futuras:
+### Validado com testes de integração reais
+
+Não há mocks — os testes (`node` + `jsdom`, com polyfill de `fetch`) rodam
+o `index.html` de verdade contra o projeto Supabase de produção: login
+real, criação de comanda, lançamento de item, abertura de caixa, pagamento,
+baixa automática de estoque por ficha técnica, e leitura de
+cardápio/financeiro/relatórios/equipe/configurações. Última rodada: 10/10
+passos, 0 erros.
+
+## Variáveis de ambiente
+
+Copie `.env.example` para `.env` (não versionado). O front-end usa apenas
+`VITE_SUPABASE_URL` e a chave **publicável** (`sb_publishable_...`, segura
+para expor no navegador). A chave secreta (`sb_secret_...`) nunca é usada
+no front-end — só no Vault, por dentro da função `criar_funcionario`.
+
+## Aplicar/atualizar migrations
 
 ```powershell
-# via psql direto (connection string em .env, senha via Project Settings → Database)
 psql "postgresql://postgres.<ref>:<senha>@aws-0-us-west-2.pooler.supabase.com:5432/postgres" -f supabase/migrations/000X_arquivo.sql
-
-# ou, quando a Supabase CLI estiver instalada e o projeto vinculado:
-supabase db push
 ```
 
-## Próximos passos (após validação)
+Senha do banco em **Project Settings → Database** no painel do Supabase
+(reset se necessário — não fica salva em lugar nenhum do repositório).
 
-- Completar Fase 0: scaffold Vite + TS + Tailwind + shadcn/ui, tela de
-  login, guard de rota por permissão, layout base.
-- Criar a primeira `empresa` e o primeiro `usuario` (`ADMIN`) via seed
-  controlado (não incluso aqui — depende de um `auth.users` real).
-- Fase 1: cardápio, mesas, comandas, lançamento de itens.
+## Pendências conhecidas
+
+- **Deploy**: ainda não publicado na Vercel (próximo passo).
+- **Notas fiscais reais (NFC-e)**: o app emite um *comprovante não fiscal*
+  (recibo de pagamento) e relatório de fechamento de caixa, ambos
+  imprimíveis via `window.print()`. Nota fiscal eletrônica de verdade exige
+  integração com um provedor credenciado (Focus NFe, Tecnospeed etc.) via
+  certificado A1 — fora do escopo atual, é a Fase 7 do projeto original.
+- **PIX**: simulado (QR ilustrativo + código "copia e cola" fake,
+  claramente rotulado como simulação) — não processa pagamento real.
