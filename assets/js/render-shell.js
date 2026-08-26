@@ -38,6 +38,7 @@ function render(){
   }
   var html = '<div class="shell">'+
       renderSidebar()+
+      (state.sidebarMobileAberto ? '<div class="sidebar-backdrop" data-action="sidebar-fechar"></div>' : '')+
       '<div class="main-col">'+
         renderTopbar()+
         '<div class="content">'+renderView()+'</div>'+
@@ -63,10 +64,11 @@ function render(){
 
 function renderSidebar(){
   var items = NAV_ITEMS.filter(function(n){ return can(n.perm); });
-  return '<div class="sidebar '+(state.sidebarCollapsed?"collapsed":"")+'">'+
+  return '<div class="sidebar '+(state.sidebarCollapsed?"collapsed":"")+' '+(state.sidebarMobileAberto?"mobile-open":"")+'">'+
     '<div class="sidebar-brand">'+
       '<img class="sidebar-logo" src="assets/logo/rancho-netto-white.png" alt="Rancho Netto">'+
       '<div class="brand-text"><div class="name">RANCHO NETTO</div><div class="sub">BRASA &amp; FOGO</div></div>'+
+      '<button class="icon-btn sidebar-close" data-action="sidebar-fechar">'+icon("x",16)+'</button>'+
     '</div>'+
     '<div class="nav-scroll">'+
       items.map(function(n){
@@ -94,9 +96,9 @@ function renderTopbar(){
     '<div class="status-pill">'+
       '<span class="status-dot" style="background:'+(aberto?"var(--success)":"var(--danger)")+';"></span>'+
       (aberto?"ABERTO":"FECHADO")+
-      ' <span style="color:var(--text-muted);">· '+state.config.horarioAbertura+'–'+state.config.horarioFechamento+'</span>'+
+      ' <span class="pill-detail" style="color:var(--text-muted);">· '+state.config.horarioAbertura+'–'+state.config.horarioFechamento+'</span>'+
     '</div>'+
-    '<div class="status-pill"><span class="status-dot" style="background:'+(navigator.onLine?"var(--success)":"var(--danger)")+';"></span>'+(navigator.onLine?"SUPABASE":"SEM CONEXÃO")+' <span style="color:var(--text-muted);">· '+(navigator.onLine?"sincronizado em tempo real":"reconectando...")+'</span></div>'+
+    '<div class="status-pill pill-conexao"><span class="status-dot" style="background:'+(navigator.onLine?"var(--success)":"var(--danger)")+';"></span>'+(navigator.onLine?"SUPABASE":"SEM CONEXÃO")+' <span class="pill-detail" style="color:var(--text-muted);">· '+(navigator.onLine?"sincronizado em tempo real":"reconectando...")+'</span></div>'+
     '<div class="user-chip">'+
       '<div class="avatar">'+escapeHtml(u.nome.charAt(0))+'</div>'+
       '<div class="meta"><div class="nome">'+escapeHtml(u.nome)+'</div><div class="papel">'+u.papel+'</div></div>'+
@@ -109,13 +111,14 @@ function renderBottomNav(){
   var items = [
     {view:"salao", label:"Salão", icon:"utensils", perm:PERM.SALAO_VER},
     {view:"kds", label:"Cozinha", icon:"chef", perm:PERM.KDS_VER},
-    {view:"caixa", label:"Caixa", icon:"wallet", perm:PERM.CAIXA_ABRIR},
-    {view:"dashboard", label:"Mais", icon:"more", perm:PERM.SALAO_VER}
+    {view:"caixa", label:"Caixa", icon:"wallet", perm:PERM.CAIXA_ABRIR}
   ].filter(function(n){ return can(n.perm); });
   return '<div class="bottom-nav">'+items.map(function(n){
     var active = state.view===n.view || (n.view==="salao" && state.view==="comanda");
     return '<div class="bn-item '+(active?"active":"")+'" data-action="nav-goto" data-view="'+n.view+'">'+icon(n.icon,20)+'<span>'+n.label+'</span></div>';
-  }).join("")+'</div>';
+  }).join("")+
+    '<div class="bn-item '+(state.sidebarMobileAberto?"active":"")+'" data-action="sidebar-abrir">'+icon("menu",20)+'<span>Menu</span></div>'+
+  '</div>';
 }
 
 function renderToasts(){

@@ -13,6 +13,7 @@ function estadoVazio(){
     pinBuffer:"",
     pinError:"",
     sidebarCollapsed:false,
+    sidebarMobileAberto:false,
     salaoFiltro:"TODAS",
     cardapioFiltro:"Todos",
     financeiroFiltro:"TODAS",

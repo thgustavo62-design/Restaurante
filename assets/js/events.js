@@ -19,8 +19,17 @@ function bindEvents(){
     }
     if(action==="login-pin-back"){ state.pinBuffer = state.pinBuffer.slice(0,-1); render(); return; }
     if(action==="logout"){ logout(); return; }
-    if(action==="toggle-sidebar"){ state.sidebarCollapsed = !state.sidebarCollapsed; render(); return; }
-    if(action==="nav-goto"){ state.view = el.dataset.view; state.viewParams={}; render(); return; }
+    if(action==="toggle-sidebar"){
+      if(window.matchMedia && window.matchMedia("(max-width:759px)").matches){
+        state.sidebarMobileAberto = !state.sidebarMobileAberto;
+      } else {
+        state.sidebarCollapsed = !state.sidebarCollapsed;
+      }
+      render(); return;
+    }
+    if(action==="sidebar-abrir"){ state.sidebarMobileAberto = true; render(); return; }
+    if(action==="sidebar-fechar"){ state.sidebarMobileAberto = false; render(); return; }
+    if(action==="nav-goto"){ state.view = el.dataset.view; state.viewParams={}; state.sidebarMobileAberto = false; render(); return; }
     if(action==="salao-filtro"){ state.salaoFiltro = el.dataset.f; render(); return; }
 
     if(action==="mesa-open"){
