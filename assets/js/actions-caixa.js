@@ -69,6 +69,11 @@ async function confirmarPagamento(){
     state.modal.erro = "Faltam "+brl(t.total-soma)+" para cobrir o total.";
     render(); return;
   }
+  var temFiado = state.modal.linhas.some(function(l){ return l.forma==="FIADO"; });
+  if(temFiado && !(state.modal.fiadoCliente||"").trim()){
+    state.modal.erro = "Informe o nome do cliente para gerar a conta a receber do fiado.";
+    render(); return;
+  }
   state.modal.confirmando = true; render();
   var troco = soma - t.total;
   var fechamento = new Date().toISOString();
@@ -96,6 +101,21 @@ async function confirmarPagamento(){
   });
   var movRes = await sb.from("caixa_movimentos").insert(movimentosPayload).select();
   if(!movRes.error) state.caixaMovimentos = state.caixaMovimentos.concat(movRes.data.map(mapMovimento));
+
+  var mesaContas = state.mesas.find(function(mm){ return mm.id===comanda.mesaId; });
+  var recebiveisPayload = state.modal.linhas.filter(function(l){ return FORMAS_RECEBIVEL.indexOf(l.forma)!==-1; }).map(function(l){
+    var descricao = l.forma==="FIADO"
+      ? "Fiado — "+state.modal.fiadoCliente.trim()+" — Mesa "+(mesaContas?mesaContas.numero:"?")+" · "+comanda.codigo
+      : l.forma+" — Mesa "+(mesaContas?mesaContas.numero:"?")+" · "+comanda.codigo;
+    return {
+      empresa_id: state.empresaId, tipo:"RECEBER", descricao: descricao, categoria: l.forma==="FIADO" ? "Fiado" : "Recebíveis de cartão/voucher",
+      valor_centavos: l.valorCentavos, vencimento: diasA(l.forma==="FIADO" ? 7 : 30)
+    };
+  });
+  if(recebiveisPayload.length){
+    var contasRes = await sb.from("contas").insert(recebiveisPayload).select();
+    if(!contasRes.error) state.contas = state.contas.concat(contasRes.data.map(mapConta));
+  }
 
   comanda.pagamentos = state.modal.linhas.map(function(l){ return {forma:l.forma, valorCentavos:l.valorCentavos}; });
   comanda.trocoCentavos = troco;
@@ -168,7 +188,7 @@ function saldoDinheiroEsperado(){
   return s;
 }
 function formasDaSessao(){
-  var formas = Object.keys(totaisPorForma());
+  var formas = Object.keys(totaisPorForma()).filter(function(f){ return FORMAS_RECEBIVEL.indexOf(f)===-1; });
   if(formas.indexOf("DINHEIRO")===-1) formas.unshift("DINHEIRO");
   else { formas = formas.filter(function(f){ return f!=="DINHEIRO"; }); formas.unshift("DINHEIRO"); }
   return formas;

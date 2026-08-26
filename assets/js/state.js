@@ -28,6 +28,7 @@ function estadoVazio(){
     },
     usuarios:[], categorias:[], categoriaIdPorNome:{}, produtos:[], mesas:[],
     insumos:[], fichaTecnica:[], estoqueMovimentos:[], contas:[],
-    comandas:[], caixaSessao:null, caixaMovimentos:[], caixaSessoesHistorico:[], auditoria:[]
+    comandas:[], caixaSessao:null, caixaMovimentos:[], caixaSessoesHistorico:[], auditoria:[],
+    vendasHoje:[], vendasPeriodo:[], vendasPeriodoCarregando:false
   };
 }

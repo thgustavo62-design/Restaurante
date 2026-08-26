@@ -166,7 +166,12 @@ function bindEvents(){
     }
     if(action==="conta-pagar"){ marcarContaPaga(el.dataset.conta); return; }
 
-    if(action==="relatorio-periodo"){ state.relatorioPeriodo = el.dataset.p; render(); return; }
+    if(action==="relatorio-periodo"){
+      state.relatorioPeriodo = el.dataset.p;
+      render();
+      if(el.dataset.p!=="HOJE") carregarVendasPeriodo(el.dataset.p);
+      return;
+    }
 
     if(action==="usuario-novo"){ abrirUsuarioForm(); return; }
     if(action==="usuario-form-cancelar"){ state.modal=null; render(); return; }
@@ -218,6 +223,7 @@ function bindEvents(){
     if(action==="draft-busca"){ state.draft.busca = e.target.value; render(); return; }
     if(action==="draft-obs"){ draftObs(e.target.dataset.produto, e.target.value); return; }
     if(action==="cancelar-motivo"){ state.modal.motivo = e.target.value; return; }
+    if(action==="pagamento-fiado-cliente"){ state.modal.fiadoCliente = e.target.value; render(); return; }
     if(action==="pagamento-valor"){
       var idx = parseInt(e.target.dataset.idx,10);
       pagamentoEditarLinha(idx, Math.round(parseFloat(e.target.value||"0")*100));
@@ -227,14 +233,14 @@ function bindEvents(){
   };
 
   app.ondragstart = function(e){
-    var card = e.target.closest(".kanban-card");
+    var card = e.target.closest(".kanban-item");
     if(!card) return;
     card.classList.add("dragging");
     e.dataTransfer.setData("text/plain", JSON.stringify({comandaId:card.dataset.comanda, itemId:card.dataset.item}));
     e.dataTransfer.effectAllowed = "move";
   };
   app.ondragend = function(e){
-    var card = e.target.closest(".kanban-card");
+    var card = e.target.closest(".kanban-item");
     if(card) card.classList.remove("dragging");
   };
   app.ondragover = function(e){

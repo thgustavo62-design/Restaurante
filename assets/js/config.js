@@ -7,6 +7,8 @@ var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 var PIN_LEN = 4;
 var INGREDIENTES_COMUNS = ["Cebola","Tomate","Alface","Pimenta","Molho","Maionese","Coentro","Alho","Queijo","Bacon"];
+var FORMAS_RECEBIVEL = ["FIADO","CREDITO","VOUCHER"];
+var VIRADA_DIA_OPERACIONAL_HORA = 5;
 function limiteDescontoPct(){ return state.config.limiteDescontoPct; }
 function limiteDiferencaCentavos(){ return state.config.limiteDiferencaCentavos; }
 

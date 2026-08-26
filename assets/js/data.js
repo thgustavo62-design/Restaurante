@@ -1,5 +1,29 @@
 "use strict";
 
+function inicioDiaOperacionalIso(){
+  var chave = hojeOperacionalStr();
+  var partes = chave.split("-").map(Number);
+  var inicio = new Date(partes[0], partes[1]-1, partes[2], VIRADA_DIA_OPERACIONAL_HORA, 0, 0, 0);
+  return inicio.toISOString();
+}
+async function carregarComandasPagas(desdeIso){
+  var res = await sb.from("comandas").select("*, comanda_itens(*)").eq("status","PAGA").gte("fechamento", desdeIso);
+  if(res.error) return [];
+  return res.data.map(function(c){
+    var m = mapComanda(c);
+    m.itens = (c.comanda_itens||[]).map(mapItem);
+    return m;
+  });
+}
+async function carregarVendasPeriodo(periodo){
+  var dias = periodo==="7D" ? 7 : periodo==="30D" ? 30 : 3650;
+  var desde = new Date(Date.now() - dias*86400000).toISOString();
+  state.vendasPeriodoCarregando = true; render();
+  state.vendasPeriodo = await carregarComandasPagas(desde);
+  state.vendasPeriodoCarregando = false;
+  render();
+}
+
 async function carregarUsuariosLogin(){
   try{
     var res = await sb.from("usuarios_login").select("id,nome").order("nome");
@@ -41,6 +65,8 @@ async function carregarTudo(){
     m.itens = (c.comanda_itens||[]).map(mapItem);
     return m;
   });
+
+  state.vendasHoje = await carregarComandasPagas(inicioDiaOperacionalIso());
 
   var sessRes = await sb.from("caixa_sessoes").select("*").eq("status","ABERTA").order("abertura_em",{ascending:false}).limit(1);
   var sessData = checar(sessRes,"caixa_sessoes");

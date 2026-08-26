@@ -39,3 +39,17 @@ function diasA(n){
 function emailInterno(nome){
   return nome.trim().toLowerCase().replace(/[^a-z0-9]/g,"") + "@fogo.internal";
 }
+
+// dia operacional: um bar que abre à noite e vira a madrugada não deve
+// "trocar de dia" à meia-noite — vendas até a hora de virada configurada
+// ainda contam como o dia anterior.
+function diaOperacionalDe(dataOrIso){
+  var d = new Date(dataOrIso);
+  d.setHours(d.getHours() - VIRADA_DIA_OPERACIONAL_HORA);
+  var m = String(d.getMonth()+1).padStart(2,"0");
+  var day = String(d.getDate()).padStart(2,"0");
+  return d.getFullYear()+"-"+m+"-"+day;
+}
+function hojeOperacionalStr(){
+  return diaOperacionalDe(new Date());
+}

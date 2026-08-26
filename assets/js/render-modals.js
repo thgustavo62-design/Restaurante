@@ -195,6 +195,7 @@ function renderPagamentoModal(m){
   var partes = splitCentavos(t.total, pessoas);
   var temPix = m.linhas.some(function(l){ return l.forma==="PIX"; });
   var pixValor = temPix ? m.linhas.filter(function(l){ return l.forma==="PIX"; }).reduce(function(s,l){ return s+l.valorCentavos; },0) : 0;
+  var temFiado = m.linhas.some(function(l){ return l.forma==="FIADO"; });
   return '<div class="modal-overlay"><div class="modal-box">'+
     '<h2>Fechar conta</h2><div class="modal-sub">'+comanda.codigo+' · Total <b style="color:var(--text-primary); font-size:15px;">'+brl(t.total)+'</b></div>'+
     '<div class="field" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">'+
@@ -214,6 +215,7 @@ function renderPagamentoModal(m){
         '<input type="number" id="payval-'+idx+'" min="0" step="0.01" value="'+(l.valorCentavos/100).toFixed(2)+'" data-action="pagamento-valor" data-idx="'+idx+'">'+
         '<button class="icon-btn" data-action="pagamento-remover" data-idx="'+idx+'" style="color:var(--danger);">'+icon("x",14)+'</button></div>';
     }).join("") : '')+
+    (temFiado ? '<div class="field"><label>Nome do cliente (fiado)</label><input id="fiadoClienteInput" placeholder="Obrigatório para gerar a conta a receber" data-action="pagamento-fiado-cliente" value="'+escapeHtml(m.fiadoCliente||"")+'"></div>' : '')+
     (temPix ? '<div class="receipt-preview" style="margin:10px auto;">'+
       '<div class="center bold">PIX — '+brl(pixValor)+'</div>'+
       pixQrGridHtml(comanda.codigo+pixValor)+
@@ -227,7 +229,7 @@ function renderPagamentoModal(m){
     (m.erro ? '<div class="pin-error" style="margin-top:8px;">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="pagamento-cancelar">Cancelar</button>'+
-      '<button class="btn btn-success btn-lg btn-block" data-action="pagamento-confirmar" '+(soma<t.total?"disabled":"")+'>Confirmar pagamento</button>'+
+      '<button class="btn btn-success btn-lg btn-block" data-action="pagamento-confirmar" '+((soma<t.total || (temFiado && !(m.fiadoCliente||"").trim()))?"disabled":"")+'>Confirmar pagamento</button>'+
     '</div>'+
   '</div></div>';
 }

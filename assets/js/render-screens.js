@@ -13,7 +13,9 @@ function renderDashboard(){
     var h = new Date(c.fechamento).getHours();
     porHora[h] = (porHora[h]||0) + totaisComanda(c).total;
   });
-  var horas = []; for(var h=11; h<=23; h++) horas.push(h);
+  var horas = [];
+  for(var h=11; h<=23; h++) horas.push(h);
+  for(var h2=0; h2<VIRADA_DIA_OPERACIONAL_HORA; h2++) horas.push(h2);
   var maxHora = Math.max(1, Math.max.apply(null, horas.map(function(h){ return porHora[h]||0; })));
 
   var livres = state.mesas.filter(function(m){ return mesaStatus(m.id)==="livre"; }).length;
@@ -246,19 +248,32 @@ function renderKds(){
     '<div class="kanban">'+
     cols.map(function(col){
       var status = col[0], lista = cards[status];
+      var porComanda = {};
+      var ordem = [];
+      lista.forEach(function(c){
+        if(!porComanda[c.comandaId]){ porComanda[c.comandaId] = {codigo:c.codigo, mesaNum:c.mesaNum, itens:[]}; ordem.push(c.comandaId); }
+        porComanda[c.comandaId].itens.push(c.item);
+      });
       return '<div class="kanban-col" data-status="'+status+'">'+
         '<div class="kanban-col-head"><span class="t">'+col[1]+'</span><span class="n">'+lista.length+'</span></div>'+
-        (lista.length ? lista.map(function(c){
-          var min = minutosDesde(c.item.enviadoEm);
-          var atraso = min>10;
-          var user = state.usuarios.find(function(u){ return u.id===c.item.usuarioId; });
-          return '<div class="kanban-card col-'+status+'" draggable="true" data-comanda="'+c.comandaId+'" data-item="'+c.item.id+'">'+
-            '<div class="kanban-card-top"><span class="codigo">'+c.codigo+'</span><span class="tempo '+(atraso?"atraso":"")+'">'+icon("clock",11)+' '+fmtMin(min)+'</span></div>'+
-            '<div class="mesa">MESA '+c.mesaNum+'</div>'+
-            '<div class="produto">'+c.item.quantidade+'x '+escapeHtml(c.item.nome).toUpperCase()+'</div>'+
-            (c.item.observacao?'<div class="obs">'+escapeHtml(c.item.observacao)+'</div>':'')+
-            (user?'<div class="garcom">Garçom: '+escapeHtml(user.nome)+'</div>':'')+
-            (can(PERM.ITEM_STATUS) ? '<button class="btn '+(status==="PRONTO"?"btn-success":"btn-primary")+' btn-block btn-sm" style="margin-top:10px;" data-action="kds-set" data-comanda="'+c.comandaId+'" data-item="'+c.item.id+'" data-status="'+nextStatus[status]+'">'+col[2]+'</button>' : '')+
+        (ordem.length ? ordem.map(function(comandaId){
+          var ticket = porComanda[comandaId];
+          var minTicket = Math.max.apply(null, ticket.itens.map(function(it){ return minutosDesde(it.enviadoEm); }));
+          var atrasoTicket = minTicket>10;
+          return '<div class="kanban-card col-'+status+'">'+
+            '<div class="kanban-card-top"><span class="codigo">'+ticket.codigo+'</span><span class="tempo '+(atrasoTicket?"atraso":"")+'">'+icon("clock",11)+' '+fmtMin(minTicket)+'</span></div>'+
+            '<div class="mesa">MESA '+ticket.mesaNum+'</div>'+
+            ticket.itens.map(function(item){
+              var min = minutosDesde(item.enviadoEm);
+              var atraso = min>10;
+              var user = state.usuarios.find(function(u){ return u.id===item.usuarioId; });
+              return '<div class="kanban-item" draggable="true" data-comanda="'+comandaId+'" data-item="'+item.id+'">'+
+                '<div class="produto">'+item.quantidade+'x '+escapeHtml(item.nome).toUpperCase()+' <span class="tempo '+(atraso?"atraso":"")+'" style="float:right;">'+fmtMin(min)+'</span></div>'+
+                (item.observacao?'<div class="obs">'+escapeHtml(item.observacao)+'</div>':'')+
+                (user?'<div class="garcom">Garçom: '+escapeHtml(user.nome)+'</div>':'')+
+                (can(PERM.ITEM_STATUS) ? '<button class="btn '+(status==="PRONTO"?"btn-success":"btn-primary")+' btn-block btn-sm" style="margin-top:8px;" data-action="kds-set" data-comanda="'+comandaId+'" data-item="'+item.id+'" data-status="'+nextStatus[status]+'">'+col[2]+'</button>' : '')+
+              '</div>';
+            }).join("")+
           '</div>';
         }).join("") : '<div class="empty-hint">Vazio</div>')+
       '</div>';
@@ -411,13 +426,11 @@ function renderFinanceiro(){
 
 function renderRelatorios(){
   var periodo = state.relatorioPeriodo || "HOJE";
-  var dias = periodo==="HOJE" ? 0 : periodo==="7D" ? 7 : periodo==="30D" ? 30 : 99999;
-  var limite = Date.now() - dias*86400000;
-  var pagas = state.comandas.filter(function(c){
-    if(c.status!=="PAGA" || !c.fechamento) return false;
-    if(periodo==="HOJE") return new Date(c.fechamento).toDateString()===hojeStr();
-    return new Date(c.fechamento).getTime()>=limite;
-  });
+  var pagas = periodo==="HOJE" ? state.vendasHoje : state.vendasPeriodo;
+  if(periodo!=="HOJE" && state.vendasPeriodoCarregando){
+    return '<div class="page-header"><div><div class="page-title">Relatórios</div><div class="page-sub">Desempenho de vendas</div></div></div>'+
+      '<div class="empty-hint">Carregando período...</div>';
+  }
   var totalVendas = pagas.reduce(function(s,c){ return s+totaisComanda(c).total; },0);
   var ticketMedio = pagas.length ? Math.round(totalVendas/pagas.length) : 0;
 
