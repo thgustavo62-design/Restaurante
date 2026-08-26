@@ -1,4 +1,6 @@
-# Sistema de Gestão para Restaurante/Bar — Fogo Gestão
+# Rancho Netto — Brasa & Fogo
+
+Sistema de Gestão para Restaurante/Bar
 
 Sistema de atendimento, cozinha (KDS), caixa, estoque, financeiro e
 administração para restaurante/bar, rodando **100% sobre o Supabase**
@@ -8,9 +10,12 @@ banco, e fica sincronizado com os demais via Realtime.
 
 ## Estado atual
 
-O front-end é um único arquivo estático (`index.html`, ~2.900 linhas,
-JavaScript puro + `@supabase/supabase-js` via CDN) — deliberadamente sem
-build step, pronto para hospedagem estática (Vercel, GitHub Pages, etc.).
+O front-end é estático e modular — `index.html` só monta `<head>`/`<body>` e
+referencia `assets/css/styles.css` e ~18 arquivos JavaScript puro em
+`assets/js/` (config, ícones, helpers, mapeamento, dados/realtime, ações por
+domínio, impressão e renderização), carregados como `<script>` clássicos em
+ordem, mais `@supabase/supabase-js` via CDN — deliberadamente sem build step
+nem bundler, pronto para hospedagem estática (Vercel, GitHub Pages, etc.).
 Ele cobre: login por PIN (autenticação real), mapa de mesas, comandas e
 lançamento de pedidos, KDS em Kanban, caixa com conferência cega, cardápio,
 estoque com baixa automática por ficha técnica, financeiro, relatórios,
