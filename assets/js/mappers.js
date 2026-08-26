@@ -19,7 +19,7 @@ function mapComanda(row){
 function mapItem(row){
   return {id:row.id, comandaId:row.comanda_id, produtoId:row.produto_id, nome:row.nome, observacao:row.observacao||"",
     quantidade:Number(row.quantidade), precoUnitCentavos:row.preco_unit_centavos, status:row.status,
-    usuarioId:row.usuario_id, enviadoEm:row.enviado_em};
+    usuarioId:row.usuario_id, enviadoEm:row.enviado_em, canceladoAposPreparo:!!row.cancelado_apos_preparo};
 }
 function mapCaixaSessao(row){
   return {id:row.id, terminal:row.terminal, usuarioAbertura:row.usuario_abertura, aberturaEm:row.abertura_em,

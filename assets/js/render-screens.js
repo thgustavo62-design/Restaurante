@@ -34,6 +34,9 @@ function renderDashboard(){
   if(ultimaFechada && ultimaFechada.diferencaCentavos){
     alerts.push({t:"DIFERENÇA NO ÚLTIMO CAIXA", d:brl(ultimaFechada.diferencaCentavos), danger:Math.abs(ultimaFechada.diferencaCentavos)>limiteDiferencaCentavos()});
   }
+  if(["ADMIN","GERENTE"].indexOf(u.papel)!==-1 && state.caixaSessao && state.caixaSessao.status==="ABERTA" && saldoDinheiroEsperado()>state.config.limiteAlertaSangriaCentavos){
+    alerts.push({t:"FAÇA UMA SANGRIA", d:"Dinheiro em gaveta acima do limite configurado", danger:true});
+  }
 
   return '<div class="page-header"><div><div class="page-title">Bom dia, '+escapeHtml(u.nome).toUpperCase()+'</div>'+
       '<div class="page-sub">Operação de hoje · '+new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"}).toUpperCase()+'</div></div>'+
@@ -104,7 +107,7 @@ function renderSalao(){
       )+
     '</div>';
   }).join("");
-  var comandasAbertas = state.comandas.filter(function(c){ return c.status!=="PAGA"; });
+  var comandasAbertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
 
   return '<div class="page-header"><div><div class="page-title">Atendimento</div><div class="page-sub">Mapa de salão em tempo real</div></div></div>'+
     '<div class="tabs">'+tabs.map(function(t){ return '<div class="tab '+(filtro===t[0]?"active":"")+'" data-action="salao-filtro" data-f="'+t[0]+'">'+t[1]+'</div>'; }).join("")+'</div>'+
@@ -131,6 +134,7 @@ function renderComanda(){
   var mesa = state.mesas.find(function(m){ return m.id===comanda.mesaId; });
   var t = totaisComanda(comanda);
   var podeFechar = can(PERM.COMANDA_FECHAR) && comanda.status==="ABERTA" && comanda.itens.length>0;
+  var podeCancelarComanda = can(PERM.COMANDA_ABRIR) && comanda.status==="ABERTA" && comanda.itens.length===0;
   var podeLancar = can(PERM.ITEM_LANCAR) && comanda.status==="ABERTA";
   var draftCount = Object.keys(state.draft.itens).reduce(function(s,k){ return s+state.draft.itens[k].qtd; },0);
 
@@ -205,6 +209,7 @@ function renderComanda(){
         '<label class="btn" style="cursor:pointer;"><input type="checkbox" data-action="toggle-taxa" '+(comanda.taxaServicoAtiva?"checked":"")+' style="margin-right:6px;">Taxa</label>'+
       '</div>'+
       (podeFechar ? '<button class="btn btn-danger btn-lg btn-block" data-action="fechar-conta-abrir">Fechar conta · '+brl(t.total)+'</button>' : '')+
+      (podeCancelarComanda ? '<button class="btn btn-ghost btn-block" data-action="comanda-cancelar-confirmar" data-comanda="'+comanda.id+'" style="margin-top:8px; color:var(--danger); border-color:var(--danger);">'+icon("x",15)+' Cancelar comanda (mesa aberta por engano)</button>' : '')+
     '</div>';
 
   return '<div class="comanda-head">'+
@@ -222,17 +227,22 @@ function renderComanda(){
 function renderKds(){
   var cols = [["PENDENTE","Pendente","INICIAR PREPARO"],["PREPARANDO","Preparando","MARCAR PRONTO"],["PRONTO","Pronto","ENTREGUE"]];
   var nextStatus = {PENDENTE:"PREPARANDO", PREPARANDO:"PRONTO", PRONTO:"ENTREGUE"};
-  var abertas = state.comandas.filter(function(c){ return c.status!=="PAGA"; });
+  var abertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
   var cards = {PENDENTE:[], PREPARANDO:[], PRONTO:[]};
+  var cancelados = [];
   abertas.forEach(function(c){
     var mesa = state.mesas.find(function(m){ return m.id===c.mesaId; });
     c.itens.forEach(function(it){
       if(cards[it.status]) cards[it.status].push({comandaId:c.id, codigo:c.codigo, item:it, mesaNum:mesa?mesa.numero:"?"});
+      if(it.status==="CANCELADO" && it.canceladoAposPreparo) cancelados.push({comandaId:c.id, codigo:c.codigo, item:it, mesaNum:mesa?mesa.numero:"?"});
     });
   });
   var total = cards.PENDENTE.length+cards.PREPARANDO.length+cards.PRONTO.length;
 
   return '<div class="page-header"><div><div class="page-title">Cozinha</div><div class="page-sub">'+total+' pedidos ativos</div></div></div>'+
+    (cancelados.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">CANCELADO DEPOIS DE PRONTO/EM PREPARO — PARE</span><span class="d">'+
+      cancelados.map(function(c){ return 'Mesa '+c.mesaNum+' · '+c.item.quantidade+'x '+escapeHtml(c.item.nome); }).join(" · ")+
+      '</span></div></div>' : '')+
     '<div class="kanban">'+
     cols.map(function(col){
       var status = col[0], lista = cards[status];
@@ -271,13 +281,18 @@ function renderCaixa(){
   var esperadoDinheiro = saldoDinheiroEsperado();
   var porForma = totaisPorForma();
   var movs = movimentosDaSessao();
+  var podeVerSaldoEsperado = ["ADMIN","GERENTE"].indexOf(usuarioAtual().papel)!==-1;
+  var precisaSangria = podeVerSaldoEsperado && esperadoDinheiro > state.config.limiteAlertaSangriaCentavos;
   return '<div class="page-header"><div><div class="page-title">Caixa</div><div class="page-sub">'+s.terminal+'</div></div></div>'+
     '<div class="card caixa-status-card">'+
       '<div class="left"><div class="t"><span class="status-dot" style="display:inline-block; margin-right:6px;"></span>ABERTO</div>'+
       '<div class="d">Desde '+new Date(s.aberturaEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+' · '+escapeHtml(usuarioAtual().nome)+'</div></div>'+
     '</div>'+
+    (precisaSangria ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">FAÇA UMA SANGRIA</span><span class="d">Dinheiro em gaveta passou de '+brl(state.config.limiteAlertaSangriaCentavos)+'</span></div></div>' : '')+
     '<div class="metric-grid">'+
-      '<div class="metric-card"><div class="metric-label">Dinheiro em gaveta</div><div class="metric-value">'+brl(esperadoDinheiro)+'</div></div>'+
+      '<div class="metric-card"><div class="metric-label">Dinheiro em gaveta</div><div class="metric-value">'+(podeVerSaldoEsperado ? brl(esperadoDinheiro) : '••••••')+'</div>'+
+      (podeVerSaldoEsperado ? '' : '<div style="font-size:10px; color:var(--text-muted); margin-top:4px; text-transform:uppercase; letter-spacing:.5px;">Oculto · conferência cega</div>')+
+      '</div>'+
       Object.keys(porForma).map(function(f){
         return '<div class="metric-card"><div class="metric-label">'+f+'</div><div class="metric-value small">'+brl(porForma[f])+'</div></div>';
       }).join("")+
@@ -488,7 +503,8 @@ function renderConfiguracoes(){
       '<div class="card-title">Limites e operação</div>'+
       '<div class="field"><label>Taxa de serviço padrão (%)</label><input id="cfgTaxa" type="number" min="0" max="30" step="1" value="'+c.taxaServicoPctPadrao+'"></div>'+
       '<div class="field"><label>Limite de desconto sem supervisor (%)</label><input id="cfgDesconto" type="number" min="0" max="100" step="1" value="'+c.limiteDescontoPct+'"></div>'+
-      '<div class="field" style="margin-bottom:0;"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
+      '<div class="field"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Alertar sangria quando dinheiro em gaveta passar de</label><input id="cfgAlertaSangria" type="number" min="0" step="0.01" value="'+(c.limiteAlertaSangriaCentavos/100).toFixed(2)+'"></div>'+
     '</div>'+
     '<div class="card">'+
       '<div class="card-title">Impressão de comprovantes</div>'+

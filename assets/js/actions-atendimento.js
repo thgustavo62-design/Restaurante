@@ -47,6 +47,17 @@ async function abrirComanda(mesaId){
   irParaComanda(comanda.id);
   render();
 }
+async function cancelarComanda(comandaId){
+  var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
+  if(!comanda || comanda.itens.length>0) return;
+  var res = await sb.from("comandas").update({status:"CANCELADA", fechamento:new Date().toISOString()}).eq("id", comandaId);
+  if(res.error){ toast("err","ERRO AO CANCELAR COMANDA", res.error.message); return; }
+  comanda.status = "CANCELADA";
+  registrarAuditoria("comanda", comandaId, "CANCELAR_COMANDA_VAZIA", state.usuarioAtualId, comanda.codigo);
+  state.view = "salao"; state.viewParams = {};
+  render();
+  toast("ok","COMANDA CANCELADA", "Mesa liberada.");
+}
 function irParaComanda(comandaId){
   state.view = "comanda"; state.viewParams = {comandaId:comandaId};
   if(!state.draft || state.draft.comandaId!==comandaId){
@@ -147,10 +158,12 @@ async function cancelarItemDigit(d){
     if(sup){
       var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
       var item = comanda.itens.find(function(i){ return i.id===m.itemId; });
-      var res = await sb.from("comanda_itens").update({status:"CANCELADO"}).eq("id", m.itemId);
+      var jaPreparado = item.status==="PREPARANDO" || item.status==="PRONTO";
+      var res = await sb.from("comanda_itens").update({status:"CANCELADO", cancelado_apos_preparo:jaPreparado}).eq("id", m.itemId);
       if(res.error){ toast("err","ERRO AO CANCELAR", res.error.message); render(); return; }
       item.status = "CANCELADO";
-      registrarAuditoria("comanda_itens", m.itemId, "CANCELAR_ITEM", sup.id, m.motivo.trim()+" (aprovado por "+sup.nome+")");
+      item.canceladoAposPreparo = jaPreparado;
+      registrarAuditoria("comanda_itens", m.itemId, "CANCELAR_ITEM", sup.id, m.motivo.trim()+" (aprovado por "+sup.nome+")"+(jaPreparado?" [já em preparo]":""));
       state.modal = null;
       render();
       toast("err","ITEM CANCELADO", item.nome);

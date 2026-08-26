@@ -18,7 +18,13 @@ function bindEvents(){
       return;
     }
     if(action==="login-pin-back"){ state.pinBuffer = state.pinBuffer.slice(0,-1); render(); return; }
-    if(action==="logout"){ logout(); return; }
+    if(action==="logout"){
+      var temDraft = state.draft && Object.keys(state.draft.itens||{}).length>0;
+      state.modal = {type:"confirmarLogout", temDraft:temDraft};
+      render(); return;
+    }
+    if(action==="logout-cancelar"){ state.modal=null; render(); return; }
+    if(action==="logout-confirmar"){ logout(); return; }
     if(action==="toggle-sidebar"){
       if(window.matchMedia && window.matchMedia("(max-width:759px)").matches){
         state.sidebarMobileAberto = !state.sidebarMobileAberto;
@@ -71,13 +77,8 @@ function bindEvents(){
     if(action==="supervisor-cancel"){ state.modal=null; render(); return; }
 
     if(action==="fechar-conta-abrir"){ abrirFecharConta(state.viewParams.comandaId); return; }
-    if(action==="pagamento-cancelar"){
-      var comanda = state.comandas.find(function(c){ return c.id===state.modal.comandaId; });
-      comanda.status = "ABERTA";
-      state.modal=null; render();
-      sb.from("comandas").update({status:"ABERTA"}).eq("id", comanda.id);
-      return;
-    }
+    if(action==="comanda-cancelar-confirmar"){ cancelarComanda(el.dataset.comanda); return; }
+    if(action==="pagamento-cancelar"){ fecharModalAtual(); return; }
     if(action==="pagamento-metodo"){ pagamentoAddMetodo(el.dataset.forma); return; }
     if(action==="pagamento-remover"){ pagamentoRemoveLinha(parseInt(el.dataset.idx,10)); return; }
     if(action==="pagamento-confirmar"){ confirmarPagamento(); return; }
@@ -185,6 +186,7 @@ function bindEvents(){
         taxaPct: parseFloat(document.getElementById("cfgTaxa").value||"0"),
         descontoPct: parseFloat(document.getElementById("cfgDesconto").value||"0"),
         diferencaCentavos: Math.round(parseFloat(document.getElementById("cfgDiferenca").value||"0")*100),
+        alertaSangriaCentavos: Math.round(parseFloat(document.getElementById("cfgAlertaSangria").value||"0")*100),
         impressoraLargura: document.getElementById("cfgImpressora").value,
         reciboRodape: document.getElementById("cfgRodape").value,
         horarioAbertura: document.getElementById("cfgHorarioAbertura").value,
@@ -259,7 +261,12 @@ function bindEvents(){
 
 document.addEventListener("keydown", function(e){
   if(!state || !state.usuarioAtualId) return;
-  if(e.key==="Escape" && state.modal){ state.modal=null; render(); return; }
+  if(e.key==="Escape" && state.modal){ fecharModalAtual(); return; }
+  if(e.key==="Enter" && state.modal && document.activeElement && document.activeElement.tagName!=="TEXTAREA"){
+    var btn = document.querySelector(".modal-overlay .btn-primary");
+    if(btn && !btn.disabled){ e.preventDefault(); btn.click(); }
+    return;
+  }
   if(e.key==="F8" && state.view==="caixa" && can(PERM.SANGRIA) && state.caixaSessao && state.caixaSessao.status==="ABERTA" && !state.modal){
     e.preventDefault(); state.modal={type:"caixaMov", tipo:"SANGRIA"}; render();
   }

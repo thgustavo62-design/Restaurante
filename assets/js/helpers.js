@@ -31,7 +31,9 @@ var state = null;
 
 function diasA(n){
   var d = new Date(Date.now()+n*86400000);
-  return d.toISOString().slice(0,10);
+  var m = String(d.getMonth()+1).padStart(2,"0");
+  var day = String(d.getDate()).padStart(2,"0");
+  return d.getFullYear()+"-"+m+"-"+day;
 }
 
 function emailInterno(nome){

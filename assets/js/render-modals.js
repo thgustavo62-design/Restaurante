@@ -14,7 +14,21 @@ function renderModal(){
   if(m.type==="usuarioForm") return renderUsuarioFormModal(m);
   if(m.type==="recibo") return renderReciboModal(m);
   if(m.type==="revisarPedido") return renderRevisarPedidoModal(m);
+  if(m.type==="confirmarLogout") return renderConfirmarLogoutModal(m);
   return "";
+}
+
+function renderConfirmarLogoutModal(m){
+  return '<div class="modal-overlay"><div class="modal-box" style="text-align:center;">'+
+    '<h2>Sair do sistema?</h2>'+
+    (m.temDraft ?
+      '<div class="modal-sub" style="color:var(--danger);">Você tem itens não enviados no pedido em andamento. Eles serão perdidos.</div>' :
+      '<div class="modal-sub">Você precisará informar o PIN de novo para entrar.</div>')+
+    '<div class="action-row" style="margin-top:16px;">'+
+      '<button class="btn btn-ghost" data-action="logout-cancelar">Cancelar</button>'+
+      '<button class="btn btn-danger btn-block" data-action="logout-confirmar">'+icon("door",16)+' Sair</button>'+
+    '</div>'+
+  '</div></div>';
 }
 
 function renderRevisarPedidoModal(m){

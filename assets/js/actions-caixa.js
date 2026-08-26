@@ -8,6 +8,17 @@ async function abrirFecharConta(comandaId){
   state.modal = {type:"pagamento", comandaId:comandaId, linhas:[], dividirPessoas:1};
   render();
 }
+function fecharModalAtual(){
+  if(state.modal && state.modal.type==="pagamento"){
+    var comanda = state.comandas.find(function(c){ return c.id===state.modal.comandaId; });
+    if(comanda && comanda.status==="FECHANDO"){
+      comanda.status = "ABERTA";
+      sb.from("comandas").update({status:"ABERTA"}).eq("id", comanda.id);
+    }
+  }
+  state.modal = null;
+  render();
+}
 function pixCodigoSimulado(comanda, valorCentavos){
   var base = comanda.codigo + "-" + valorCentavos;
   var hash = 0;
@@ -90,6 +101,9 @@ async function confirmarPagamento(){
   comanda.trocoCentavos = troco;
   comanda.status = "PAGA";
   comanda.fechamento = fechamento;
+
+  registrarAuditoria("comanda", comanda.id, "PAGAMENTO_CONFIRMADO", state.usuarioAtualId,
+    comanda.codigo+" · "+brl(t.total)+" · "+state.modal.linhas.map(function(l){ return l.forma; }).join("+"));
 
   await baixarEstoqueDaVenda(comanda);
 

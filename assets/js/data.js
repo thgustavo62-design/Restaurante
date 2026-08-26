@@ -35,7 +35,7 @@ async function carregarTudo(){
     state.config = Object.assign({}, state.config, emp.config||{}, {empresaNome:emp.nome, empresaCnpj:emp.cnpj||""});
   }
 
-  var comRes = await sb.from("comandas").select("*, comanda_itens(*)").neq("status","PAGA");
+  var comRes = await sb.from("comandas").select("*, comanda_itens(*)").in("status",["ABERTA","FECHANDO"]);
   state.comandas = (checar(comRes,"comandas")||[]).map(function(c){
     var m = mapComanda(c);
     m.itens = (c.comanda_itens||[]).map(mapItem);
@@ -144,7 +144,7 @@ function toast(tipo, titulo, desc){
 }
 
 function comandasAbertasDaMesa(mesaId){
-  return state.comandas.filter(function(c){ return c.mesaId===mesaId && c.status!=="PAGA"; });
+  return state.comandas.filter(function(c){ return c.mesaId===mesaId && (c.status==="ABERTA" || c.status==="FECHANDO"); });
 }
 function mesaStatus(mesaId){
   var abertas = comandasAbertasDaMesa(mesaId);

@@ -39,6 +39,7 @@ async function salvarUsuario(nome, papel, pin){
   state.usuarios.push({id:res.data, nome:nome.trim(), papel:papel, ativo:true});
   state.modal = null;
   render();
+  registrarAuditoria("usuarios", res.data, "USUARIO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+papel);
   toast("ok","USUÁRIO CRIADO", nome.trim()+" · "+papel);
 }
 async function toggleUsuarioAtivo(usuarioId){
@@ -47,7 +48,8 @@ async function toggleUsuarioAtivo(usuarioId){
   u.ativo = novo;
   render();
   var res = await sb.from("usuarios").update({ativo:novo}).eq("id", usuarioId);
-  if(res.error){ u.ativo = !novo; toast("err","ERRO", res.error.message); render(); }
+  if(res.error){ u.ativo = !novo; toast("err","ERRO", res.error.message); render(); return; }
+  registrarAuditoria("usuarios", usuarioId, novo?"USUARIO_ATIVADO":"USUARIO_DESATIVADO", state.usuarioAtualId, u.nome);
 }
 
 async function salvarConfig(campos){
@@ -56,6 +58,7 @@ async function salvarConfig(campos){
     taxaServicoPctPadrao: Math.max(0, campos.taxaPct||0),
     limiteDescontoPct: Math.max(0, campos.descontoPct||0),
     limiteDiferencaCentavos: Math.max(0, campos.diferencaCentavos||0),
+    limiteAlertaSangriaCentavos: Math.max(0, campos.alertaSangriaCentavos||0),
     impressoraLargura: campos.impressoraLargura==="58mm" ? "58mm" : "80mm",
     reciboRodape: campos.reciboRodape.trim(),
     horarioAbertura: campos.horarioAbertura || c.horarioAbertura,
@@ -67,6 +70,10 @@ async function salvarConfig(campos){
     nome: campos.nome.trim() || c.empresaNome, cnpj: campos.cnpj.trim(), config: novoConfig
   }).eq("id", state.empresaId);
   if(res.error){ toast("err","ERRO AO SALVAR", res.error.message); return; }
+  var mudancasSensiveis = [];
+  if(c.limiteDescontoPct!==novoConfig.limiteDescontoPct) mudancasSensiveis.push("limite desconto: "+c.limiteDescontoPct+"% -> "+novoConfig.limiteDescontoPct+"%");
+  if(c.limiteDiferencaCentavos!==novoConfig.limiteDiferencaCentavos) mudancasSensiveis.push("limite diferença caixa: "+brl(c.limiteDiferencaCentavos)+" -> "+brl(novoConfig.limiteDiferencaCentavos));
+  if(mudancasSensiveis.length) registrarAuditoria("configuracoes", state.empresaId, "CONFIG_ALTERADA", state.usuarioAtualId, mudancasSensiveis.join(" · "));
   state.config = Object.assign({}, novoConfig, {empresaNome: campos.nome.trim()||c.empresaNome, empresaCnpj: campos.cnpj.trim()});
   render();
   toast("ok","CONFIGURAÇÕES SALVAS", "");

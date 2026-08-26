@@ -22,12 +22,17 @@ async function salvarProduto(produtoId, nome, categoria, precoCentavos){
     var upd = await sb.from("produtos").update({nome:nome.trim(), categoria_id:categoriaId, preco_centavos:precoCentavos}).eq("id", produtoId);
     if(upd.error){ toast("err","ERRO", upd.error.message); return; }
     var p = state.produtos.find(function(x){ return x.id===produtoId; });
+    var precoAntes = p.precoCentavos;
     p.nome = nome.trim(); p.categoria = categoria.trim(); p.categoriaId = categoriaId; p.precoCentavos = precoCentavos;
+    if(precoAntes!==precoCentavos){
+      registrarAuditoria("produtos", produtoId, "PRECO_ALTERADO", state.usuarioAtualId, nome.trim()+": "+brl(precoAntes)+" -> "+brl(precoCentavos));
+    }
   } else {
     var insRes = await sb.from("produtos").insert({empresa_id:state.empresaId, categoria_id:categoriaId, nome:nome.trim(), preco_centavos:precoCentavos}).select().single();
     if(insRes.error){ toast("err","ERRO", insRes.error.message); return; }
     var catPorId = {}; catPorId[categoriaId] = categoria.trim();
     state.produtos.push(mapProduto(insRes.data, catPorId));
+    registrarAuditoria("produtos", insRes.data.id, "PRODUTO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+brl(precoCentavos));
   }
   state.modal = null;
   render();
@@ -65,7 +70,7 @@ async function confirmarInsumoMov(tipo, insumoId, quantidade, motivo){
 async function baixarEstoqueDaVenda(comanda){
   for(var i=0;i<comanda.itens.length;i++){
     var it = comanda.itens[i];
-    if(it.status==="CANCELADO") continue;
+    if(it.status==="CANCELADO" && !it.canceladoAposPreparo) continue;
     var fichas = state.fichaTecnica.filter(function(f){ return f.produtoId===it.produtoId; });
     for(var j=0;j<fichas.length;j++){
       var f = fichas[j];
