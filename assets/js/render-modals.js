@@ -13,7 +13,39 @@ function renderModal(){
   if(m.type==="contaForm") return renderContaFormModal(m);
   if(m.type==="usuarioForm") return renderUsuarioFormModal(m);
   if(m.type==="recibo") return renderReciboModal(m);
+  if(m.type==="revisarPedido") return renderRevisarPedidoModal(m);
   return "";
+}
+
+function renderRevisarPedidoModal(m){
+  var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
+  if(!comanda || !state.draft) return "";
+  var mesa = state.mesas.find(function(mm){ return mm.id===comanda.mesaId; });
+  var itens = state.draft.itens;
+  var ids = Object.keys(itens);
+  var total = 0;
+  var linhasHtml = ids.map(function(pid){
+    var p = state.produtos.find(function(x){ return x.id===pid; });
+    var d = itens[pid];
+    var subtotal = p.precoCentavos * d.qtd;
+    total += subtotal;
+    return '<div class="item-row">'+
+      '<div class="info"><div class="nome">'+d.qtd+'x '+escapeHtml(p.nome)+'</div>'+
+      (d.obs ? '<div class="obs">'+escapeHtml(d.obs)+'</div>' : '')+
+      '</div>'+
+      '<div class="preco">'+brl(subtotal)+'</div>'+
+    '</div>';
+  }).join("");
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Revisar pedido</h2>'+
+    '<div class="modal-sub">Confira os itens antes de lançar na mesa '+(mesa?mesa.numero:"?")+' e enviar para a cozinha.</div>'+
+    linhasHtml+
+    '<div class="totais-linha total" style="margin-top:12px;"><span>Total deste pedido</span><span>'+brl(total)+'</span></div>'+
+    '<div class="action-row" style="margin-top:16px;">'+
+      '<button class="btn btn-ghost" data-action="pedido-revisar-voltar">Voltar e editar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="pedido-revisar-confirmar">'+icon("check",16)+' Confirmar e enviar</button>'+
+    '</div>'+
+  '</div></div>';
 }
 
 function renderReciboModal(m){

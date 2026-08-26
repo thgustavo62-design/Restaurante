@@ -39,7 +39,9 @@ function bindEvents(){
     if(action==="picker-cat"){ state.draft.categoria = el.dataset.cat; render(); return; }
     if(action==="draft-mais"){ draftAlterar(el.dataset.produto, 1); return; }
     if(action==="draft-menos"){ draftAlterar(el.dataset.produto, -1); return; }
-    if(action==="enviar-pedido"){ enviarPedido(); return; }
+    if(action==="pedido-revisar-abrir"){ state.modal={type:"revisarPedido", comandaId:state.draft.comandaId}; render(); return; }
+    if(action==="pedido-revisar-voltar"){ state.modal=null; render(); return; }
+    if(action==="pedido-revisar-confirmar"){ enviarPedido(); return; }
 
     if(action==="item-cancelar"){ abrirCancelarItem(state.viewParams.comandaId, el.dataset.item); return; }
     if(action==="cancelaritem-digit"){ cancelarItemDigit(el.dataset.d); return; }

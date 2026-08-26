@@ -82,6 +82,7 @@ async function enviarPedido(){
   comanda.itens = comanda.itens.concat(novos);
   state.draft.itens = {};
   state.draft.mobileCatalog = false;
+  state.modal = null;
   render();
   toast("ok","PEDIDO ENVIADO", novos.length+" ite"+(novos.length===1?"m":"ns")+" para a cozinha");
 }

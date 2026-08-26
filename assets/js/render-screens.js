@@ -184,7 +184,7 @@ function renderComanda(){
   var orderPanel = '<div class="order-panel">'+
       '<div><div class="order-panel-title">Novo pedido — Mesa '+(mesa?mesa.numero:"?")+'</div>'+
       (podeLancar ? '<div style="margin-top:10px;">'+draftHtml+'</div>' : '')+
-      (podeLancar && draftCount>0 ? '<button class="btn btn-primary btn-lg btn-block" style="margin-top:8px;" data-action="enviar-pedido">'+icon("check",16)+' Enviar para cozinha ('+draftCount+')</button>' : '')+
+      (podeLancar && draftCount>0 ? '<button class="btn btn-primary btn-lg btn-block" style="margin-top:8px;" data-action="pedido-revisar-abrir">'+icon("check",16)+' Revisar e enviar ('+draftCount+')</button>' : '')+
       '</div>'+
       '<div><div class="order-panel-title" style="margin-bottom:8px;">Itens da comanda</div>'+sentItemsHtml+'</div>'+
       '<div class="totais-box">'+
