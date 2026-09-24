@@ -1,9 +1,10 @@
 "use strict";
 
-var SUPABASE_URL = "https://enmfjfhqqvezyaieotjb.supabase.co";
-var SUPABASE_KEY = "sb_publishable_2JWVIHWn7VxrbnAnWrfLWg_y-TLYZ2o";
+var SUPABASE_URL = "https://ybsyhjqtwiwomtxbloyu.supabase.co";
+var SUPABASE_KEY = "sb_publishable_35oPPu0kJ7Da0LtintHzOw_MO_n1oN3";
 var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: true }
+  auth: { persistSession: false, autoRefreshToken: true },
+  db: { schema: "restaurante" }
 });
 var PIN_LEN = 4;
 var INGREDIENTES_COMUNS = ["Cebola","Tomate","Alface","Pimenta","Molho","Maionese","Coentro","Alho","Queijo","Bacon"];

@@ -108,14 +108,14 @@ function configurarRealtime(){
     if(typeof window.WebSocket === "undefined"){ console.error("WebSocket indisponível — realtime desativado."); return; }
     var eq = "empresa_id=eq."+state.empresaId;
     realtimeChannel = sb.channel("empresa-"+state.empresaId)
-      .on("postgres_changes", {event:"*", schema:"public", table:"comandas", filter:eq}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"comanda_itens"}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"caixa_sessoes", filter:eq}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"caixa_movimentos"}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"produtos", filter:eq}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"insumos", filter:eq}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"contas", filter:eq}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"public", table:"usuarios", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"comandas", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"comanda_itens"}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"caixa_sessoes", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"caixa_movimentos"}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"produtos", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"insumos", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"contas", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"usuarios", filter:eq}, agendarRefresh)
       .subscribe();
   }catch(e){ console.error("realtime indisponível:", e.message); }
 }
