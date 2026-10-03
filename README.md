@@ -1,4 +1,4 @@
-# Rancho Netto — Brasa & Fogo
+# Vision Food
 
 Sistema de gestão para restaurante/bar: atendimento de salão, cozinha (KDS),
 caixa, cardápio, estoque, compras, financeiro, relatórios e equipe — rodando
@@ -6,6 +6,12 @@ caixa, cardápio, estoque, compras, financeiro, relatórios e equipe — rodando
 próprio: o front-end fala direto com o banco, e a segurança (quem pode ver
 e escrever o quê) é garantida pelo próprio Postgres via Row Level Security
 (RLS), não pela interface.
+
+**Vision Food** é o produto/plataforma; o restaurante que usa esta instância
+hoje é o **Rancho Netto — Brasa & Fogo**, cadastrado em `empresas` e exibido
+como marca própria no login, no cardápio público e nos recibos impressos —
+só a casca do sistema (sidebar, topbar, telas internas) carrega a marca
+Vision Food. Ver [Identidade visual](#identidade-visual) abaixo.
 
 Este documento é a referência completa de como o sistema funciona hoje —
 telas, permissões, segurança, dados e deploy. Para o catálogo detalhado de
@@ -33,6 +39,43 @@ estrutura de tabelas real, a fonte de verdade são as migrations em
   recarregar a página.
 - **Página pública**: `cardapio.html`, separada do app autenticado, para o
   cliente ver o cardápio pelo celular via QR Code, sem login.
+
+## Identidade visual
+
+Tema único (escuro), sem alternância claro/escuro. Tokens de cor, raio de
+borda e fonte ficam centralizados em `:root` no topo de
+`assets/css/styles.css` (e replicados num `<style>` próprio em
+`cardapio.html`, que é uma página isolada) — qualquer ajuste de paleta
+começa ali, nunca com cor solta espalhada pelo CSS/JS.
+
+- **Base**: preto quase neutro (`--background`/`--surface-01/02/03`), não
+  azul-marinho — o azul (`--primary` `#1E8BFF` + `--accent-cyan`) aparece só
+  como destaque (botões, estado ativo, glow sutil nos cantos da tela e nos
+  cards em evidência via `--glow-primary`).
+- **Tipografia**: `Exo 2` (700/800, caixa-alta) pra títulos e números
+  grandes, `Inter` pro resto — carregadas via Google Fonts (`<link>` no
+  `<head>`, não `@import` no CSS, por performance).
+  `--on-accent`/`--on-success` resolvem a cor de texto sobre botões/estados
+  coloridos (branco ou quase-preto, conforme contraste).
+- **Componentes reutilizáveis**: `.kpi-card` (ícone + rótulo + valor, usado
+  em todo KPI do app), `.card`/`.card-title`, `.chip`/`.tab` (filtros em
+  pílula), `.badge`/`.badge-status-*` (com bolinha colorida), `.table-dark`
+  (tabelas com cabeçalho caixa-alta), `renderPageHeader()` em
+  `render-shell.js` (ícone circular + título + subtítulo, usado por toda
+  tela interna).
+- **Logo**: `assets/logo/vision-food.png` (lockup completo, login),
+  `vision-food-icon.png` (ícone só, sidebar) e `vision-food-favicon.png`
+  (favicon) — fundo removido via script (chroma-key por distância de cor,
+  não é arte vetorial original). Os PNGs antigos `rancho-netto-*.png`
+  continuam em `assets/logo/` porque o cardápio público ainda os usa (marca
+  do restaurante, não da plataforma).
+- **Impressão** (`print.js`, `.receipt-preview`): fundo branco/texto preto
+  fixos, de propósito — não usa os tokens de cor do app (impressora
+  térmica). O "logo" do recibo é o nome da empresa em texto, não uma
+  imagem.
+- **Cozinha (KDS)**: única tela com tipografia/botões maiores
+  (`.kds-grande` no CSS) — é operada em tablet na cozinha, precisa ser
+  legível/tocável de mais longe que as outras telas.
 
 ## Telas do app (`index.html`)
 

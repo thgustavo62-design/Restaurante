@@ -163,7 +163,7 @@ function renderSinoAlertas(){
   var n = alertas.length;
   return '<button class="icon-btn" data-action="nav-goto" data-view="dashboard" title="'+n+' alerta(s)" style="position:relative;">'+
     icon("bell",17)+
-    (n ? '<span style="position:absolute; top:-3px; right:-3px; background:var(--danger); color:#fff; font-size:9px; font-weight:800; min-width:16px; height:16px; line-height:16px; border-radius:999px; text-align:center; padding:0 3px;">'+(n>9?"9+":n)+'</span>' : '')+
+    (n ? '<span style="position:absolute; top:-3px; right:-3px; background:var(--danger); color:var(--on-accent); font-size:9px; font-weight:800; min-width:16px; height:16px; line-height:16px; border-radius:999px; text-align:center; padding:0 3px;">'+(n>9?"9+":n)+'</span>' : '')+
   '</button>';
 }
 
