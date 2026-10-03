@@ -10,8 +10,12 @@ function renderModal(){
   if(m.type==="caixaFechar") return renderCaixaFecharModal(m);
   if(m.type==="produtoForm") return renderProdutoFormModal(m);
   if(m.type==="insumoMov") return renderInsumoMovModal(m);
+  if(m.type==="rendimento") return renderRendimentoModal(m);
   if(m.type==="contaForm") return renderContaFormModal(m);
   if(m.type==="usuarioForm") return renderUsuarioFormModal(m);
+  if(m.type==="trocarPin") return renderTrocarPinModal(m);
+  if(m.type==="fornecedorForm") return renderFornecedorFormModal(m);
+  if(m.type==="pedidoCompraForm") return renderPedidoCompraFormModal(m);
   if(m.type==="recibo") return renderReciboModal(m);
   if(m.type==="revisarPedido") return renderRevisarPedidoModal(m);
   if(m.type==="confirmarLogout") return renderConfirmarLogoutModal(m);
@@ -86,7 +90,12 @@ function renderProdutoFormModal(m){
     '</select></div>'+
     '<div class="field"><label>Ou nova categoria</label><input id="pfNovaCategoria" placeholder="Deixe em branco para usar a de cima"></div>'+
     '<div class="field"><label>Preço (R$)</label><input id="pfPreco" type="number" min="0" step="0.01" value="'+(m.precoCentavos/100).toFixed(2)+'"></div>'+
-    '<div class="action-row">'+
+    '<div class="field"><label>Setor de produção (KDS)</label><select id="pfSetorProducao">'+
+      SETORES_PRODUCAO.map(function(s){ return '<option value="'+s+'" '+(s===m.setorProducao?"selected":"")+'>'+s+'</option>'; }).join("")+
+    '</select></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Foto do produto (URL)</label><input id="pfFotoUrl" value="'+escapeHtml(m.fotoUrl||"")+'" placeholder="https://..."></div>'+
+    (m.fotoUrl ? '<img src="'+escapeHtml(m.fotoUrl)+'" style="width:100%; max-height:140px; object-fit:cover; border-radius:6px; margin-top:10px;" onerror="this.style.display=\'none\'">' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
       '<button class="btn btn-ghost" data-action="produto-form-cancelar">Cancelar</button>'+
       '<button class="btn btn-primary btn-block" data-action="produto-form-salvar" data-produto="'+(m.produtoId||"")+'">Salvar</button>'+
     '</div>'+
@@ -106,6 +115,68 @@ function renderInsumoMovModal(m){
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="insumo-mov-cancelar">Cancelar</button>'+
       '<button class="btn btn-primary btn-block" data-action="insumo-mov-confirmar" data-tipo="'+m.tipo+'">Confirmar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+function renderFornecedorFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Novo fornecedor</h2>'+
+    '<div class="field"><label>Nome</label><input id="fnNome" placeholder="Ex: Distribuidora Boi Bom"></div>'+
+    '<div class="field"><label>Contato</label><input id="fnContato" placeholder="Nome do representante"></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Telefone</label><input id="fnTelefone" placeholder="(00) 00000-0000"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="fornecedor-form-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="fornecedor-form-salvar">Salvar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+function renderPedidoCompraFormModal(m){
+  var totalItens = m.itens.length;
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Novo pedido de compra</h2>'+
+    '<div class="field"><label>Fornecedor</label><select id="pcFornecedor" data-action="pedido-compra-fornecedor">'+
+      state.fornecedores.filter(function(f){ return f.ativo; }).map(function(f){
+        return '<option value="'+f.id+'" '+(f.id===m.fornecedorId?"selected":"")+'>'+escapeHtml(f.nome)+'</option>';
+      }).join("")+
+    '</select></div>'+
+    '<div class="card" style="padding:12px; margin-bottom:10px;">'+
+      '<div class="field"><label>Insumo</label><select id="pcInsumo">'+
+        state.insumos.map(function(i){ return '<option value="'+i.id+'">'+escapeHtml(i.nome)+' ('+i.unidade+')</option>'; }).join("")+
+      '</select></div>'+
+      '<div style="display:flex; gap:10px;">'+
+        '<div class="field" style="flex:1;"><label>Quantidade</label><input id="pcQuantidade" type="number" min="0" step="0.01" placeholder="0"></div>'+
+        '<div class="field" style="flex:1; margin-bottom:0;"><label>Custo unit. (R$, opcional)</label><input id="pcCustoUnit" type="number" min="0" step="0.01" placeholder="0,00"></div>'+
+      '</div>'+
+      '<button type="button" class="btn btn-block" data-action="pedido-compra-item-add">'+icon("plus",15)+' Adicionar item</button>'+
+    '</div>'+
+    (totalItens ? m.itens.map(function(it, idx){
+      var insumo = state.insumos.find(function(i){ return i.id===it.insumoId; });
+      return '<div class="pagamento-linha"><span class="forma">'+(insumo?escapeHtml(insumo.nome):"?")+' — '+it.quantidade+(insumo?" "+insumo.unidade:"")+
+        (it.custoUnitCentavos!=null?' · '+brl(it.custoUnitCentavos)+'/un':'')+'</span>'+
+        '<button class="icon-btn" data-action="pedido-compra-item-remover" data-idx="'+idx+'" style="color:var(--danger);">'+icon("x",14)+'</button></div>';
+    }).join("") : '<div class="empty-hint">Nenhum item adicionado ainda.</div>')+
+    (m.erro ? '<div class="pin-error" style="margin-top:8px;">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="pedido-compra-form-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="pedido-compra-criar" '+(totalItens===0||m.salvando?"disabled":"")+'>Criar pedido</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+function renderRendimentoModal(m){
+  var insumo = state.insumos.find(function(i){ return i.id===m.insumoId; });
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Rendimento — '+escapeHtml(insumo?insumo.nome:"")+'</h2>'+
+    '<div class="modal-sub">Percentual do insumo que efetivamente sobra depois do preparo/perda (ex: limpeza, corte, cozimento).</div>'+
+    '<div class="field"><label>Rendimento (%)</label><input id="rdFator" type="number" min="1" max="100" step="1" value="'+(m.fatorAtual!=null?Math.round(m.fatorAtual*100):"")+'" placeholder="Ex: 85"></div>'+
+    '<div class="field"><label>Observação</label><textarea id="rdObservacao" placeholder="Ex: medido em 20 unidades, perda de aparas">'+escapeHtml(m.observacaoAtual||"")+'</textarea></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row">'+
+      '<button class="btn btn-ghost" data-action="rendimento-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="rendimento-confirmar" data-insumo="'+m.insumoId+'">Salvar medição</button>'+
     '</div>'+
   '</div></div>';
 }
@@ -136,6 +207,20 @@ function renderUsuarioFormModal(m){
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="usuario-form-cancelar">Cancelar</button>'+
       '<button class="btn btn-primary btn-block" data-action="usuario-form-salvar">Salvar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+function renderTrocarPinModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Trocar PIN — '+escapeHtml(m.nome)+'</h2>'+
+    '<div class="modal-sub">O funcionário passa a entrar com o novo PIN imediatamente.</div>'+
+    '<div class="field"><label>Novo PIN (4 dígitos)</label><input id="tpNovoPin" maxlength="4" inputmode="numeric" placeholder="Ex: 1234"></div>'+
+    '<div class="field"><label>Confirmar novo PIN</label><input id="tpConfirmarPin" maxlength="4" inputmode="numeric" placeholder="Repita o PIN"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row">'+
+      '<button class="btn btn-ghost" data-action="trocarpin-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="trocarpin-confirmar" data-usuario="'+m.usuarioId+'" '+(m.salvando?"disabled":"")+'>Salvar novo PIN</button>'+
     '</div>'+
   '</div></div>';
 }

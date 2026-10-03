@@ -42,6 +42,24 @@ async function salvarUsuario(nome, papel, pin){
   registrarAuditoria("usuarios", res.data, "USUARIO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+papel);
   toast("ok","USUÁRIO CRIADO", nome.trim()+" · "+papel);
 }
+function abrirTrocarPin(usuarioId){
+  var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
+  if(!u) return;
+  state.modal = {type:"trocarPin", usuarioId:usuarioId, nome:u.nome, erro:"", salvando:false};
+  render();
+}
+async function confirmarTrocarPin(usuarioId, novoPin, confirmarPin){
+  var m = state.modal;
+  if(!/^[0-9]{4}$/.test(novoPin||"")){ m.erro = "PIN deve ter exatamente 4 dígitos."; render(); return; }
+  if(novoPin !== confirmarPin){ m.erro = "Os PINs digitados não coincidem."; render(); return; }
+  m.erro = ""; m.salvando = true; render();
+  var res = await sb.rpc("trocar_pin_funcionario", {p_usuario_id:usuarioId, p_novo_pin:novoPin});
+  if(res.error){ m.erro = res.error.message; m.salvando = false; render(); return; }
+  var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
+  state.modal = null;
+  render();
+  toast("ok","PIN ALTERADO", u ? u.nome : "");
+}
 async function toggleUsuarioAtivo(usuarioId){
   var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
   var novo = !u.ativo;
@@ -65,7 +83,7 @@ async function salvarConfig(campos){
     horarioFechamento: campos.horarioFechamento || c.horarioFechamento,
     chavePix: campos.chavePix.trim()
   });
-  delete novoConfig.empresaNome; delete novoConfig.empresaCnpj;
+  delete novoConfig.empresaNome; delete novoConfig.empresaCnpj; delete novoConfig.totalFichas; delete novoConfig.slug;
   var res = await sb.from("empresas").update({
     nome: campos.nome.trim() || c.empresaNome, cnpj: campos.cnpj.trim(), config: novoConfig
   }).eq("id", state.empresaId);

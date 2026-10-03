@@ -2,7 +2,8 @@
 
 // ---------- mapeamento snake_case (Supabase) <-> camelCase (app) ----------
 function mapProduto(row, catNomePorId){
-  return {id:row.id, nome:row.nome, categoria:(catNomePorId&&catNomePorId[row.categoria_id])||"", categoriaId:row.categoria_id, precoCentavos:row.preco_centavos, ativo:row.ativo, esgotado:row.esgotado};
+  return {id:row.id, nome:row.nome, categoria:(catNomePorId&&catNomePorId[row.categoria_id])||"", categoriaId:row.categoria_id, precoCentavos:row.preco_centavos, ativo:row.ativo, esgotado:row.esgotado,
+    setorProducao:row.setor_producao||"COZINHA", fotoUrl:row.foto_url||""};
 }
 function mapInsumo(row){
   return {id:row.id, nome:row.nome, unidade:row.unidade, estoqueAtual:Number(row.estoque_atual), estoqueMinimo:Number(row.estoque_minimo), custoMedioCentavos:row.custo_medio_centavos};
@@ -14,12 +15,13 @@ function mapComanda(row){
   return {id:row.id, codigo:row.codigo, mesaId:row.mesa_id, tipo:row.tipo, status:row.status,
     abertura:row.abertura, fechamento:row.fechamento, usuarioAbertura:row.usuario_abertura,
     taxaServicoAtiva:row.taxa_servico_ativa, descontoCentavos:row.desconto_centavos,
-    trocoCentavos:row.troco_centavos, itens:[], pagamentos:[]};
+    trocoCentavos:row.troco_centavos, fichaNumero:row.ficha_numero, itens:[], pagamentos:[]};
 }
 function mapItem(row){
   return {id:row.id, comandaId:row.comanda_id, produtoId:row.produto_id, nome:row.nome, observacao:row.observacao||"",
     quantidade:Number(row.quantidade), precoUnitCentavos:row.preco_unit_centavos, status:row.status,
-    usuarioId:row.usuario_id, enviadoEm:row.enviado_em, canceladoAposPreparo:!!row.cancelado_apos_preparo};
+    usuarioId:row.usuario_id, enviadoEm:row.enviado_em, canceladoAposPreparo:!!row.cancelado_apos_preparo,
+    motivoCancelamento:row.motivo_cancelamento||"", setorProducao:row.setor_producao||""};
 }
 function mapCaixaSessao(row){
   return {id:row.id, terminal:row.terminal, usuarioAbertura:row.usuario_abertura, aberturaEm:row.abertura_em,
@@ -43,6 +45,21 @@ function mapUsuario(row){
 function mapEstoqueMov(row){
   return {id:row.id, insumoId:row.insumo_id, tipo:row.tipo, quantidade:Number(row.quantidade),
     motivo:row.motivo, origem:row.origem, origemId:row.origem_id, usuarioId:row.usuario_id, createdAt:row.created_at};
+}
+function mapRendimento(row){
+  return {id:row.id, insumoId:row.insumo_id, fator:Number(row.fator), observacao:row.observacao||"",
+    medidoEm:row.medido_em, usuarioId:row.usuario_id};
+}
+function mapFornecedor(row){
+  return {id:row.id, nome:row.nome, contato:row.contato||"", telefone:row.telefone||"", ativo:row.ativo};
+}
+function mapPedidoCompra(row){
+  return {id:row.id, fornecedorId:row.fornecedor_id, status:row.status, usuarioId:row.usuario_id,
+    recebidoEm:row.recebido_em, createdAt:row.created_at, itens:[]};
+}
+function mapPedidoCompraItem(row){
+  return {id:row.id, pedidoId:row.pedido_id, insumoId:row.insumo_id, quantidade:Number(row.quantidade),
+    custoUnitCentavos:row.custo_unit_centavos};
 }
 function mapAuditoria(row){
   return {id:row.id, entidade:row.entidade, entidadeId:row.entidade_id, acao:row.acao,

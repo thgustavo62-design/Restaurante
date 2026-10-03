@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cardápio</title>
+<link rel="icon" type="image/png" href="assets/logo/rancho-netto-white-bg.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+:root{
+  --background:#0A0A0B; --surface-01:#101112; --border:#2A2C2F;
+  --text-primary:#F4F2ED; --text-muted:#8E8F92;
+  --primary:#F05A24; --danger:#D83A32;
+  --font-display:'Barlow Condensed','Oswald','Arial Narrow',sans-serif;
+  --font-body:'Inter','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--background); color:var(--text-primary); font-family:var(--font-body); padding:16px 16px 48px;}
+h1,h2{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
+.cp-header{text-align:center; padding:24px 0 12px;}
+.cp-header h1{font-size:28px; font-weight:800;}
+.cp-header p{margin:4px 0 0; color:var(--text-muted); font-size:12px; text-transform:uppercase; letter-spacing:1.5px;}
+.cp-categoria{max-width:640px; margin:0 auto 28px;}
+.cp-categoria h2{font-size:16px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--primary); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px;}
+.cp-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px;}
+.cp-item{background:var(--surface-01); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:left;}
+.cp-item.cp-esgotado{opacity:.45;}
+.cp-thumb{width:100%; height:80px; object-fit:cover; border-radius:6px; margin-bottom:8px; display:block;}
+.cp-item-nome{font-size:13px; font-weight:600; line-height:1.3; min-height:34px;}
+.cp-item-preco{font-family:var(--font-display); font-size:18px; font-weight:800; color:var(--primary); margin-top:8px;}
+.cp-esgotado-label{color:var(--danger); font-family:var(--font-body); font-size:11px; text-transform:uppercase; letter-spacing:.5px;}
+.cp-erro{max-width:480px; margin:60px auto; text-align:center; color:var(--text-muted); font-size:14px;}
+</style>
+</head>
+<body>
+<div id="cp-root">
+  <div class="cp-erro">Carregando cardápio...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="assets/js/cardapio-publico.js"></script>
+</body>
+</html>

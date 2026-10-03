@@ -111,7 +111,12 @@ function renderSalao(){
   }).join("");
   var comandasAbertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
 
-  return '<div class="page-header"><div><div class="page-title">Atendimento</div><div class="page-sub">Mapa de salão em tempo real</div></div></div>'+
+  return '<div class="page-header"><div><div class="page-title">Atendimento</div><div class="page-sub">Mapa de salão em tempo real</div></div>'+
+      (can(PERM.COMANDA_ABRIR) ? '<div class="action-row" style="flex:0 0 auto;">'+
+        '<button class="btn" data-action="balcao-abrir">'+icon("plus",15)+' Balcão</button>'+
+        '<button class="btn" data-action="ficha-abrir">'+icon("plus",15)+' Ficha</button>'+
+      '</div>' : '')+
+    '</div>'+
     '<div class="tabs">'+tabs.map(function(t){ return '<div class="tab '+(filtro===t[0]?"active":"")+'" data-action="salao-filtro" data-f="'+t[0]+'">'+t[1]+'</div>'; }).join("")+'</div>'+
     '<div class="grid-2">'+
       '<div class="mesas-grid">'+(cards||'<div class="empty-hint">Nenhuma mesa neste filtro.</div>')+'</div>'+
@@ -121,7 +126,7 @@ function renderSalao(){
           var mesa = state.mesas.find(function(m){ return m.id===c.mesaId; });
           var t = totaisComanda(c);
           return '<div class="item" data-action="comanda-open" data-comanda="'+c.id+'">'+
-            '<div>Mesa '+(mesa?mesa.numero:"?")+'<div class="t">'+fmtMin(minutosDesde(c.abertura))+'</div></div>'+
+            '<div>'+rotuloComanda(c, mesa)+'<div class="t">'+fmtMin(minutosDesde(c.abertura))+'</div></div>'+
             '<div>'+brl(t.total)+'</div>'+
           '</div>';
         }).join("") : '<div class="empty-hint">Salão livre no momento.</div>')+
@@ -183,7 +188,7 @@ function renderComanda(){
       '<input id="buscaProdutoInput" placeholder="Buscar produto, código ou categoria..." value="'+escapeHtml(state.draft.busca)+'" data-action="draft-busca">'+
     '</div>'+
     '<div class="cat-tabs">'+state.categorias.map(function(c){
-      return '<div class="cat-tab '+(c===state.draft.categoria?"active":"")+'" data-action="picker-cat" data-cat="'+c+'">'+c+'</div>';
+      return '<div class="cat-tab '+(c===state.draft.categoria?"active":"")+'" data-action="picker-cat" data-cat="'+escapeHtml(c)+'">'+escapeHtml(c)+'</div>';
     }).join("")+'</div>'+
     '<div class="product-grid">'+produtosFiltrados.map(function(p){
       if(p.esgotado){
@@ -191,11 +196,12 @@ function renderComanda(){
           '<div class="nome">'+escapeHtml(p.nome)+'</div><div class="preco" style="color:var(--text-muted);">ESGOTADO</div></div>';
       }
       return '<div class="product-card" data-action="draft-mais" data-produto="'+p.id+'">'+
+        (p.fotoUrl ? '<img class="thumb" src="'+escapeHtml(p.fotoUrl)+'" onerror="this.style.display=\'none\'">' : '')+
         '<div class="nome">'+escapeHtml(p.nome)+'</div><div class="preco">'+brl(p.precoCentavos)+'</div></div>';
     }).join("")+'</div>';
 
   var orderPanel = '<div class="order-panel">'+
-      '<div><div class="order-panel-title">Novo pedido — Mesa '+(mesa?mesa.numero:"?")+'</div>'+
+      '<div><div class="order-panel-title">Novo pedido — '+rotuloComanda(comanda, mesa)+'</div>'+
       (podeLancar ? '<div style="margin-top:10px;">'+draftHtml+'</div>' : '')+
       (podeLancar && draftCount>0 ? '<button class="btn btn-primary btn-lg btn-block" style="margin-top:8px;" data-action="pedido-revisar-abrir">'+icon("check",16)+' Revisar e enviar ('+draftCount+')</button>' : '')+
       '</div>'+
@@ -215,7 +221,7 @@ function renderComanda(){
     '</div>';
 
   return '<div class="comanda-head">'+
-      '<div><div class="titulo">MESA '+(mesa?mesa.numero:"?")+' <span style="color:var(--text-muted); font-size:14px;">· '+comanda.codigo+'</span></div>'+
+      '<div><div class="titulo">'+rotuloComanda(comanda, mesa).toUpperCase()+' <span style="color:var(--text-muted); font-size:14px;">· '+comanda.codigo+'</span></div>'+
       '<div class="sub">Aberta há '+fmtMin(minutosDesde(comanda.abertura))+' · '+comanda.status+'</div></div>'+
       '<button class="btn btn-ghost" data-action="nav-goto" data-view="salao">'+icon("arrowLeft",16)+' Salão</button>'+
     '</div>'+
@@ -229,21 +235,26 @@ function renderComanda(){
 function renderKds(){
   var cols = [["PENDENTE","Pendente","INICIAR PREPARO"],["PREPARANDO","Preparando","MARCAR PRONTO"],["PRONTO","Pronto","ENTREGUE"]];
   var nextStatus = {PENDENTE:"PREPARANDO", PREPARANDO:"PRONTO", PRONTO:"ENTREGUE"};
+  var setorFiltro = state.kdsSetorFiltro || "TODOS";
+  var setorTabs = ["TODOS"].concat(SETORES_PRODUCAO);
   var abertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
   var cards = {PENDENTE:[], PREPARANDO:[], PRONTO:[]};
   var cancelados = [];
   abertas.forEach(function(c){
     var mesa = state.mesas.find(function(m){ return m.id===c.mesaId; });
+    var rotulo = rotuloComanda(c, mesa);
     c.itens.forEach(function(it){
-      if(cards[it.status]) cards[it.status].push({comandaId:c.id, codigo:c.codigo, item:it, mesaNum:mesa?mesa.numero:"?"});
-      if(it.status==="CANCELADO" && it.canceladoAposPreparo) cancelados.push({comandaId:c.id, codigo:c.codigo, item:it, mesaNum:mesa?mesa.numero:"?"});
+      if(setorFiltro!=="TODOS" && (it.setorProducao||"COZINHA")!==setorFiltro) return;
+      if(cards[it.status]) cards[it.status].push({comandaId:c.id, codigo:c.codigo, item:it, rotulo:rotulo});
+      if(it.status==="CANCELADO" && it.canceladoAposPreparo) cancelados.push({comandaId:c.id, codigo:c.codigo, item:it, rotulo:rotulo});
     });
   });
   var total = cards.PENDENTE.length+cards.PREPARANDO.length+cards.PRONTO.length;
 
   return '<div class="page-header"><div><div class="page-title">Cozinha</div><div class="page-sub">'+total+' pedidos ativos</div></div></div>'+
+    '<div class="tabs">'+setorTabs.map(function(s){ return '<div class="tab '+(setorFiltro===s?"active":"")+'" data-action="kds-filtro" data-f="'+s+'">'+(s==="TODOS"?"Todos":s)+'</div>'; }).join("")+'</div>'+
     (cancelados.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">CANCELADO DEPOIS DE PRONTO/EM PREPARO — PARE</span><span class="d">'+
-      cancelados.map(function(c){ return 'Mesa '+c.mesaNum+' · '+c.item.quantidade+'x '+escapeHtml(c.item.nome); }).join(" · ")+
+      cancelados.map(function(c){ return c.rotulo+' · '+c.item.quantidade+'x '+escapeHtml(c.item.nome); }).join(" · ")+
       '</span></div></div>' : '')+
     '<div class="kanban">'+
     cols.map(function(col){
@@ -251,7 +262,7 @@ function renderKds(){
       var porComanda = {};
       var ordem = [];
       lista.forEach(function(c){
-        if(!porComanda[c.comandaId]){ porComanda[c.comandaId] = {codigo:c.codigo, mesaNum:c.mesaNum, itens:[]}; ordem.push(c.comandaId); }
+        if(!porComanda[c.comandaId]){ porComanda[c.comandaId] = {codigo:c.codigo, rotulo:c.rotulo, itens:[]}; ordem.push(c.comandaId); }
         porComanda[c.comandaId].itens.push(c.item);
       });
       return '<div class="kanban-col" data-status="'+status+'">'+
@@ -262,7 +273,7 @@ function renderKds(){
           var atrasoTicket = minTicket>10;
           return '<div class="kanban-card col-'+status+'">'+
             '<div class="kanban-card-top"><span class="codigo">'+ticket.codigo+'</span><span class="tempo '+(atrasoTicket?"atraso":"")+'">'+icon("clock",11)+' '+fmtMin(minTicket)+'</span></div>'+
-            '<div class="mesa">MESA '+ticket.mesaNum+'</div>'+
+            '<div class="mesa">'+ticket.rotulo.toUpperCase()+'</div>'+
             ticket.itens.map(function(item){
               var min = minutosDesde(item.enviadoEm);
               var atraso = min>10;
@@ -342,12 +353,13 @@ function renderCardapio(){
   return '<div class="page-header"><div><div class="page-title">Cardápio</div><div class="page-sub">'+state.produtos.length+' produtos · '+state.categorias.length+' categorias</div></div>'+
       (podeEditar ? '<button class="btn btn-primary" data-action="produto-novo">'+icon("plus",15)+' Novo produto</button>' : '')+
     '</div>'+
-    '<div class="tabs">'+tabs.map(function(c){ return '<div class="tab '+(filtro===c?"active":"")+'" data-action="cardapio-filtro" data-f="'+c+'">'+c+'</div>'; }).join("")+'</div>'+
+    '<div class="tabs">'+tabs.map(function(c){ return '<div class="tab '+(filtro===c?"active":"")+'" data-action="cardapio-filtro" data-f="'+escapeHtml(c)+'">'+escapeHtml(c)+'</div>'; }).join("")+'</div>'+
     '<div class="card">'+
     (lista.length ? lista.map(function(p){
       return '<div class="data-row">'+
+        (p.fotoUrl ? '<img class="produto-thumb" src="'+escapeHtml(p.fotoUrl)+'" onerror="this.style.display=\'none\'">' : '')+
         '<div class="main"><div class="nome">'+escapeHtml(p.nome)+(p.esgotado?' <span class="badge badge-esgotado">Esgotado</span>':'')+(!p.ativo?' <span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
-        '<div class="sub">'+escapeHtml(p.categoria)+'</div></div>'+
+        '<div class="sub">'+escapeHtml(p.categoria)+' · '+p.setorProducao+'</div></div>'+
         '<div class="num">'+brl(p.precoCentavos)+'</div>'+
         (podeEditar ? '<div class="acts">'+
           '<button class="btn btn-sm" data-action="produto-esgotar" data-produto="'+p.id+'">'+(p.esgotado?"Reativar":"Esgotar")+'</button>'+
@@ -371,13 +383,16 @@ function renderEstoque(){
     state.insumos.map(function(i){
       var pct = Math.max(4, Math.min(100, Math.round(i.estoqueAtual/(i.estoqueMinimo*2||1)*100)));
       var baixo = i.estoqueAtual<=i.estoqueMinimo;
+      var rend = state.insumoRendimentos.find(function(r){ return r.insumoId===i.id; });
       return '<div class="data-row">'+
         '<div class="main"><div class="nome">'+escapeHtml(i.nome)+' '+(baixo?'<span class="badge badge-baixo">Baixo</span>':'<span class="badge badge-ok">OK</span>')+'</div>'+
-        '<div class="sub">'+i.estoqueAtual+' '+i.unidade+' em estoque · mínimo '+i.estoqueMinimo+' '+i.unidade+' · custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+'</div>'+
+        '<div class="sub">'+i.estoqueAtual+' '+i.unidade+' em estoque · mínimo '+i.estoqueMinimo+' '+i.unidade+' · custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+
+          (rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div>'+
         '<div class="stock-bar"><div class="stock-bar-fill '+(baixo?"low":"")+'" style="width:'+pct+'%"></div></div></div>'+
         (podeEditar ? '<div class="acts">'+
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="ENTRADA" data-insumo="'+i.id+'">Entrada</button>'+
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="SAIDA" data-insumo="'+i.id+'">Saída</button>'+
+          '<button class="btn btn-sm" data-action="rendimento-abrir" data-insumo="'+i.id+'">Rendimento</button>'+
         '</div>' : '')+
       '</div>';
     }).join("")+
@@ -389,6 +404,41 @@ function renderEstoque(){
       var sinal = m.tipo==="ENTRADA" ? "+" : "-";
       return '<div class="mov-row"><span><span class="mov-tipo '+cls+'">'+(m.tipo==="VENDA"?"VENDA":m.tipo)+'</span>'+(i?escapeHtml(i.nome):"?")+(m.motivo?" — "+escapeHtml(m.motivo):"")+'<div class="tag">'+new Date(m.createdAt).toLocaleString("pt-BR")+'</div></span><span>'+sinal+m.quantidade+' '+(i?i.unidade:"")+'</span></div>';
     }).join("") : '<div class="empty-hint">Nenhuma movimentação ainda.</div>')+'</div>';
+}
+
+function renderCompras(){
+  var podeEditar = can(PERM.ESTOQUE);
+  var statusLbl = {RASCUNHO:"Rascunho", PEDIDO_REALIZADO:"Pedido realizado", RECEBIDO:"Recebido"};
+  return '<div class="page-header"><div><div class="page-title">Compras</div><div class="page-sub">'+state.fornecedores.length+' fornecedores · '+state.pedidosCompra.length+' pedidos</div></div>'+
+      (podeEditar ? '<div class="action-row" style="flex:0 0 auto;">'+
+        '<button class="btn" data-action="fornecedor-novo">'+icon("plus",15)+' Fornecedor</button>'+
+        (state.fornecedores.length ? '<button class="btn btn-primary" data-action="pedido-compra-novo">'+icon("plus",15)+' Pedido de compra</button>' : '')+
+      '</div>' : '')+
+    '</div>'+
+    '<div class="section-label">Fornecedores</div>'+
+    '<div class="card">'+
+    (state.fornecedores.length ? state.fornecedores.map(function(f){
+      return '<div class="data-row">'+
+        '<div class="main"><div class="nome">'+escapeHtml(f.nome)+(!f.ativo?' <span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
+        '<div class="sub">'+(f.contato?escapeHtml(f.contato)+' · ':'')+escapeHtml(f.telefone||"")+'</div></div>'+
+        (podeEditar ? '<div class="acts"><button class="btn btn-sm" data-action="fornecedor-toggle-ativo" data-fornecedor="'+f.id+'">'+(f.ativo?"Desativar":"Reativar")+'</button></div>' : '')+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nenhum fornecedor cadastrado.</div>')+
+    '</div>'+
+    '<div class="section-label">Pedidos de compra</div>'+
+    '<div class="card">'+
+    (state.pedidosCompra.length ? state.pedidosCompra.map(function(p){
+      var forn = state.fornecedores.find(function(f){ return f.id===p.fornecedorId; });
+      return '<div class="mov-row"><span><span class="mov-tipo '+p.status+'">'+statusLbl[p.status]+'</span>'+
+          (forn?escapeHtml(forn.nome):"?")+' — '+p.itens.length+' item(ns)'+
+          '<div class="tag">'+new Date(p.createdAt).toLocaleString("pt-BR")+'</div></span>'+
+          (podeEditar ? '<span class="acts">'+
+            (p.status==="RASCUNHO" ? '<button class="btn btn-sm" data-action="pedido-compra-marcar-realizado" data-pedido="'+p.id+'">Marcar realizado</button>' : '')+
+            (p.status!=="RECEBIDO" ? '<button class="btn btn-sm btn-success" data-action="pedido-compra-receber" data-pedido="'+p.id+'">Receber</button>' : '')+
+          '</span>' : '')+
+        '</div>';
+    }).join("") : '<div class="empty-hint">Nenhum pedido de compra ainda.</div>')+
+    '</div>';
 }
 
 function renderFinanceiro(){
@@ -489,6 +539,7 @@ function renderEquipe(){
         '<div class="main"><div class="nome">'+escapeHtml(u.nome)+' '+(!u.ativo?'<span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
         '<div class="sub">'+u.papel+'</div></div>'+
         (podeEditar ? '<div class="acts">'+
+          '<button class="btn btn-sm" data-action="usuario-trocar-pin" data-usuario="'+u.id+'">Trocar PIN</button>'+
           '<button class="btn btn-sm" data-action="usuario-toggle-ativo" data-usuario="'+u.id+'">'+(u.ativo?"Desativar":"Reativar")+'</button>'+
         '</div>' : '')+
       '</div>';
@@ -526,6 +577,15 @@ function renderConfiguracoes(){
         '<option value="58mm" '+(c.impressoraLargura==="58mm"?"selected":"")+'>58mm</option>'+
       '</select></div>'+
       '<div class="field" style="margin-bottom:0;"><label>Mensagem de rodapé do recibo</label><input id="cfgRodape" value="'+escapeHtml(c.reciboRodape)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Cardápio público (QR)</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Link somente leitura, sem login — nome, preço, categoria e foto dos produtos ativos. Gere um QR code a partir dele em qualquer serviço gratuito e imprima pra colocar nas mesas.</p>'+
+      (c.slug ? '<div class="field" style="margin-bottom:0;"><label>Link do cardápio</label>'+
+        '<div style="display:flex; gap:8px;">'+
+          '<input id="cfgLinkCardapio" readonly value="'+escapeHtml(window.location.origin+"/cardapio/"+c.slug)+'" style="flex:1;">'+
+          '<button type="button" class="btn" data-action="cardapio-link-copiar">Copiar</button>'+
+        '</div></div>' : '<div class="empty-hint">Cardápio público ainda não configurado (slug ausente).</div>')+
     '</div>'+
     '</div>'+
     '<button class="btn btn-primary btn-lg" style="margin-top:16px;" data-action="config-salvar">Salvar configurações</button>';

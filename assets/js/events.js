@@ -38,6 +38,8 @@ function bindEvents(){
     if(action==="nav-goto"){ state.view = el.dataset.view; state.viewParams={}; state.sidebarMobileAberto = false; render(); return; }
     if(action==="salao-filtro"){ state.salaoFiltro = el.dataset.f; render(); return; }
 
+    if(action==="balcao-abrir"){ abrirComandaBalcao(); return; }
+    if(action==="ficha-abrir"){ abrirComandaFicha(); return; }
     if(action==="mesa-open"){
       var mesaId = el.dataset.mesa;
       var abertas = comandasAbertasDaMesa(mesaId);
@@ -91,6 +93,7 @@ function bindEvents(){
     if(action==="recibo-fechar"){ state.modal = null; render(); return; }
 
     if(action==="kds-set"){ kdsSetStatus(el.dataset.comanda, el.dataset.item, el.dataset.status); return; }
+    if(action==="kds-filtro"){ state.kdsSetorFiltro = el.dataset.f; render(); return; }
 
     if(action==="caixa-abrir-confirmar"){
       var v = document.getElementById("saldoInicialInput").value;
@@ -138,7 +141,9 @@ function bindEvents(){
       var categoria = novaCat || document.getElementById("pfCategoria").value;
       var nome = document.getElementById("pfNome").value;
       var preco = Math.round(parseFloat(document.getElementById("pfPreco").value||"0")*100);
-      salvarProduto(el.dataset.produto||null, nome, categoria, preco);
+      var setorProducao = document.getElementById("pfSetorProducao").value;
+      var fotoUrl = document.getElementById("pfFotoUrl").value;
+      salvarProduto(el.dataset.produto||null, nome, categoria, preco, setorProducao, fotoUrl);
       return;
     }
 
@@ -149,6 +154,39 @@ function bindEvents(){
       var qtd = parseFloat(document.getElementById("imQuantidade").value||"0");
       var motivo = document.getElementById("imMotivo").value;
       confirmarInsumoMov(el.dataset.tipo, insumoId, qtd, motivo);
+      return;
+    }
+    if(action==="fornecedor-novo"){ state.modal={type:"fornecedorForm", erro:""}; render(); return; }
+    if(action==="fornecedor-form-cancelar"){ state.modal=null; render(); return; }
+    if(action==="fornecedor-form-salvar"){
+      var fnNome = document.getElementById("fnNome").value;
+      var fnContato = document.getElementById("fnContato").value;
+      var fnTelefone = document.getElementById("fnTelefone").value;
+      salvarFornecedor(fnNome, fnContato, fnTelefone);
+      return;
+    }
+    if(action==="fornecedor-toggle-ativo"){ toggleFornecedorAtivo(el.dataset.fornecedor); return; }
+
+    if(action==="pedido-compra-novo"){ abrirPedidoCompraForm(); return; }
+    if(action==="pedido-compra-form-cancelar"){ state.modal=null; render(); return; }
+    if(action==="pedido-compra-item-add"){
+      var pcInsumo = document.getElementById("pcInsumo").value;
+      var pcQtd = parseFloat(document.getElementById("pcQuantidade").value||"0");
+      var pcCusto = document.getElementById("pcCustoUnit").value;
+      pedidoCompraAdicionarItem(pcInsumo, pcQtd, pcCusto===""?null:Math.round(parseFloat(pcCusto)*100));
+      return;
+    }
+    if(action==="pedido-compra-item-remover"){ pedidoCompraRemoverItem(parseInt(el.dataset.idx,10)); return; }
+    if(action==="pedido-compra-criar"){ criarPedidoCompra(); return; }
+    if(action==="pedido-compra-marcar-realizado"){ marcarPedidoCompraRealizado(el.dataset.pedido); return; }
+    if(action==="pedido-compra-receber"){ receberPedidoCompra(el.dataset.pedido); return; }
+
+    if(action==="rendimento-abrir"){ abrirRendimento(el.dataset.insumo); return; }
+    if(action==="rendimento-cancelar"){ state.modal=null; render(); return; }
+    if(action==="rendimento-confirmar"){
+      var rdFator = parseFloat(document.getElementById("rdFator").value||"0");
+      var rdObs = document.getElementById("rdObservacao").value;
+      salvarRendimento(el.dataset.insumo, rdFator, rdObs);
       return;
     }
 
@@ -183,7 +221,22 @@ function bindEvents(){
       return;
     }
     if(action==="usuario-toggle-ativo"){ toggleUsuarioAtivo(el.dataset.usuario); return; }
+    if(action==="usuario-trocar-pin"){ abrirTrocarPin(el.dataset.usuario); return; }
+    if(action==="trocarpin-cancelar"){ state.modal=null; render(); return; }
+    if(action==="trocarpin-confirmar"){
+      var tpNovo = document.getElementById("tpNovoPin").value;
+      var tpConfirmar = document.getElementById("tpConfirmarPin").value;
+      confirmarTrocarPin(el.dataset.usuario, tpNovo, tpConfirmar);
+      return;
+    }
 
+    if(action==="cardapio-link-copiar"){
+      var linkInput = document.getElementById("cfgLinkCardapio");
+      if(linkInput && navigator.clipboard){
+        navigator.clipboard.writeText(linkInput.value).then(function(){ toast("ok","LINK COPIADO",""); });
+      }
+      return;
+    }
     if(action==="config-salvar"){
       salvarConfig({
         nome: document.getElementById("cfgNome").value,
@@ -207,6 +260,10 @@ function bindEvents(){
   };
 
   app.onchange = function(e){
+    if(e.target.dataset.action==="pedido-compra-fornecedor"){
+      state.modal.fornecedorId = e.target.value;
+      return;
+    }
     if(e.target.dataset.action==="toggle-taxa"){
       var comanda = state.comandas.find(function(c){ return c.id===state.viewParams.comandaId; });
       var ativa = e.target.checked;

@@ -75,57 +75,32 @@ async function confirmarPagamento(){
     render(); return;
   }
   state.modal.confirmando = true; render();
-  var troco = soma - t.total;
-  var fechamento = new Date().toISOString();
 
-  var upd = await sb.from("comandas").update({
-    status:"PAGA", fechamento:fechamento, troco_centavos:troco
-  }).eq("id", comanda.id);
-  if(upd.error){ state.modal.erro = upd.error.message; state.modal.confirmando=false; render(); return; }
-
-  var pagamentosPayload = state.modal.linhas.map(function(l){
-    return {comanda_id:comanda.id, sessao_id:state.caixaSessao.id, forma:l.forma, valor_centavos:l.valorCentavos};
+  // toda a gravação (comanda, pagamentos, movimentos de caixa, contas a
+  // receber de fiado e baixa de estoque) acontece atomicamente dentro do
+  // RPC confirmar_pagamento — se qualquer passo falhar, nada é gravado.
+  var res = await sb.rpc("confirmar_pagamento", {
+    p_comanda_id: comanda.id,
+    p_linhas: state.modal.linhas.map(function(l){ return {forma:l.forma, valor_centavos:l.valorCentavos}; }),
+    p_fiado_cliente: temFiado ? state.modal.fiadoCliente.trim() : null
   });
-  await sb.from("pagamentos").insert(pagamentosPayload);
-
-  var movimentosPayload = [];
-  var trocoRestante = troco;
-  state.modal.linhas.forEach(function(l){
-    var valor = l.valorCentavos;
-    if(l.forma==="DINHEIRO" && trocoRestante>0){ valor = Math.max(0, valor - trocoRestante); trocoRestante = 0; }
-    if(valor<=0) return;
-    movimentosPayload.push({
-      sessao_id:state.caixaSessao.id, tipo:"VENDA", valor_centavos:valor,
-      forma_pagamento:l.forma, comanda_id:comanda.id, usuario_id:state.usuarioAtualId
-    });
-  });
-  var movRes = await sb.from("caixa_movimentos").insert(movimentosPayload).select();
-  if(!movRes.error) state.caixaMovimentos = state.caixaMovimentos.concat(movRes.data.map(mapMovimento));
-
-  var mesaContas = state.mesas.find(function(mm){ return mm.id===comanda.mesaId; });
-  var recebiveisPayload = state.modal.linhas.filter(function(l){ return FORMAS_RECEBIVEL.indexOf(l.forma)!==-1; }).map(function(l){
-    var descricao = l.forma==="FIADO"
-      ? "Fiado — "+state.modal.fiadoCliente.trim()+" — Mesa "+(mesaContas?mesaContas.numero:"?")+" · "+comanda.codigo
-      : l.forma+" — Mesa "+(mesaContas?mesaContas.numero:"?")+" · "+comanda.codigo;
-    return {
-      empresa_id: state.empresaId, tipo:"RECEBER", descricao: descricao, categoria: l.forma==="FIADO" ? "Fiado" : "Recebíveis de cartão/voucher",
-      valor_centavos: l.valorCentavos, vencimento: diasA(l.forma==="FIADO" ? 7 : 30)
-    };
-  });
-  if(recebiveisPayload.length){
-    var contasRes = await sb.from("contas").insert(recebiveisPayload).select();
-    if(!contasRes.error) state.contas = state.contas.concat(contasRes.data.map(mapConta));
+  if(res.error){
+    state.modal.erro = res.error.message; state.modal.confirmando = false; render(); return;
   }
+  var out = res.data;
+
+  (out.caixa_movimentos||[]).forEach(function(m){ state.caixaMovimentos.push(mapMovimento(m)); });
+  (out.contas||[]).forEach(function(c){ state.contas.push(mapConta(c)); });
+  (out.estoque_movimentos||[]).forEach(function(m){
+    state.estoqueMovimentos.unshift(mapEstoqueMov(m));
+    var insumo = state.insumos.find(function(i){ return i.id===m.insumo_id; });
+    if(insumo) insumo.estoqueAtual = Math.max(0, insumo.estoqueAtual - Number(m.quantidade));
+  });
 
   comanda.pagamentos = state.modal.linhas.map(function(l){ return {forma:l.forma, valorCentavos:l.valorCentavos}; });
-  comanda.trocoCentavos = troco;
+  comanda.trocoCentavos = out.comanda.troco_centavos;
   comanda.status = "PAGA";
-  comanda.fechamento = fechamento;
-
-  registrarAuditoria("comanda", comanda.id, "PAGAMENTO_CONFIRMADO", state.usuarioAtualId,
-    comanda.codigo+" · "+brl(t.total)+" · "+state.modal.linhas.map(function(l){ return l.forma; }).join("+"));
-
-  await baixarEstoqueDaVenda(comanda);
+  comanda.fechamento = out.comanda.fechamento;
 
   state.view = "salao"; state.viewParams = {};
   state.modal = {type:"recibo", comanda: JSON.parse(JSON.stringify(comanda))};

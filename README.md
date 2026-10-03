@@ -1,69 +1,156 @@
 # Rancho Netto — Brasa & Fogo
 
-Sistema de Gestão para Restaurante/Bar
+Sistema de gestão para restaurante/bar: atendimento de salão, cozinha (KDS),
+caixa, cardápio, estoque, compras, financeiro, relatórios e equipe — rodando
+**100% sobre o Supabase** (Postgres + Auth + Realtime). Não há backend
+próprio: o front-end fala direto com o banco, e a segurança (quem pode ver
+e escrever o quê) é garantida pelo próprio Postgres via Row Level Security
+(RLS), não pela interface.
 
-Sistema de atendimento, cozinha (KDS), caixa, estoque, financeiro e
-administração para restaurante/bar, rodando **100% sobre o Supabase**
-(Postgres + Auth + Realtime) — sem `localStorage`, sem estado local como
-fonte de verdade. Qualquer dispositivo autenticado lê e escreve direto no
-banco, e fica sincronizado com os demais via Realtime.
+Este documento é a referência completa de como o sistema funciona hoje —
+telas, permissões, segurança, dados e deploy. Para o catálogo detalhado de
+permissões e rotas, ver [`docs/rotas-permissoes.md`](docs/rotas-permissoes.md).
+O diagrama em [`docs/ER.md`](docs/ER.md) é **histórico** (descreve o desenho
+original do projeto, anterior ao schema `restaurante` atual) — para a
+estrutura de tabelas real, a fonte de verdade são as migrations em
+[`supabase/migrations/`](supabase/migrations/).
 
-## Estado atual
+## Visão geral
 
-O front-end é estático e modular — `index.html` só monta `<head>`/`<body>` e
-referencia `assets/css/styles.css` e ~18 arquivos JavaScript puro em
-`assets/js/` (config, ícones, helpers, mapeamento, dados/realtime, ações por
-domínio, impressão e renderização), carregados como `<script>` clássicos em
-ordem, mais `@supabase/supabase-js` via CDN — deliberadamente sem build step
-nem bundler, pronto para hospedagem estática (Vercel, GitHub Pages, etc.).
-Ele cobre: login por PIN (autenticação real), mapa de mesas, comandas e
-lançamento de pedidos, KDS em Kanban, caixa com conferência cega, cardápio,
-estoque com baixa automática por ficha técnica, financeiro, relatórios,
-equipe e configurações.
+- **Front-end**: `index.html` + ~20 arquivos JavaScript puro em
+  `assets/js/`, carregados como `<script>` clássicos em ordem fixa — sem
+  build step, sem bundler, sem framework. Pronto pra qualquer hospedagem
+  estática (hoje: Vercel). `assets/js/config.js` guarda a URL e a chave
+  pública (`publishable key`) do Supabase; não há segredo no front-end.
+- **Backend**: Postgres do Supabase, schema `restaurante` (ver
+  [abaixo](#banco-de-dados-schema-restaurante-num-projeto-compartilhado)),
+  com RLS em toda tabela e algumas operações sensíveis feitas por função
+  `SECURITY DEFINER` (RPC) em vez de escrita direta de tabela.
+- **Autenticação**: PIN de 4 dígitos, mas é a senha real de uma conta do
+  Supabase Auth — não é mock (detalhes [abaixo](#autenticação-e-segurança)).
+- **Sincronização**: Realtime do Supabase — qualquer mudança em um
+  dispositivo aparece nos outros em menos de 1 segundo, sem precisar
+  recarregar a página.
+- **Página pública**: `cardapio.html`, separada do app autenticado, para o
+  cliente ver o cardápio pelo celular via QR Code, sem login.
 
-### Backend (Supabase) — schema completo aplicado
+## Telas do app (`index.html`)
 
-- **Fase 0**: `empresas`, `usuarios`, `papeis_permissoes`, `auditoria`, RLS,
-  RBAC (5 papéis × 23 permissões).
-- **Fase 1**: `categorias`, `produtos`, `insumos`, `ficha_tecnica`,
-  `estoque_movimentos`, `mesas`, `comandas`, `comanda_itens`,
-  `caixa_sessoes`, `caixa_movimentos`, `pagamentos`, `contas` — todas com
-  RLS por `empresa_id` + permissão do papel.
-- Todas as migrations estão em [`supabase/migrations/`](supabase/migrations/),
-  numeradas e aplicadas em ordem.
+Depois do login, a navegação lateral mostra só as telas que o papel do
+usuário logado pode acessar (ver [Papéis e permissões](#papéis-e-permissões)).
 
-### Autenticação real (não é mock)
+| Tela | O que faz |
+|---|---|
+| **Dashboard** | Vendas do dia, ticket médio, mesas ocupadas, gráfico de vendas por hora, situação da cozinha e alertas (mesa atrasada, caixa fechado, sangria recomendada). |
+| **Atendimento (Salão)** | Mapa de mesas com status (livre / ocupada / aguardando pagamento) e tempo de ocupação. Botões **Balcão** e **Nova ficha** abrem uma venda sem mesa (fila por balcão ou ficha numerada — number atribuído automaticamente, até o limite configurado de fichas). Painel lateral lista todas as comandas abertas, seja de mesa, balcão ou ficha. |
+| **Comanda** | Catálogo de produtos por categoria (com busca e foto, se cadastrada) pra lançar itens; revisão do pedido antes de enviar pra cozinha; desconto (com aprovação de supervisor se acima do limite configurado); fechar conta. |
+| **Cozinha (KDS)** | Kanban (Pendente → Preparando → Pronto → Entregue) dos itens lançados, com abas pra filtrar por setor de produção (Bar / Cozinha / Brasa / Sobremesa) — cada produto tem um setor, gravado no item no momento do lançamento. Alerta separado pra item cancelado depois de já estar em preparo. |
+| **Caixa** | Abrir sessão com saldo inicial, registrar sangria/suprimento, ver movimentos da sessão. Fechamento é por **conferência cega**: o operador informa o valor contado antes de ver o valor esperado pelo sistema; diferença acima do limite configurado exige justificativa escrita. |
+| **Cardápio** | CRUD de produtos (nome, categoria, preço, foto por URL, setor de produção) e de categorias (criadas on-the-fly no formulário de produto). Marcar produto como esgotado/reativado sem precisar editar o preço. |
+| **Estoque** | Insumos com estoque atual/mínimo e custo médio; entrada/saída manual com motivo obrigatório; alerta de estoque baixo; botão **Rendimento** pra registrar o fator de perda medido de um insumo (ex: 85% depois de limpar/aparar) — hoje é só registro/consulta, não altera o cálculo de baixa automática (ver [Pendências](#pendências-conhecidas)). |
+| **Compras** | Cadastro de fornecedores e pedidos de compra (Rascunho → Pedido realizado → Recebido). Receber um pedido lança entrada de estoque automaticamente e recalcula o custo médio ponderado do insumo. |
+| **Financeiro** | Contas a pagar e a receber (as de receber de fiado/cartão/voucher são geradas automaticamente ao fechar uma conta), com status pago/pendente/vencido. |
+| **Relatórios** | Ranking de produtos e desempenho por garçom, por período (hoje / 7 dias / 30 dias / tudo). |
+| **Equipe** | Criar funcionário (nome, papel, PIN), ativar/desativar, e **trocar PIN** de um funcionário existente sem precisar recriá-lo. |
+| **Auditoria** | Trilha de ações sensíveis (desconto aprovado, item cancelado, preço alterado, caixa fechado com diferença, PIN alterado, etc.), com quem fez e quando. |
+| **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, e o **link do cardápio público** (pra gerar o QR Code em qualquer gerador gratuito e imprimir nas mesas). |
 
-Cada funcionário é uma conta real do Supabase Auth. O PIN de 4 dígitos que
-aparece na tela **é a senha** por trás de um e-mail interno gerado
-(`nome@fogo.internal`). O JWT emitido no login carrega `empresa_id` e
-`papel` via um *Custom Access Token Hook* (`public.custom_access_token_hook`,
-`SECURITY DEFINER`) — é isso que a RLS usa para isolar os dados por empresa
-e por papel em toda tabela.
+### Cardápio público (`cardapio.html`)
 
-Criar um novo funcionário (tela Equipe) chama a função
-`public.criar_funcionario` (RPC, `SECURITY DEFINER`), que valida a
-permissão do chamador, lê a chave de serviço do **Supabase Vault**
-(nunca do código do cliente) e cria a conta via Admin API do GoTrue. A
-chave secreta nunca é exposta ao navegador.
+Página HTML separada, sem login, acessível em `/cardapio/:slug` (rewrite
+configurado em `vercel.json`, servido estaticamente igual ao app
+principal). Lê só nome, preço, categoria, status de esgotado e foto dos
+produtos *ativos* — nunca estoque, custo, funcionários ou vendas. Usa seu
+próprio script (`assets/js/cardapio-publico.js`), com a mesma chave pública
+do Supabase, mas via políticas de RLS específicas para o papel `anon`
+(ver `0030_cardapio_publico_restaurante.sql`).
 
-### Sincronização multi-dispositivo
+## Papéis e permissões
 
-`supabase-js` mantém um canal Realtime (`postgres_changes`) por empresa,
-escutando `comandas`, `comanda_itens`, `caixa_sessoes`, `caixa_movimentos`,
-`produtos`, `insumos`, `contas` e `usuarios`. Qualquer mudança em um
-dispositivo dispara um recarregamento (debounced) nos demais. Se
-`WebSocket` não estiver disponível no ambiente, o app degrada com
-graça (sem Realtime, mas CRUD continua funcionando normalmente).
+Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 23
+permissões no formato `modulo.recurso.acao` (ex:
+`atendimento.comanda.item.cancelar`), cada uma concedida por papel numa
+tabela de configuração (`papeis_permissoes`, semeada nas migrations, não é
+dado de exemplo). O catálogo completo e a matriz papel × permissão estão em
+[`docs/rotas-permissoes.md`](docs/rotas-permissoes.md).
 
-### Validado com testes de integração reais
+Dois lugares guardam esse catálogo e precisam ficar em sincronia manual:
+a tabela `papeis_permissoes` no banco (quem efetivamente bloqueia) e o
+objeto `PERM`/`MATRIZ` em `assets/js/config.js` (usado só pra esconder
+botões/telas que o usuário não pode usar — nunca é a trava real).
 
-Não há mocks — os testes (`node` + `jsdom`, com polyfill de `fetch`) rodam
-o `index.html` de verdade contra o projeto Supabase de produção: login
-real, criação de comanda, lançamento de item, abertura de caixa, pagamento,
-baixa automática de estoque por ficha técnica, e leitura de
-cardápio/financeiro/relatórios/equipe/configurações. Última rodada: 10/10
-passos, 0 erros.
+**Regra de ouro do sistema**: a UI esconder um botão é conveniência, não
+segurança. Quem decide o que cada papel pode gravar é o Postgres — RLS e,
+pras operações mais sensíveis (fechar conta, mexer em estoque, trocar PIN),
+funções `SECURITY DEFINER` chamadas via RPC.
+
+## Autenticação e segurança
+
+### PIN = senha real do Supabase Auth
+
+Cada funcionário é uma conta real do Supabase Auth. O PIN de 4 dígitos
+digitado na tela de login **é a senha** de uma conta cujo e-mail é gerado
+de forma previsível a partir do nome (`nome@fogo.internal`). O JWT emitido
+no login carrega `empresa_id` e `papel` via um *Custom Access Token Hook*
+(`restaurante.custom_access_token_hook`, `SECURITY DEFINER`) — é esse claim
+que toda policy de RLS usa pra isolar dados por empresa e por papel.
+
+Criar funcionário (`restaurante.criar_funcionario`) e trocar PIN
+(`restaurante.trocar_pin_funcionario`) são RPCs `SECURITY DEFINER` que
+validam a permissão do chamador, leem a chave de serviço do **Supabase
+Vault** (nunca do código do cliente) e chamam a Admin API do GoTrue
+diretamente — a chave secreta nunca é exposta ao navegador.
+
+### RLS por linha **e** por coluna
+
+Toda tabela tem RLS habilitado, escopado por `empresa_id` + permissão do
+papel (via `restaurante.tem_permissao(text)`). Isso resolve "pode ver/gravar
+nesta tabela", mas não "pode gravar *esta coluna específica*" — por
+exemplo, GARCOM tem permissão pra abrir/fechar comanda, o que por si só
+libera `UPDATE` na linha inteira da comanda, incluindo colunas que GARCOM
+não devia poder tocar (desconto). Pra isso, `comandas` e `comanda_itens`
+têm **triggers** (`0038_protege_colunas_sensiveis_restaurante.sql`) que
+comparam o valor antigo e o novo de cada coluna sensível e exigem a
+permissão certa coluna a coluna:
+
+- Mudar `desconto_centavos` exige `atendimento.comanda.desconto.aplicar`.
+- Marcar item como `CANCELADO` exige `atendimento.comanda.item.cancelar` **e**
+  motivo preenchido.
+- Produto, nome, preço e quantidade de um item já lançado são imutáveis.
+- Mudar mesa/tipo da comanda exige `atendimento.comanda.transferir`.
+
+### Operações transacionais (RPC em vez de múltiplas escritas)
+
+Fechar conta, lançar/receber pedido de compra e movimentar estoque
+manualmente passam por funções `SECURITY DEFINER` que fazem tudo numa
+transação só — se qualquer passo falhar, nada é gravado:
+
+- `confirmar_pagamento` — fecha a comanda, grava pagamentos, movimentos de
+  caixa, contas a receber (fiado/crédito/voucher) e baixa de estoque.
+- `registrar_movimento_estoque` — entrada/saída manual, com
+  `estoque_atual = estoque_atual - qtd` atômico (evita perder baixa quando
+  dois terminais mexem no mesmo insumo ao mesmo tempo).
+- `criar_pedido_compra` / `receber_pedido_compra` — mesma lógica pra
+  compras: criar pedido sem item por falha no meio não acontece, e receber
+  lança entrada de estoque + recalcula custo médio ponderado atomicamente.
+
+### Conferência cega e trilha de auditoria
+
+Fechamento de caixa esconde o saldo esperado até o operador informar o
+valor contado (evita vício de "acertar" a contagem pelo número que o
+sistema mostra). Toda ação sensível (desconto acima do limite, cancelar
+item, criar/desativar usuário, trocar PIN, diferença de caixa justificada,
+preço alterado) grava uma linha em `auditoria`, visível na tela de mesmo
+nome pra quem tem `auditoria.ver`.
+
+### Pendências de segurança (ver também [Pendências conhecidas](#pendências-conhecidas))
+
+- PIN de 4 dígitos é curto por natureza (10 mil combinações). O app bloqueia
+  por 30s após 5 tentativas erradas na própria UI, mas isso não impede uma
+  chamada direta ao endpoint de Auth do Supabase — rate limit/CAPTCHA de
+  verdade precisam ser configurados em **Auth → Rate Limits** no painel.
+- Os PINs devem ser trocados regularmente e nunca deixados no padrão de
+  criação de conta.
 
 ## Banco de dados: schema `restaurante` num projeto compartilhado
 
@@ -89,17 +176,29 @@ Consequências práticas:
   e os filtros de Realtime em `assets/js/data.js` usam `schema:"restaurante"`
   em vez de `"public"`.
 
-Migrations `0021` a `0027` reconstroem o schema completo (núcleo, RBAC,
-cardápio/estoque, atendimento, caixa/pagamentos, financeiro, view de login,
-`criar_funcionario`, grants, Realtime, e o modelo de venda por
-balcão/ficha da Fase A do v2) nesse projeto. As migrations `0001` a `0020`
-documentam a história original (schema `public`) mas **não devem ser
-reaplicadas neste projeto** — foram substituídas pelas `0021+`.
+### Principais tabelas
 
-**Funcionários recriados em 2026-09-24** (contas antigas perdidas junto
-com o projeto morto): Ana/ADMIN, Bruno/GERENTE, Carla/CAIXA, Diego/GARCOM,
-Eva/COZINHA — todos com **PIN temporário `1234`**, a trocar pela tela
-Equipe assim que possível.
+- **Núcleo**: `empresas`, `usuarios`, `papeis_permissoes`, `auditoria`.
+- **Cardápio/estoque**: `categorias`, `produtos` (com `setor_producao`,
+  `foto_url`), `insumos`, `ficha_tecnica`, `estoque_movimentos`,
+  `insumo_rendimentos`.
+- **Atendimento**: `mesas`, `comandas` (tipo `MESA`/`BALCAO`/`FICHA`,
+  `ficha_numero`, `dia_operacional`), `comanda_itens` (com
+  `setor_producao` e `motivo_cancelamento`).
+- **Caixa/pagamentos**: `caixa_sessoes`, `caixa_movimentos`, `pagamentos`.
+- **Financeiro**: `contas`.
+- **Compras**: `fornecedores`, `pedidos_compra`, `pedidos_compra_itens`.
+- **Cardápio público**: view `cardapio_publico_empresa` + policies `*_select_publico`
+  (`to anon`) em `produtos`/`categorias`.
+
+Todas numeradas e aplicadas em ordem em
+[`supabase/migrations/`](supabase/migrations/). Migrations `0001` a `0020`
+documentam a história original (schema `public`) mas **não devem ser
+reaplicadas neste projeto** — foram substituídas pelas `0021+`. As
+migrations `0021` a `0040` (estado atual, 2026-09/10) reconstroem o schema
+completo, incluindo venda por balcão/ficha, rendimento de insumo, cardápio
+público, setor de produção, compras/fornecedores, foto de produto, e as
+correções de integridade/RLS descritas [acima](#autenticação-e-segurança).
 
 ## Variáveis de ambiente
 
@@ -110,20 +209,22 @@ hardcoded ali). Editar o `.env` sozinho não muda o comportamento do app.
 
 ## Aplicar/atualizar migrations
 
-Sem `psql` disponível, as migrations 0021+ foram aplicadas via um script
-Node (`pg`) direto contra a connection string do pooler. Pra rodar uma
-migration nova:
+Conexão direta (`db.<ref>.supabase.co`) costuma falhar por DNS nesta rede
+(provavelmente só IPv6, sem o add-on de IPv4). O pooler
+(`aws-1-us-west-2.pooler.supabase.com`) resolve, mas uma tentativa de
+conexão via script (`pg`/Node) teve o certificado TLS rejeitado tanto pelo
+runtime quanto pela validação nativa do Windows — não investigado a fundo,
+e **nunca contorne isso desabilitando a verificação de certificado** (a
+connection string carrega a senha do banco em texto puro).
 
-```powershell
-psql "postgresql://postgres.<ref>:<senha>@aws-1-us-west-2.pooler.supabase.com:5432/postgres" -f supabase/migrations/00XX_arquivo.sql
-```
-
-Senha do banco em **Project Settings → Database** no painel do Supabase
-(reset se necessário — não fica salva em lugar nenhum do repositório).
+Caminho que funcionou e é o recomendado: **SQL Editor do Supabase** (painel
+→ SQL Editor), colando o conteúdo de cada arquivo de `supabase/migrations/`
+em ordem e rodando. Sem risco de rede/TLS.
 
 Existe uma integração GitHub↔Supabase configurada no painel (deploy
 automático de `supabase/migrations/` ao dar merge em `main`), mas nunca foi
-testada de fato — as migrations atuais foram aplicadas manualmente.
+confirmada de fato — as migrations atuais foram todas aplicadas manualmente
+pelo SQL Editor.
 
 ## Deploy (Vercel)
 
@@ -138,12 +239,35 @@ painel):
 - **Deployment Protection** estava exigindo login na Vercel até pra
   Production, bloqueando qualquer usuário real — desligado.
 
+`vercel.json` também define o rewrite de `/cardapio/:slug` para
+`/cardapio.html?slug=:slug`, usado pelo cardápio público.
+
 ## Pendências conhecidas
 
 - **Notas fiscais reais (NFC-e)**: o app emite um *comprovante não fiscal*
   (recibo de pagamento) e relatório de fechamento de caixa, ambos
   imprimíveis via `window.print()`. Nota fiscal eletrônica de verdade exige
   integração com um provedor credenciado (Focus NFe, Tecnospeed etc.) via
-  certificado A1 — fora do escopo atual, é a Fase 7 do projeto original.
+  certificado A1 — fora do escopo atual.
 - **PIX**: simulado (QR ilustrativo + código "copia e cola" fake,
   claramente rotulado como simulação) — não processa pagamento real.
+- **Rendimento de insumo não afeta a baixa de estoque**: o fator medido na
+  tela Estoque é só registro/consulta hoje. Aplicá-lo na fórmula de baixa
+  automática (ficha técnica × venda) é decisão de negócio — multiplicar ou
+  dividir a quantidade pelo fator muda o resultado pra lados opostos, e
+  errar isso bagunça o estoque de verdade. Não implementado até alguém com
+  esse contexto decidir a direção certa.
+- **Transferir/juntar comandas**: a permissão `atendimento.comanda.transferir`
+  existe no catálogo e a tabela `venda_movimentacoes` existe no banco
+  (`0027`), mas não há tela pra isso ainda — hoje não dá pra mover item ou
+  juntar duas mesas pela interface.
+- **Força-bruta de PIN via API do Supabase**: ver
+  [Pendências de segurança](#pendências-de-segurança-ver-também-pendências-conhecidas) acima.
+- **`docs/ER.md` está desatualizado**: descreve o desenho original
+  (schema `public`, tabelas que não existem no `restaurante` atual, como
+  `produto_variacoes`/`notas_fiscais`/`formas_pagamento`). Não reflete o
+  schema real — use as migrations como fonte de verdade.
+- **Sem testes automatizados no repositório**: não há arquivo de teste
+  versionado, apesar de versões anteriores deste documento mencionarem
+  testes de integração reais contra o Supabase de produção. Se existiram,
+  nunca foram commitados.

@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/cardapio/:slug", "destination": "/cardapio.html?slug=:slug" }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",

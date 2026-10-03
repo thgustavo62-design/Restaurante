@@ -5,6 +5,11 @@
 async function login(userId, pin){
   var candidato = state.usuariosLogin.find(function(x){ return x.id===userId; });
   if(!candidato) return;
+  if(pinLockoutAtivo()){
+    state.pinBuffer = "";
+    state.pinError = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s.";
+    render(); return;
+  }
   state.carregando = true;
   render();
   try{
@@ -12,6 +17,7 @@ async function login(userId, pin){
     if(res.error) throw res.error;
     var claims = decodeJwt(res.data.session.access_token);
     if(!claims.empresa_id){ throw new Error("Usuário sem empresa vinculada."); }
+    limparFalhasPin();
     state.usuarioAtualId = res.data.user.id;
     state.empresaId = claims.empresa_id;
     state.loginSelectedUserId = null;
@@ -21,7 +27,8 @@ async function login(userId, pin){
     configurarRealtime();
   } catch(e){
     state.pinBuffer = "";
-    state.pinError = "PIN incorreto.";
+    var bloqueado = registrarFalhaPin();
+    state.pinError = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN incorreto.";
   }
   state.carregando = false;
   render();
@@ -42,6 +49,42 @@ async function abrirComanda(mesaId){
   };
   var res = await sb.from("comandas").insert(payload).select().single();
   if(res.error){ toast("err","ERRO AO ABRIR COMANDA", res.error.message); return; }
+  var comanda = mapComanda(res.data);
+  state.comandas.push(comanda);
+  irParaComanda(comanda.id);
+  render();
+}
+async function abrirComandaBalcao(){
+  var payload = {
+    empresa_id: state.empresaId, codigo: "C"+Date.now().toString(36).toUpperCase(),
+    mesa_id: null, tipo: "BALCAO", status: "ABERTA",
+    usuario_abertura: state.usuarioAtualId, taxa_servico_ativa: true, desconto_centavos: 0,
+    dia_operacional: hojeOperacionalStr()
+  };
+  var res = await sb.from("comandas").insert(payload).select().single();
+  if(res.error){ toast("err","ERRO AO ABRIR BALCÃO", res.error.message); return; }
+  var comanda = mapComanda(res.data);
+  state.comandas.push(comanda);
+  irParaComanda(comanda.id);
+  render();
+}
+async function abrirComandaFicha(){
+  var totalFichas = state.config.totalFichas || 50;
+  var emUso = {};
+  state.comandas.forEach(function(c){
+    if(c.tipo==="FICHA" && (c.status==="ABERTA"||c.status==="FECHANDO") && c.fichaNumero) emUso[c.fichaNumero] = true;
+  });
+  var numero = null;
+  for(var n=1; n<=totalFichas; n++){ if(!emUso[n]){ numero = n; break; } }
+  if(!numero){ toast("err","SEM FICHAS LIVRES", "Todas as "+totalFichas+" fichas estão em uso."); return; }
+  var payload = {
+    empresa_id: state.empresaId, codigo: "C"+Date.now().toString(36).toUpperCase(),
+    mesa_id: null, tipo: "FICHA", ficha_numero: numero, status: "ABERTA",
+    usuario_abertura: state.usuarioAtualId, taxa_servico_ativa: true, desconto_centavos: 0,
+    dia_operacional: hojeOperacionalStr()
+  };
+  var res = await sb.from("comandas").insert(payload).select().single();
+  if(res.error){ toast("err","ERRO AO ABRIR FICHA", res.error.message); return; }
   var comanda = mapComanda(res.data);
   state.comandas.push(comanda);
   irParaComanda(comanda.id);
@@ -97,7 +140,8 @@ async function enviarPedido(){
     return {
       comanda_id: comanda.id, produto_id: produtoId, nome: produto.nome,
       observacao: draftObsFinal(produtoId, itens[produtoId]), quantidade: itens[produtoId].qtd,
-      preco_unit_centavos: produto.precoCentavos, status:"PENDENTE", usuario_id: state.usuarioAtualId
+      preco_unit_centavos: produto.precoCentavos, status:"PENDENTE", usuario_id: state.usuarioAtualId,
+      setor_producao: produto.setorProducao||"COZINHA"
     };
   });
   if(!payload.length) return;
@@ -121,6 +165,7 @@ function pedirSupervisor(permissaoNecessaria, motivo, onConfirm){
 }
 async function supervisorDigit(d){
   var m = state.modal;
+  if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
   if(m.buffer.length>=PIN_LEN) return;
   m.buffer += d;
   if(m.buffer.length===PIN_LEN){
@@ -128,11 +173,15 @@ async function supervisorDigit(d){
     var sup = await verificarSupervisor(m.buffer, m.permissao);
     if(state.modal!==m) return;
     if(sup){
+      limparFalhasPin();
       var cb = m.onConfirm;
       state.modal = null;
       cb(sup);
     } else {
-      m.buffer = ""; m.error = "PIN inválido ou sem permissão."; m.verificando = false;
+      m.buffer = "";
+      var bloqueado = registrarFalhaPin();
+      m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
+      m.verificando = false;
     }
   }
   render();
@@ -148,6 +197,7 @@ function abrirCancelarItem(comandaId, itemId){
 async function cancelarItemDigit(d){
   var m = state.modal;
   if(!m.motivo.trim()){ m.error = "Informe o motivo antes do PIN."; render(); return; }
+  if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
   if(m.buffer.length>=PIN_LEN) return;
   m.error = "";
   m.buffer += d;
@@ -156,19 +206,25 @@ async function cancelarItemDigit(d){
     var sup = await verificarSupervisor(m.buffer, PERM.ITEM_CANCELAR);
     if(state.modal!==m) return;
     if(sup){
+      limparFalhasPin();
       var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
       var item = comanda.itens.find(function(i){ return i.id===m.itemId; });
       var jaPreparado = item.status==="PREPARANDO" || item.status==="PRONTO";
-      var res = await sb.from("comanda_itens").update({status:"CANCELADO", cancelado_apos_preparo:jaPreparado}).eq("id", m.itemId);
+      var motivo = m.motivo.trim();
+      var res = await sb.from("comanda_itens").update({status:"CANCELADO", cancelado_apos_preparo:jaPreparado, motivo_cancelamento:motivo}).eq("id", m.itemId);
       if(res.error){ toast("err","ERRO AO CANCELAR", res.error.message); render(); return; }
       item.status = "CANCELADO";
       item.canceladoAposPreparo = jaPreparado;
-      registrarAuditoria("comanda_itens", m.itemId, "CANCELAR_ITEM", sup.id, m.motivo.trim()+" (aprovado por "+sup.nome+")"+(jaPreparado?" [já em preparo]":""));
+      item.motivoCancelamento = motivo;
+      registrarAuditoria("comanda_itens", m.itemId, "CANCELAR_ITEM", sup.id, motivo+" (aprovado por "+sup.nome+")"+(jaPreparado?" [já em preparo]":""));
       state.modal = null;
       render();
       toast("err","ITEM CANCELADO", item.nome);
     } else {
-      m.buffer=""; m.error = "PIN inválido ou sem permissão."; m.verificando = false;
+      m.buffer="";
+      var bloqueado = registrarFalhaPin();
+      m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
+      m.verificando = false;
       render();
     }
   } else render();

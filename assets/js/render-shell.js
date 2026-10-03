@@ -10,6 +10,7 @@ var NAV_ITEMS = [
   {view:"kds", label:"Cozinha", icon:"chef", perm:PERM.KDS_VER, built:true},
   {view:"cardapio", label:"Cardápio", icon:"book", perm:PERM.CARDAPIO, built:true},
   {view:"estoque", label:"Estoque", icon:"package", perm:PERM.ESTOQUE, built:true},
+  {view:"compras", label:"Compras", icon:"package", perm:PERM.ESTOQUE, built:true},
   {view:"financeiro", label:"Financeiro", icon:"landmark", perm:PERM.FINANCEIRO, built:true},
   {view:"relatorios", label:"Relatórios", icon:"chart", perm:PERM.RELATORIOS, built:true},
   {view:"equipe", label:"Equipe", icon:"users", perm:PERM.EQUIPE, built:true},
@@ -17,7 +18,7 @@ var NAV_ITEMS = [
   {view:"configuracoes", label:"Configurações", icon:"settings", perm:PERM.CONFIGURACOES, built:true}
 ];
 var PAGE_TITLES = {dashboard:"Dashboard", salao:"Atendimento", comanda:"Atendimento", kds:"Cozinha (KDS)", caixa:"Caixa", auditoria:"Auditoria",
-  cardapio:"Cardápio", estoque:"Estoque", financeiro:"Financeiro", relatorios:"Relatórios", equipe:"Equipe", configuracoes:"Configurações"};
+  cardapio:"Cardápio", estoque:"Estoque", compras:"Compras", financeiro:"Financeiro", relatorios:"Relatórios", equipe:"Equipe", configuracoes:"Configurações"};
 
 function render(){
   var active = document.activeElement;
@@ -135,6 +136,7 @@ function renderView(){
   if(state.view==="auditoria") return renderAuditoria();
   if(state.view==="cardapio") return renderCardapio();
   if(state.view==="estoque") return renderEstoque();
+  if(state.view==="compras") return renderCompras();
   if(state.view==="financeiro") return renderFinanceiro();
   if(state.view==="relatorios") return renderRelatorios();
   if(state.view==="equipe") return renderEquipe();

@@ -72,8 +72,13 @@ guard de rota no front-end (`core/auth`).
 - Operações marcadas como "sensíveis" no prompt mestre (cancelar item
   enviado, desconto acima do limite, transferir, reabrir) exigem PIN de
   `ADMIN`/`GERENTE` mesmo quando disparadas a partir da tela de um
-  `GARCOM`/`CAIXA` — a UI pede o PIN, mas a policy de RLS é quem
-  efetivamente bloqueia a escrita sem a permissão.
+  `GARCOM`/`CAIXA` — a UI pede o PIN, e desde `0038_protege_colunas_sensiveis_restaurante.sql`
+  um trigger em `comandas`/`comanda_itens` é quem efetivamente bloqueia a
+  escrita coluna a coluna (`desconto_centavos` exige `desconto.aplicar`,
+  `status=CANCELADO` exige `item.cancelar` + motivo). Antes desse trigger,
+  a policy de RLS só checava se o papel tinha *alguma* permissão sobre a
+  linha (ex.: `abrir` ou `fechar`), não qual coluna estava mudando — um
+  `GARCOM` conseguia gravar desconto direto via API, ignorando o PIN.
 - `CAIXA` fecha comanda e registra pagamento, mas não cancela item nem
   aplica desconto — essas ações passam pela mesma trava de supervisor.
 - `COZINHA` só enxerga o próprio módulo (KDS); não vê salão, caixa ou admin.

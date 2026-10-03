@@ -30,7 +30,7 @@ function buildReciboHtml(comanda){
     '<div class="center">NÃO É DOCUMENTO FISCAL</div>'+
     '<hr>'+
     '<div class="line"><span>Comanda</span><span>'+comanda.codigo+'</span></div>'+
-    '<div class="line"><span>Mesa</span><span>'+(mesa?mesa.numero:"-")+'</span></div>'+
+    '<div class="line"><span>'+(comanda.tipo==="MESA"?"Mesa":"Tipo")+'</span><span>'+rotuloComanda(comanda, mesa)+'</span></div>'+
     '<div class="line"><span>Data</span><span>'+new Date(comanda.fechamento).toLocaleString("pt-BR")+'</span></div>'+
     '<div class="line"><span>Atendente</span><span>'+(atendente?escapeHtml(atendente.nome):"-")+'</span></div>'+
     '<hr>'+

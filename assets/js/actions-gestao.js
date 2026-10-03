@@ -2,14 +2,19 @@
 
 // ---------- gestão: cardápio, estoque, financeiro, equipe, configurações ----------
 
+var SETORES_PRODUCAO = ["BAR","COZINHA","BRASA","SOBREMESA"];
+
 function abrirProdutoForm(produtoId){
   var p = produtoId ? state.produtos.find(function(x){ return x.id===produtoId; }) : null;
   state.modal = {type:"produtoForm", produtoId:produtoId||null,
-    nome: p?p.nome:"", categoria: p?p.categoria:state.categorias[0], precoCentavos: p?p.precoCentavos:0};
+    nome: p?p.nome:"", categoria: p?p.categoria:state.categorias[0], precoCentavos: p?p.precoCentavos:0,
+    setorProducao: p?p.setorProducao:"COZINHA", fotoUrl: p?p.fotoUrl:""};
   render();
 }
-async function salvarProduto(produtoId, nome, categoria, precoCentavos){
+async function salvarProduto(produtoId, nome, categoria, precoCentavos, setorProducao, fotoUrl){
   if(!nome.trim() || !categoria.trim() || !(precoCentavos>0)) return;
+  setorProducao = SETORES_PRODUCAO.indexOf(setorProducao)!==-1 ? setorProducao : "COZINHA";
+  fotoUrl = (fotoUrl||"").trim();
   var categoriaId = state.categoriaIdPorNome[categoria];
   if(!categoriaId){
     var catRes = await sb.from("categorias").insert({empresa_id:state.empresaId, nome:categoria.trim(), ordem:state.categorias.length}).select().single();
@@ -19,16 +24,17 @@ async function salvarProduto(produtoId, nome, categoria, precoCentavos){
     state.categoriaIdPorNome[catRes.data.nome] = categoriaId;
   }
   if(produtoId){
-    var upd = await sb.from("produtos").update({nome:nome.trim(), categoria_id:categoriaId, preco_centavos:precoCentavos}).eq("id", produtoId);
+    var upd = await sb.from("produtos").update({nome:nome.trim(), categoria_id:categoriaId, preco_centavos:precoCentavos, setor_producao:setorProducao, foto_url:fotoUrl||null}).eq("id", produtoId);
     if(upd.error){ toast("err","ERRO", upd.error.message); return; }
     var p = state.produtos.find(function(x){ return x.id===produtoId; });
     var precoAntes = p.precoCentavos;
     p.nome = nome.trim(); p.categoria = categoria.trim(); p.categoriaId = categoriaId; p.precoCentavos = precoCentavos;
+    p.setorProducao = setorProducao; p.fotoUrl = fotoUrl;
     if(precoAntes!==precoCentavos){
       registrarAuditoria("produtos", produtoId, "PRECO_ALTERADO", state.usuarioAtualId, nome.trim()+": "+brl(precoAntes)+" -> "+brl(precoCentavos));
     }
   } else {
-    var insRes = await sb.from("produtos").insert({empresa_id:state.empresaId, categoria_id:categoriaId, nome:nome.trim(), preco_centavos:precoCentavos}).select().single();
+    var insRes = await sb.from("produtos").insert({empresa_id:state.empresaId, categoria_id:categoriaId, nome:nome.trim(), preco_centavos:precoCentavos, setor_producao:setorProducao, foto_url:fotoUrl||null}).select().single();
     if(insRes.error){ toast("err","ERRO", insRes.error.message); return; }
     var catPorId = {}; catPorId[categoriaId] = categoria.trim();
     state.produtos.push(mapProduto(insRes.data, catPorId));
@@ -51,41 +57,42 @@ function abrirInsumoMov(tipo, insumoId){
   state.modal = {type:"insumoMov", tipo:tipo, insumoId:insumoId||state.insumos[0].id};
   render();
 }
+function abrirRendimento(insumoId){
+  var atual = state.insumoRendimentos.find(function(r){ return r.insumoId===insumoId; });
+  state.modal = {type:"rendimento", insumoId:insumoId, fatorAtual: atual?atual.fator:null, observacaoAtual: atual?atual.observacao:"", erro:""};
+  render();
+}
+async function salvarRendimento(insumoId, fatorPct, observacao){
+  var m = state.modal;
+  if(!(fatorPct>0) || fatorPct>100){ m.erro = "Informe um rendimento entre 1% e 100%."; render(); return; }
+  var fator = Math.round(fatorPct)/100;
+  var res = await sb.from("insumo_rendimentos").upsert({
+    empresa_id: state.empresaId, insumo_id: insumoId, fator: fator,
+    observacao: (observacao||"").trim() || null, medido_em: diasA(0), usuario_id: state.usuarioAtualId
+  }, {onConflict:"empresa_id,insumo_id"}).select().single();
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  var idx = state.insumoRendimentos.findIndex(function(r){ return r.insumoId===insumoId; });
+  var mapeado = mapRendimento(res.data);
+  if(idx===-1) state.insumoRendimentos.push(mapeado); else state.insumoRendimentos[idx] = mapeado;
+  state.modal = null;
+  render();
+  var insumo = state.insumos.find(function(i){ return i.id===insumoId; });
+  toast("ok","RENDIMENTO REGISTRADO", (insumo?insumo.nome+" — ":"")+Math.round(fator*100)+"%");
+}
 async function confirmarInsumoMov(tipo, insumoId, quantidade, motivo){
   if(!(quantidade>0) || !motivo.trim()) return;
   var insumo = state.insumos.find(function(i){ return i.id===insumoId; });
-  var novoEstoque = tipo==="ENTRADA" ? insumo.estoqueAtual+quantidade : Math.max(0, insumo.estoqueAtual-quantidade);
-  var upd = await sb.from("insumos").update({estoque_atual:novoEstoque}).eq("id", insumoId);
-  if(upd.error){ toast("err","ERRO", upd.error.message); return; }
-  insumo.estoqueAtual = novoEstoque;
-  var movRes = await sb.from("estoque_movimentos").insert({
-    empresa_id: state.empresaId, insumo_id:insumoId, tipo:tipo, quantidade:quantidade,
-    motivo:motivo.trim(), origem:"MANUAL", usuario_id: state.usuarioAtualId
-  }).select().single();
-  if(!movRes.error) state.estoqueMovimentos.unshift(mapEstoqueMov(movRes.data));
+  // decremento/incremento atômico no servidor (evita corrida entre dois
+  // terminais mexendo no mesmo insumo ao mesmo tempo)
+  var res = await sb.rpc("registrar_movimento_estoque", {
+    p_insumo_id: insumoId, p_tipo: tipo, p_quantidade: quantidade, p_motivo: motivo.trim()
+  });
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  var out = res.data;
+  insumo.estoqueAtual = Number(out.insumo.estoque_atual);
+  state.estoqueMovimentos.unshift(mapEstoqueMov(out.movimento));
   state.modal = null;
   render();
   toast("ok", tipo==="ENTRADA"?"ENTRADA REGISTRADA":"SAÍDA REGISTRADA", insumo.nome+" — "+quantidade+" "+insumo.unidade);
-}
-async function baixarEstoqueDaVenda(comanda){
-  for(var i=0;i<comanda.itens.length;i++){
-    var it = comanda.itens[i];
-    if(it.status==="CANCELADO" && !it.canceladoAposPreparo) continue;
-    var fichas = state.fichaTecnica.filter(function(f){ return f.produtoId===it.produtoId; });
-    for(var j=0;j<fichas.length;j++){
-      var f = fichas[j];
-      var insumo = state.insumos.find(function(i2){ return i2.id===f.insumoId; });
-      if(!insumo) continue;
-      var qtd = f.quantidade * it.quantidade;
-      var novoEstoque = Math.max(0, insumo.estoqueAtual - qtd);
-      await sb.from("insumos").update({estoque_atual:novoEstoque}).eq("id", insumo.id);
-      insumo.estoqueAtual = novoEstoque;
-      var movRes = await sb.from("estoque_movimentos").insert({
-        empresa_id: state.empresaId, insumo_id: insumo.id, tipo:"VENDA", quantidade: qtd,
-        motivo:null, origem:"comanda", origem_id: comanda.id, usuario_id: state.usuarioAtualId
-      }).select().single();
-      if(!movRes.error) state.estoqueMovimentos.unshift(mapEstoqueMov(movRes.data));
-    }
-  }
 }
 

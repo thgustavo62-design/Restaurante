@@ -56,8 +56,21 @@ async function carregarTudo(){
   state.usuarios = (checar(usrRes,"usuarios")||[]).map(mapUsuario);
   var emp = checar(empRes,"empresas");
   if(emp){
-    state.config = Object.assign({}, state.config, emp.config||{}, {empresaNome:emp.nome, empresaCnpj:emp.cnpj||""});
+    state.config = Object.assign({}, state.config, emp.config||{}, {empresaNome:emp.nome, empresaCnpj:emp.cnpj||"", totalFichas:emp.total_fichas||50, slug:emp.slug||""});
   }
+
+  var rendRes = await sb.from("insumo_rendimentos").select("*");
+  state.insumoRendimentos = (checar(rendRes,"insumo_rendimentos")||[]).map(mapRendimento);
+
+  var fornRes = await sb.from("fornecedores").select("*").order("nome");
+  state.fornecedores = (checar(fornRes,"fornecedores")||[]).map(mapFornecedor);
+
+  var pedRes = await sb.from("pedidos_compra").select("*, pedidos_compra_itens(*)").order("created_at",{ascending:false}).limit(50);
+  state.pedidosCompra = (checar(pedRes,"pedidos_compra")||[]).map(function(p){
+    var m = mapPedidoCompra(p);
+    m.itens = (p.pedidos_compra_itens||[]).map(mapPedidoCompraItem);
+    return m;
+  });
 
   var comRes = await sb.from("comandas").select("*, comanda_itens(*)").in("status",["ABERTA","FECHANDO"]);
   state.comandas = (checar(comRes,"comandas")||[]).map(function(c){
@@ -97,10 +110,23 @@ async function carregarTudo(){
 
 var realtimeChannel = null;
 var refreshTimer = null;
+var refreshPendenteOculto = false;
 function agendarRefresh(){
   if(refreshTimer) clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(function(){ carregarTudo(); }, 400);
+  refreshTimer = setTimeout(function(){
+    // aba em segundo plano: adia o reload completo em vez de gastar
+    // banda/CPU num terminal que ninguém está olhando; recupera quando
+    // a aba volta a ficar visível.
+    if(document.visibilityState === "hidden"){ refreshPendenteOculto = true; return; }
+    carregarTudo();
+  }, 600);
 }
+document.addEventListener("visibilitychange", function(){
+  if(document.visibilityState === "visible" && refreshPendenteOculto && state && state.usuarioAtualId){
+    refreshPendenteOculto = false;
+    carregarTudo();
+  }
+});
 function configurarRealtime(){
   try{
     desligarRealtime();
@@ -116,6 +142,9 @@ function configurarRealtime(){
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"insumos", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"contas", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"usuarios", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"insumo_rendimentos", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"fornecedores", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"pedidos_compra", filter:eq}, agendarRefresh)
       .subscribe();
   }catch(e){ console.error("realtime indisponível:", e.message); }
 }
