@@ -3,7 +3,7 @@
 function renderLogin(){
   if(!state.loginSelectedUserId){
     return '<div class="login-wrap"><div class="login-card">'+
-      '<img class="login-logo" src="assets/logo/vision-food.svg" alt="Vision Food">'+
+      '<img class="login-logo" src="assets/logo/vision-food.png" alt="Vision Food">'+
       '<p>Selecione seu usuário para entrar</p>'+
       '<div class="user-grid">'+
         (state.usuariosLogin.length ? state.usuariosLogin.map(function(u){

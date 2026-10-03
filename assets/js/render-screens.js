@@ -1,5 +1,7 @@
 "use strict";
 
+var SETOR_COR = {BAR:"var(--info)", COZINHA:"var(--primary)", BRASA:"var(--danger)", SOBREMESA:"var(--purple)"};
+
 function renderDashboard(){
   var u = usuarioAtual();
   var pagas = comandasPagasHoje();
@@ -24,30 +26,15 @@ function renderDashboard(){
 
   var kds = itensKdsAtivos();
 
-  var alerts = [];
-  state.mesas.forEach(function(m){
-    var min = mesaMinutos(m.id);
-    if(mesaStatus(m.id)!=="livre" && min>=60) alerts.push({t:"MESA ATRASADA", d:"Mesa "+m.numero+" · "+fmtMin(min), danger:true});
-  });
-  if(!state.caixaSessao || state.caixaSessao.status!=="ABERTA"){
-    alerts.push({t:"CAIXA FECHADO", d:"Abra o caixa para registrar pagamentos"});
-  }
-  var ultimaFechada = state.caixaSessao && state.caixaSessao.status==="FECHADA" ? state.caixaSessao : null;
-  if(ultimaFechada && ultimaFechada.diferencaCentavos){
-    alerts.push({t:"DIFERENÇA NO ÚLTIMO CAIXA", d:brl(ultimaFechada.diferencaCentavos), danger:Math.abs(ultimaFechada.diferencaCentavos)>limiteDiferencaCentavos()});
-  }
-  if(["ADMIN","GERENTE"].indexOf(u.papel)!==-1 && state.caixaSessao && state.caixaSessao.status==="ABERTA" && saldoDinheiroEsperado()>state.config.limiteAlertaSangriaCentavos){
-    alerts.push({t:"FAÇA UMA SANGRIA", d:"Dinheiro em gaveta acima do limite configurado", danger:true});
-  }
+  var alerts = alertasOperacionais();
 
-  return '<div class="page-header"><div><div class="page-title">Bom dia, '+escapeHtml(u.nome).toUpperCase()+'</div>'+
-      '<div class="page-sub">Operação de hoje · '+new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"}).toUpperCase()+'</div></div>'+
-    '</div>'+
+  return renderPageHeader("grid", "Bom dia, "+escapeHtml(u.nome).toUpperCase(),
+      "Operação de hoje · "+new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"short",year:"numeric"}).toUpperCase())+
     '<div class="metric-grid">'+
-      '<div class="metric-card"><div class="metric-label">Vendas hoje</div><div class="metric-value">'+brl(vendasHoje)+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">Pedidos</div><div class="metric-value">'+nPedidos+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">Ticket médio</div><div class="metric-value">'+brl(ticketMedio)+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">Mesas ocupadas</div><div class="metric-value">'+ocupadas+' / '+state.mesas.length+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("trendingUp",20)+'</div><div class="kpi-body"><div class="kpi-label">Vendas hoje</div><div class="kpi-value">'+brl(vendasHoje)+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("utensils",20)+'</div><div class="kpi-body"><div class="kpi-label">Pedidos</div><div class="kpi-value">'+nPedidos+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("target",20)+'</div><div class="kpi-body"><div class="kpi-label">Ticket médio</div><div class="kpi-value">'+brl(ticketMedio)+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("grid",20)+'</div><div class="kpi-body"><div class="kpi-label">Mesas ocupadas</div><div class="kpi-value">'+ocupadas+' / '+state.mesas.length+'</div></div></div>'+
     '</div>'+
     '<div class="section-label">Vendas do dia</div>'+
     '<div class="card">'+
@@ -78,7 +65,10 @@ function renderDashboard(){
     '</div>'+
     '<div class="section-label">Alertas</div>'+
     (alerts.length ? alerts.map(function(a){
-      return '<div class="alert-row '+(a.danger?"danger":"")+'">'+icon("alert",16)+'<div><span class="t">'+a.t+'</span><span class="d">'+a.d+'</span></div></div>';
+      return '<div class="alert-row '+(a.danger?"danger":"")+'"'+(a.view?' data-action="nav-goto" data-view="'+a.view+'" style="cursor:pointer;"':'')+'>'+icon("alert",16)+
+        '<div style="flex:1;"><span class="t">'+a.t+'</span><span class="d">'+a.d+'</span></div>'+
+        (a.view?icon("chevronRight",16):'')+
+      '</div>';
     }).join("") : '<div class="empty-hint">Nenhum alerta no momento.</div>');
 }
 
@@ -111,12 +101,11 @@ function renderSalao(){
   }).join("");
   var comandasAbertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
 
-  return '<div class="page-header"><div><div class="page-title">Atendimento</div><div class="page-sub">Mapa de salão em tempo real</div></div>'+
+  return renderPageHeader("utensils", "Atendimento", "Mapa de salão em tempo real",
       (can(PERM.COMANDA_ABRIR) ? '<div class="action-row" style="flex:0 0 auto;">'+
-        '<button class="btn" data-action="balcao-abrir">'+icon("plus",15)+' Balcão</button>'+
-        '<button class="btn" data-action="ficha-abrir">'+icon("plus",15)+' Ficha</button>'+
-      '</div>' : '')+
-    '</div>'+
+        '<button class="btn btn-primary" data-action="balcao-abrir">'+icon("plus",15)+' Balcão</button>'+
+        '<button class="btn btn-primary" data-action="ficha-abrir">'+icon("plus",15)+' Ficha</button>'+
+      '</div>' : ''))+
     '<div class="tabs">'+tabs.map(function(t){ return '<div class="tab '+(filtro===t[0]?"active":"")+'" data-action="salao-filtro" data-f="'+t[0]+'">'+t[1]+'</div>'; }).join("")+'</div>'+
     '<div class="grid-2">'+
       '<div class="mesas-grid">'+(cards||'<div class="empty-hint">Nenhuma mesa neste filtro.</div>')+'</div>'+
@@ -240,23 +229,44 @@ function renderKds(){
   var abertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
   var cards = {PENDENTE:[], PREPARANDO:[], PRONTO:[]};
   var cancelados = [];
+  var cargaPorSetor = {};
+  SETORES_PRODUCAO.forEach(function(s){ cargaPorSetor[s] = 0; });
   abertas.forEach(function(c){
     var mesa = state.mesas.find(function(m){ return m.id===c.mesaId; });
     var rotulo = rotuloComanda(c, mesa);
     c.itens.forEach(function(it){
-      if(setorFiltro!=="TODOS" && (it.setorProducao||"COZINHA")!==setorFiltro) return;
+      var setorItem = it.setorProducao||"COZINHA";
+      if(cards[it.status] && cargaPorSetor[setorItem]!==undefined) cargaPorSetor[setorItem]++;
+      if(setorFiltro!=="TODOS" && setorItem!==setorFiltro) return;
       if(cards[it.status]) cards[it.status].push({comandaId:c.id, codigo:c.codigo, item:it, rotulo:rotulo});
       if(it.status==="CANCELADO" && it.canceladoAposPreparo) cancelados.push({comandaId:c.id, codigo:c.codigo, item:it, rotulo:rotulo});
     });
   });
   var total = cards.PENDENTE.length+cards.PREPARANDO.length+cards.PRONTO.length;
+  var todosAtivos = cards.PENDENTE.concat(cards.PREPARANDO).concat(cards.PRONTO);
+  var maisAntigoMin = todosAtivos.length ? Math.max.apply(null, todosAtivos.map(function(c){ return minutosDesde(c.item.enviadoEm); })) : 0;
+  var maxCarga = Math.max(1, Math.max.apply(null, SETORES_PRODUCAO.map(function(s){ return cargaPorSetor[s]; })));
 
-  return '<div class="page-header"><div><div class="page-title">Cozinha</div><div class="page-sub">'+total+' pedidos ativos</div></div></div>'+
-    '<div class="tabs">'+setorTabs.map(function(s){ return '<div class="tab '+(setorFiltro===s?"active":"")+'" data-action="kds-filtro" data-f="'+s+'">'+(s==="TODOS"?"Todos":s)+'</div>'; }).join("")+'</div>'+
-    (cancelados.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">CANCELADO DEPOIS DE PRONTO/EM PREPARO — PARE</span><span class="d">'+
-      cancelados.map(function(c){ return c.rotulo+' · '+c.item.quantidade+'x '+escapeHtml(c.item.nome); }).join(" · ")+
-      '</span></div></div>' : '')+
-    '<div class="kanban">'+
+  var kpisHtml = '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("alert",20)+'</div><div class="kpi-body"><div class="kpi-label">Pendentes</div><div class="kpi-value">'+cards.PENDENTE.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(245,176,20,.14); color:var(--warning);">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Preparando</div><div class="kpi-value">'+cards.PREPARANDO.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(34,197,94,.14); color:var(--success);">'+icon("check",20)+'</div><div class="kpi-body"><div class="kpi-label">Prontos</div><div class="kpi-value">'+cards.PRONTO.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Pedido mais antigo</div><div class="kpi-value">'+(todosAtivos.length?fmtMin(maisAntigoMin):"—")+'</div></div></div>'+
+    '</div>';
+
+  var cargaHtml = '<div class="card">'+
+    '<div class="card-title">Carga por setor</div>'+
+    SETORES_PRODUCAO.map(function(s){
+      var n = cargaPorSetor[s]||0;
+      var pct = Math.max(4, Math.round(n/maxCarga*100));
+      return '<div style="margin-bottom:10px;">'+
+        '<div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px;"><span style="color:'+SETOR_COR[s]+'; font-weight:700;">'+s+'</span><span style="color:var(--text-muted);">'+n+' item(ns)</span></div>'+
+        '<div class="stock-bar"><div class="stock-bar-fill" style="width:'+pct+'%; background:'+SETOR_COR[s]+';"></div></div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+
+  var kanbanHtml = '<div class="kanban">'+
     cols.map(function(col){
       var status = col[0], lista = cards[status];
       var porComanda = {};
@@ -278,8 +288,10 @@ function renderKds(){
               var min = minutosDesde(item.enviadoEm);
               var atraso = min>10;
               var user = state.usuarios.find(function(u){ return u.id===item.usuarioId; });
+              var setorItem = item.setorProducao||"COZINHA";
               return '<div class="kanban-item" draggable="true" data-comanda="'+comandaId+'" data-item="'+item.id+'">'+
                 '<div class="produto">'+item.quantidade+'x '+escapeHtml(item.nome).toUpperCase()+' <span class="tempo '+(atraso?"atraso":"")+'" style="float:right;">'+fmtMin(min)+'</span></div>'+
+                '<span class="badge" style="background:rgba(255,255,255,.08); color:'+SETOR_COR[setorItem]+'; margin-top:4px;">'+setorItem+'</span>'+
                 (item.observacao?'<div class="obs">'+escapeHtml(item.observacao)+'</div>':'')+
                 (user?'<div class="garcom">Garçom: '+escapeHtml(user.nome)+'</div>':'')+
                 (can(PERM.ITEM_STATUS) ? '<button class="btn '+(status==="PRONTO"?"btn-success":"btn-primary")+' btn-block btn-sm" style="margin-top:8px;" data-action="kds-set" data-comanda="'+comandaId+'" data-item="'+item.id+'" data-status="'+nextStatus[status]+'">'+col[2]+'</button>' : '')+
@@ -289,6 +301,17 @@ function renderKds(){
         }).join("") : '<div class="empty-hint">Vazio</div>')+
       '</div>';
     }).join("")+
+  '</div>';
+
+  return '<div class="kds-grande">'+
+    renderPageHeader("chef", "Cozinha", total+" pedidos ativos")+
+    kpisHtml+
+    '<div class="tabs">'+setorTabs.map(function(s){ return '<div class="chip '+(setorFiltro===s?"chip-active":"")+'" data-action="kds-filtro" data-f="'+s+'">'+(s==="TODOS"?"Todos":s)+'</div>'; }).join("")+'</div>'+
+    (cancelados.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">CANCELADO DEPOIS DE PRONTO/EM PREPARO — PARE</span><span class="d">'+
+      cancelados.map(function(c){ return c.rotulo+' · '+c.item.quantidade+'x '+escapeHtml(c.item.nome); }).join(" · ")+
+      '</span></div></div>' : '')+
+    '<div style="margin-bottom:14px;">'+cargaHtml+'</div>'+
+    kanbanHtml+
   '</div>';
 }
 

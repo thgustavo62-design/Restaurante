@@ -26,7 +26,12 @@ var ICONS = {
   door:'<path d="M15 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h9"></path><path d="M15 3v18"></path><path d="M10 12h9m0 0-3-3m3 3-3 3"></path>',
   wifiOff:'<path d="M2 2l20 20"></path><path d="M8.5 15.5a6 6 0 0 1 4.7-1.9"></path><path d="M5 12a11 11 0 0 1 4-2.3"></path><path d="M19 12a11 11 0 0 0-2.6-1.9"></path><path d="M2 8.5a16 16 0 0 1 5-3"></path><path d="M22 8.5a16 16 0 0 0-4.2-2.8"></path><circle cx="12" cy="19" r="1"></circle>',
   edit:'<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>',
-  book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>'
+  book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>',
+  bell:'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
+  chevronRight:'<path d="M9 6l6 6-6 6"></path>',
+  trendingUp:'<path d="M3 17l6-6 4 4 8-8"></path><path d="M17 7h4v4"></path>',
+  target:'<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"></circle>',
+  truck:'<path d="M3 7h11v9H3z"></path><path d="M14 11h4l3 3v2h-7z"></path><circle cx="7.5" cy="18" r="1.6"></circle><circle cx="17.5" cy="18" r="1.6"></circle>'
 };
 function icon(name, size, cls){
   size = size||18;

@@ -20,6 +20,20 @@ var NAV_ITEMS = [
 var PAGE_TITLES = {dashboard:"Dashboard", salao:"Atendimento", comanda:"Atendimento", kds:"Cozinha (KDS)", caixa:"Caixa", auditoria:"Auditoria",
   cardapio:"Cardápio", estoque:"Estoque", compras:"Compras", financeiro:"Financeiro", relatorios:"Relatórios", equipe:"Equipe", configuracoes:"Configurações"};
 
+// Cabeçalho padrão de tela (ícone em destaque + título + subtítulo [+ ações
+// à direita]) — uso progressivo: cada tela passa a chamar isso conforme é
+// reconstruída nas próximas etapas, em vez de montar o <div class="page-header">
+// à mão.
+function renderPageHeader(iconName, title, sub, acoesHtml){
+  return '<div class="page-header">'+
+      '<div style="display:flex; align-items:center; gap:14px;">'+
+        '<div class="page-icon-badge">'+icon(iconName,22)+'</div>'+
+        '<div><div class="page-title">'+title+'</div><div class="page-sub">'+sub+'</div></div>'+
+      '</div>'+
+      (acoesHtml||'')+
+    '</div>';
+}
+
 function render(){
   var active = document.activeElement;
   var activeId = (active && active.id) ? active.id : null;
@@ -33,7 +47,7 @@ function render(){
   }
   if(state.carregando || !usuarioAtual()){
     app.innerHTML = '<div class="login-wrap"><div class="login-card">'+
-      '<img class="login-logo" src="assets/logo/vision-food.svg" alt="Vision Food">'+
+      '<img class="login-logo" src="assets/logo/vision-food.png" alt="Vision Food">'+
       '<h1>CARREGANDO</h1><p>Sincronizando dados...</p></div></div>';
     return;
   }
@@ -67,7 +81,7 @@ function renderSidebar(){
   var items = NAV_ITEMS.filter(function(n){ return can(n.perm); });
   return '<div class="sidebar '+(state.sidebarCollapsed?"collapsed":"")+' '+(state.sidebarMobileAberto?"mobile-open":"")+'">'+
     '<div class="sidebar-brand">'+
-      '<img class="sidebar-logo" src="assets/logo/vision-food-icon.svg" alt="Vision Food">'+
+      '<img class="sidebar-logo" src="assets/logo/vision-food-icon.png" alt="Vision Food">'+
       '<div class="brand-text"><div class="name"><span class="vf-vision">VISION</span> <span class="vf-food">FOOD</span></div>'+
         '<div class="sub">A inovação tecnológica para o seu restaurante</div></div>'+
       '<button class="icon-btn sidebar-close" data-action="sidebar-fechar">'+icon("x",16)+'</button>'+
@@ -134,12 +148,23 @@ function renderTopbar(){
       ' <span class="pill-detail" style="color:var(--text-muted);">· '+state.config.horarioAbertura+'–'+state.config.horarioFechamento+'</span>'+
     '</div>'+
     '<div class="status-pill pill-conexao"><span class="status-dot" style="background:'+conexaoCor+';"></span>'+conexaoTexto+' <span class="pill-detail" style="color:var(--text-muted);">· '+conexaoDetalhe+'</span></div>'+
+    renderSinoAlertas()+
     '<div class="user-chip">'+
       '<div class="avatar">'+escapeHtml(u.nome.charAt(0))+'</div>'+
       '<div class="meta"><div class="nome">'+escapeHtml(u.nome)+'</div><div class="papel">'+u.papel+'</div></div>'+
     '</div>'+
     '<button class="icon-btn" data-action="logout" title="Sair" style="margin-left:4px;">'+icon("door",16)+'</button>'+
   '</div>';
+}
+
+function renderSinoAlertas(){
+  if(!can(PERM.SALAO_VER)) return "";
+  var alertas = alertasOperacionais();
+  var n = alertas.length;
+  return '<button class="icon-btn" data-action="nav-goto" data-view="dashboard" title="'+n+' alerta(s)" style="position:relative;">'+
+    icon("bell",17)+
+    (n ? '<span style="position:absolute; top:-3px; right:-3px; background:var(--danger); color:#fff; font-size:9px; font-weight:800; min-width:16px; height:16px; line-height:16px; border-radius:999px; text-align:center; padding:0 3px;">'+(n>9?"9+":n)+'</span>' : '')+
+  '</button>';
 }
 
 function renderBottomNav(){
