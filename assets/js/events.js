@@ -272,7 +272,10 @@ function bindEvents(){
       sb.from("comandas").update({taxa_servico_ativa:ativa}).eq("id", comanda.id).then(function(res){
         if(res.error){ comanda.taxaServicoAtiva = !ativa; toast("err","ERRO", res.error.message); render(); }
       });
+      return;
     }
+    if(e.target.dataset.action==="auditoria-filtro-usuario"){ state.auditoriaFiltroUsuario = e.target.value; render(); return; }
+    if(e.target.dataset.action==="auditoria-filtro-acao"){ state.auditoriaFiltroAcao = e.target.value; render(); return; }
   };
 
   app.oninput = function(e){
@@ -287,6 +290,7 @@ function bindEvents(){
       render();
       return;
     }
+    if(action==="auditoria-busca"){ state.auditoriaBusca = e.target.value; render(); return; }
   };
 
   app.ondragstart = function(e){

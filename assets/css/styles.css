@@ -112,9 +112,10 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .status-dot{width:7px; height:7px; border-radius:50%; background:var(--success); flex:0 0 auto; box-shadow:0 0 6px currentColor;}
 .topbar-spacer{flex:1;}
 .user-chip{display:flex; align-items:center; gap:9px;}
-.user-chip .avatar{
+.user-chip .avatar, .avatar-sm{
   width:32px; height:32px; border-radius:var(--radius-sm); background:var(--surface-03); border:1px solid var(--border);
   display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:var(--primary);
+  flex:0 0 auto;
 }
 .user-chip .meta{line-height:1.15; display:none;}
 .user-chip .meta .nome{font-size:12.5px; font-weight:600;}

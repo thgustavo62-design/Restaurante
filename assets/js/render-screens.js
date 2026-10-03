@@ -1,6 +1,23 @@
 "use strict";
 
 var SETOR_COR = {BAR:"var(--info)", COZINHA:"var(--primary)", BRASA:"var(--danger)", SOBREMESA:"var(--purple)"};
+var PAPEL_COR = {ADMIN:"var(--purple)", GERENTE:"var(--primary)", CAIXA:"var(--success)", GARCOM:"var(--info)", COZINHA:"var(--warning)"};
+
+// Criticidade por ação de auditoria — mapa simples e fácil de editar.
+// Ações sensíveis explícitas viram Alta/Média; qualquer ação não listada
+// aqui cai em Baixa por padrão.
+var AUDITORIA_CRITICIDADE = {
+  CANCELAR_ITEM: "Alta",
+  DIFERENCA_JUSTIFICADA: "Alta",
+  DESCONTO_ACIMA_LIMITE: "Média",
+  PRECO_ALTERADO: "Média",
+  PIN_ALTERADO: "Média",
+  USUARIO_DESATIVADO: "Média"
+};
+function criticidadeDe(acao){
+  return AUDITORIA_CRITICIDADE[acao] || "Baixa";
+}
+var CRITICIDADE_CLS = {Alta:"badge-status-critico", Média:"badge-status-atencao", Baixa:"badge-status-ok"};
 
 function renderDashboard(){
   var u = usuarioAtual();
@@ -364,13 +381,66 @@ function renderCaixa(){
 }
 
 function renderAuditoria(){
-  return '<div class="page-header"><div><div class="page-title">Auditoria</div><div class="page-sub">Trilha de ações sensíveis</div></div></div>'+
-    '<div class="card">'+
-    (state.auditoria.length ? state.auditoria.map(function(a){
+  var busca = (state.auditoriaBusca||"").trim().toLowerCase();
+  var filtroUsuario = state.auditoriaFiltroUsuario || "TODOS";
+  var filtroAcao = state.auditoriaFiltroAcao || "TODAS";
+
+  var usuariosComEvento = {};
+  var acoesDistintas = {};
+  state.auditoria.forEach(function(a){
+    if(a.usuarioId) usuariosComEvento[a.usuarioId] = true;
+    acoesDistintas[a.acao] = true;
+  });
+  var opcoesUsuario = Object.keys(usuariosComEvento).map(function(id){
+    return state.usuarios.find(function(u){ return u.id===id; });
+  }).filter(Boolean).sort(function(a,b){ return a.nome<b.nome?-1:1; });
+  var opcoesAcao = Object.keys(acoesDistintas).sort();
+
+  var lista = state.auditoria.filter(function(a){
+    if(filtroUsuario!=="TODOS" && a.usuarioId!==filtroUsuario) return false;
+    if(filtroAcao!=="TODAS" && a.acao!==filtroAcao) return false;
+    if(busca){
       var u = state.usuarios.find(function(x){ return x.id===a.usuarioId; });
-      return '<div class="mov-row"><span>'+a.acao+' — '+a.entidade+(a.motivo?' — '+escapeHtml(a.motivo):'')+'<div class="tag">'+(u?u.nome:"?")+' · '+new Date(a.createdAt).toLocaleString("pt-BR")+'</div></span></div>';
-    }).join("") : '<div class="empty-hint">Nenhum evento sensível registrado ainda.</div>')+
-    '</div>';
+      var texto = (a.acao+" "+a.entidade+" "+(a.motivo||"")+" "+(u?u.nome:"")).toLowerCase();
+      if(texto.indexOf(busca)===-1) return false;
+    }
+    return true;
+  });
+
+  return renderPageHeader("alert", "Auditoria", lista.length+" de "+state.auditoria.length+" eventos")+
+    '<div class="filter-row">'+
+      '<div class="search-box" style="flex:1; min-width:220px; margin-bottom:0;">'+icon("search",16)+
+        '<input id="auditoriaBuscaInput" placeholder="Buscar por usuário, ação ou motivo..." value="'+escapeHtml(state.auditoriaBusca||"")+'" data-action="auditoria-busca">'+
+      '</div>'+
+      '<div class="field"><select data-action="auditoria-filtro-usuario">'+
+        '<option value="TODOS">Todos os usuários</option>'+
+        opcoesUsuario.map(function(u){ return '<option value="'+u.id+'" '+(filtroUsuario===u.id?"selected":"")+'>'+escapeHtml(u.nome)+'</option>'; }).join("")+
+      '</select></div>'+
+      '<div class="field"><select data-action="auditoria-filtro-acao">'+
+        '<option value="TODAS">Todas as ações</option>'+
+        opcoesAcao.map(function(a){ return '<option value="'+a+'" '+(filtroAcao===a?"selected":"")+'>'+a+'</option>'; }).join("")+
+      '</select></div>'+
+    '</div>'+
+    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr>'+
+      '<th>Data/hora</th><th>Usuário</th><th>Entidade</th><th>Ação</th><th>Descrição/Motivo</th><th>Criticidade</th>'+
+    '</tr></thead><tbody>'+
+    (lista.length ? lista.map(function(a){
+      var u = state.usuarios.find(function(x){ return x.id===a.usuarioId; });
+      var crit = criticidadeDe(a.acao);
+      return '<tr>'+
+        '<td>'+new Date(a.createdAt).toLocaleString("pt-BR")+'</td>'+
+        '<td><div style="display:flex; align-items:center; gap:8px;">'+
+          '<div class="avatar-sm">'+(u?escapeHtml(u.nome.charAt(0)):"?")+'</div>'+
+          '<div><div style="font-weight:600;">'+(u?escapeHtml(u.nome):"—")+'</div>'+
+          (u?'<div style="font-size:10px; color:var(--text-muted); text-transform:uppercase;">'+u.papel+'</div>':'')+'</div>'+
+        '</div></td>'+
+        '<td>'+escapeHtml(a.entidade)+'</td>'+
+        '<td>'+escapeHtml(a.acao)+'</td>'+
+        '<td>'+(a.motivo?escapeHtml(a.motivo):'<span style="color:var(--text-muted);">—</span>')+'</td>'+
+        '<td><span class="badge '+CRITICIDADE_CLS[crit]+'">'+crit+'</span></td>'+
+      '</tr>';
+    }).join("") : '<tr><td colspan="6"><div class="empty-hint">Nenhum evento encontrado.</div></td></tr>')+
+    '</tbody></table></div></div>';
 }
 
 function renderCardapio(){
@@ -493,44 +563,77 @@ function renderCompras(){
     '</div>';
 }
 
+function contaBucket(c, hoje, fimSemana){
+  if(c.pagoEm) return "pago";
+  if(c.vencimento<hoje) return "vencida";
+  if(c.vencimento===hoje) return "hoje";
+  if(c.vencimento<=fimSemana) return "semana";
+  return "depois";
+}
+function renderResumoContas(titulo, iconName, cor, contasDoTipo, hoje, fimSemana){
+  var buckets = {hoje:{n:0,v:0}, semana:{n:0,v:0}, depois:{n:0,v:0}, vencida:{n:0,v:0}};
+  var totalAberto = 0;
+  contasDoTipo.forEach(function(c){
+    if(c.pagoEm) return;
+    var b = contaBucket(c, hoje, fimSemana);
+    if(buckets[b]){ buckets[b].n++; buckets[b].v += c.valorCentavos; }
+    totalAberto += c.valorCentavos;
+  });
+  return '<div class="card">'+
+    '<div class="card-title"><span style="display:flex; align-items:center; gap:8px;">'+icon(iconName,16)+titulo+'</span></div>'+
+    '<div class="kpi-value" style="color:'+cor+'; margin-bottom:12px;">'+brl(totalAberto)+'</div>'+
+    [["hoje","Vence hoje"],["semana","Esta semana"],["depois","Depois"],["vencida","Vencidas"]].map(function(b){
+      var d = buckets[b[0]];
+      return '<div style="display:flex; justify-content:space-between; font-size:12px; padding:6px 0; border-bottom:1px solid var(--border);">'+
+        '<span style="color:'+(b[0]==="vencida"&&d.n?"var(--danger)":"var(--text-secondary)")+';">'+b[1]+'</span>'+
+        '<span>'+d.n+' · '+brl(d.v)+'</span>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+}
 function renderFinanceiro(){
   var podeEditar = can(PERM.FINANCEIRO);
   var filtro = state.financeiroFiltro || "TODAS";
   var tabs = [["TODAS","Todas"],["PAGAR","A pagar"],["RECEBER","A receber"]];
   var hoje = diasA(0);
+  var fimSemana = diasA(7);
   var lista = state.contas.filter(function(c){ return filtro==="TODAS" || c.tipo===filtro; })
     .sort(function(a,b){ return a.vencimento<b.vencimento?-1:1; });
-  var totalPagar = state.contas.filter(function(c){ return c.tipo==="PAGAR" && !c.pagoEm; }).reduce(function(s,c){ return s+c.valorCentavos; },0);
-  var totalReceber = state.contas.filter(function(c){ return c.tipo==="RECEBER" && !c.pagoEm; }).reduce(function(s,c){ return s+c.valorCentavos; },0);
-  var vencidas = state.contas.filter(function(c){ return !c.pagoEm && c.vencimento<hoje; }).length;
-  return '<div class="page-header"><div><div class="page-title">Financeiro</div><div class="page-sub">Contas a pagar e a receber</div></div>'+
-      (podeEditar ? '<button class="btn btn-primary" data-action="conta-nova">'+icon("plus",15)+' Nova conta</button>' : '')+
+  var contasPagar = state.contas.filter(function(c){ return c.tipo==="PAGAR"; });
+  var contasReceber = state.contas.filter(function(c){ return c.tipo==="RECEBER"; });
+
+  return renderPageHeader("landmark", "Financeiro", "Contas a pagar e a receber",
+      (podeEditar ? '<button class="btn btn-primary" data-action="conta-nova">'+icon("plus",15)+' Nova conta</button>' : ''))+
+    '<div class="grid-2">'+
+      renderResumoContas("Contas a pagar", "trendingUp", "var(--danger)", contasPagar, hoje, fimSemana)+
+      renderResumoContas("Contas a receber", "trendingUp", "var(--success)", contasReceber, hoje, fimSemana)+
     '</div>'+
-    '<div class="metric-grid">'+
-      '<div class="metric-card"><div class="metric-label">A pagar (em aberto)</div><div class="metric-value" style="color:var(--danger);">'+brl(totalPagar)+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">A receber (em aberto)</div><div class="metric-value" style="color:var(--success);">'+brl(totalReceber)+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">Contas vencidas</div><div class="metric-value" style="color:var(--warning);">'+vencidas+'</div></div>'+
-    '</div>'+
+    '<div class="section-label">Todas as contas</div>'+
     '<div class="tabs">'+tabs.map(function(t){ return '<div class="tab '+(filtro===t[0]?"active":"")+'" data-action="financeiro-filtro" data-f="'+t[0]+'">'+t[1]+'</div>'; }).join("")+'</div>'+
-    '<div class="card">'+
+    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr>'+
+      '<th>Descrição</th><th>Categoria</th><th>Tipo</th><th>Vencimento</th><th style="text-align:right;">Valor</th><th>Status</th>'+(podeEditar?'<th></th>':'')+
+    '</tr></thead><tbody>'+
     (lista.length ? lista.map(function(c){
       var status = c.pagoEm ? "pago" : (c.vencimento<hoje ? "vencido" : "pendente");
       var statusLbl = {pago:"Pago", vencido:"Vencido", pendente:"Pendente"}[status];
-      return '<div class="data-row">'+
-        '<div class="main"><div class="nome">'+escapeHtml(c.descricao)+' <span class="badge badge-'+status+'">'+statusLbl+'</span></div>'+
-        '<div class="sub">'+escapeHtml(c.categoria)+' · '+(c.tipo==="PAGAR"?"A pagar":"A receber")+' · vence '+new Date(c.vencimento+"T00:00:00").toLocaleDateString("pt-BR")+'</div></div>'+
-        '<div class="num" style="color:'+(c.tipo==="PAGAR"?"var(--danger)":"var(--success)")+';">'+brl(c.valorCentavos)+'</div>'+
-        (podeEditar && !c.pagoEm ? '<div class="acts"><button class="btn btn-sm btn-success" data-action="conta-pagar" data-conta="'+c.id+'">Marcar pago</button></div>' : '')+
-      '</div>';
-    }).join("") : '<div class="empty-hint">Nenhuma conta neste filtro.</div>')+
-    '</div>';
+      return '<tr>'+
+        '<td>'+escapeHtml(c.descricao)+'</td>'+
+        '<td>'+escapeHtml(c.categoria)+'</td>'+
+        '<td>'+(c.tipo==="PAGAR"?"A pagar":"A receber")+'</td>'+
+        '<td>'+new Date(c.vencimento+"T00:00:00").toLocaleDateString("pt-BR")+'</td>'+
+        '<td style="text-align:right; color:'+(c.tipo==="PAGAR"?"var(--danger)":"var(--success)")+'; font-weight:700;">'+brl(c.valorCentavos)+'</td>'+
+        '<td><span class="badge badge-'+status+'">'+statusLbl+'</span></td>'+
+        (podeEditar ? '<td>'+(!c.pagoEm ? '<button class="btn btn-sm btn-success" data-action="conta-pagar" data-conta="'+c.id+'">Marcar pago</button>' : '')+'</td>' : '')+
+      '</tr>';
+    }).join("") : '<tr><td colspan="7"><div class="empty-hint">Nenhuma conta neste filtro.</div></td></tr>')+
+    '</tbody></table></div></div>';
 }
 
 function renderRelatorios(){
   var periodo = state.relatorioPeriodo || "HOJE";
   var pagas = periodo==="HOJE" ? state.vendasHoje : state.vendasPeriodo;
   if(periodo!=="HOJE" && state.vendasPeriodoCarregando){
-    return '<div class="page-header"><div><div class="page-title">Relatórios</div><div class="page-sub">Desempenho de vendas</div></div></div>'+
+    return renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+
       '<div class="empty-hint">Carregando período...</div>';
   }
   var totalVendas = pagas.reduce(function(s,c){ return s+totaisComanda(c).total; },0);
@@ -558,23 +661,33 @@ function renderRelatorios(){
   var garcons = Object.keys(porGarcom).map(function(k){ return porGarcom[k]; }).sort(function(a,b){ return b.vendas-a.vendas; });
 
   var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["TUDO","Tudo"]];
+  var maxProduto = ranking.length ? ranking[0].total : 0;
+  var maxGarcom = garcons.length ? garcons[0].vendas : 0;
 
-  return '<div class="page-header"><div><div class="page-title">Relatórios</div><div class="page-sub">Desempenho de vendas</div></div></div>'+
+  return renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+
     '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
     '<div class="metric-grid">'+
-      '<div class="metric-card"><div class="metric-label">Vendas no período</div><div class="metric-value">'+brl(totalVendas)+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">Contas fechadas</div><div class="metric-value">'+pagas.length+'</div></div>'+
-      '<div class="metric-card"><div class="metric-label">Ticket médio</div><div class="metric-value">'+brl(ticketMedio)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("trendingUp",20)+'</div><div class="kpi-body"><div class="kpi-label">Vendas no período</div><div class="kpi-value">'+brl(totalVendas)+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("utensils",20)+'</div><div class="kpi-body"><div class="kpi-label">Contas fechadas</div><div class="kpi-value">'+pagas.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("target",20)+'</div><div class="kpi-body"><div class="kpi-label">Ticket médio</div><div class="kpi-value">'+brl(ticketMedio)+'</div></div></div>'+
     '</div>'+
     '<div class="grid-2">'+
       '<div class="card"><div class="card-title">Ranking de produtos</div>'+
         (ranking.length ? ranking.map(function(r,idx){
-          return '<div class="ranking-row"><span class="pos">'+(idx+1)+'</span><div class="main"><div class="nome">'+escapeHtml(r.nome)+'</div><div class="sub">'+r.qtd+' unidades vendidas</div></div><div class="num">'+brl(r.total)+'</div></div>';
+          var pct = Math.max(4, Math.round(r.total/maxProduto*100));
+          return '<div class="ranking-row"><span class="pos">'+(idx+1)+'</span>'+
+            '<div class="main"><div class="nome">'+escapeHtml(r.nome)+'</div><div class="sub">'+r.qtd+' unidades vendidas</div>'+
+              '<div class="stock-bar" style="max-width:none;"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--primary);"></div></div>'+
+            '</div>'+
+            '<div class="num">'+brl(r.total)+'</div></div>';
         }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+
       '</div>'+
       '<div class="card"><div class="card-title">Desempenho por garçom</div>'+
         (garcons.length ? garcons.map(function(g){
-          return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(g.nome)+'</div><div class="sub">'+g.contas+' conta(s) fechada(s)</div></div><div class="num">'+brl(g.vendas)+'</div></div>';
+          var pct = Math.max(4, Math.round(g.vendas/maxGarcom*100));
+          return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(g.nome)+'</div><div class="sub">'+g.contas+' conta(s) fechada(s)</div>'+
+              '<div class="stock-bar" style="max-width:none;"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--primary);"></div></div>'+
+            '</div><div class="num">'+brl(g.vendas)+'</div></div>';
         }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+
       '</div>'+
     '</div>';
@@ -582,14 +695,31 @@ function renderRelatorios(){
 
 function renderEquipe(){
   var podeEditar = can(PERM.EQUIPE);
-  return '<div class="page-header"><div><div class="page-title">Equipe</div><div class="page-sub">'+state.usuarios.length+' usuários cadastrados</div></div>'+
-      (podeEditar ? '<button class="btn btn-primary" data-action="usuario-novo">'+icon("plus",15)+' Novo usuário</button>' : '')+
+  var ativos = state.usuarios.filter(function(u){ return u.ativo; }).length;
+  var inativos = state.usuarios.length - ativos;
+  var porPapel = {};
+  state.usuarios.forEach(function(u){ porPapel[u.papel] = (porPapel[u.papel]||0)+1; });
+  var papeis = Object.keys(porPapel).sort();
+
+  return renderPageHeader("users", "Equipe", state.usuarios.length+" usuários cadastrados",
+      (podeEditar ? '<button class="btn btn-primary" data-action="usuario-novo">'+icon("plus",15)+' Novo usuário</button>' : ''))+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(34,197,94,.14); color:var(--success);">'+icon("check",20)+'</div><div class="kpi-body"><div class="kpi-label">Ativos</div><div class="kpi-value">'+ativos+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:var(--surface-03); color:var(--text-muted);">'+icon("x",20)+'</div><div class="kpi-body"><div class="kpi-label">Inativos</div><div class="kpi-value">'+inativos+'</div></div></div>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:14px;"><div class="card-title">Por papel</div>'+
+      '<div style="display:flex; gap:10px; flex-wrap:wrap;">'+
+      papeis.map(function(p){
+        return '<span class="badge" style="background:rgba(255,255,255,.08); color:'+(PAPEL_COR[p]||"var(--text-secondary)")+'; font-size:11px; padding:6px 12px;">'+p+' · '+porPapel[p]+'</span>';
+      }).join("")+
+      '</div>'+
     '</div>'+
     '<div class="card">'+
     state.usuarios.map(function(u){
       return '<div class="data-row">'+
+        '<div class="avatar-sm">'+escapeHtml(u.nome.charAt(0))+'</div>'+
         '<div class="main"><div class="nome">'+escapeHtml(u.nome)+' '+(!u.ativo?'<span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
-        '<div class="sub">'+u.papel+'</div></div>'+
+        '<div class="sub"><span class="badge" style="background:rgba(255,255,255,.08); color:'+(PAPEL_COR[u.papel]||"var(--text-secondary)")+';">'+u.papel+'</span></div></div>'+
         (podeEditar ? '<div class="acts">'+
           '<button class="btn btn-sm" data-action="usuario-trocar-pin" data-usuario="'+u.id+'">Trocar PIN</button>'+
           '<button class="btn btn-sm" data-action="usuario-toggle-ativo" data-usuario="'+u.id+'">'+(u.ativo?"Desativar":"Reativar")+'</button>'+
@@ -601,14 +731,17 @@ function renderEquipe(){
 
 function renderConfiguracoes(){
   var c = state.config;
-  return '<div class="page-header"><div><div class="page-title">Configurações</div><div class="page-sub">Dados fiscais, limites, impressão e funcionamento</div></div></div>'+
+  return renderPageHeader("settings", "Configurações", "Dados fiscais, limites, impressão e funcionamento")+
     '<div class="grid-2">'+
     '<div class="card">'+
-      '<div class="card-title">Empresa</div>'+
+      '<div class="card-title">Geral</div>'+
       '<div class="field"><label>Nome da empresa</label><input id="cfgNome" value="'+escapeHtml(c.empresaNome)+'"></div>'+
       '<div class="field"><label>CNPJ</label><input id="cfgCnpj" value="'+escapeHtml(c.empresaCnpj)+'"></div>'+
-      '<div class="field"><label>Chave PIX (recebimento)</label><input id="cfgChavePix" value="'+escapeHtml(c.chavePix)+'"></div>'+
-      '<div class="field" style="margin-bottom:0;"><label>Horário de funcionamento</label>'+
+      '<div class="field" style="margin-bottom:0;"><label>Chave PIX (recebimento)</label><input id="cfgChavePix" value="'+escapeHtml(c.chavePix)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Horário de funcionamento</div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Abertura e fechamento</label>'+
         '<div style="display:flex; gap:8px;">'+
           '<input id="cfgHorarioAbertura" type="time" value="'+c.horarioAbertura+'">'+
           '<input id="cfgHorarioFechamento" type="time" value="'+c.horarioFechamento+'">'+
@@ -616,14 +749,14 @@ function renderConfiguracoes(){
       '</div>'+
     '</div>'+
     '<div class="card">'+
-      '<div class="card-title">Limites e operação</div>'+
+      '<div class="card-title">Taxas e limites</div>'+
       '<div class="field"><label>Taxa de serviço padrão (%)</label><input id="cfgTaxa" type="number" min="0" max="30" step="1" value="'+c.taxaServicoPctPadrao+'"></div>'+
       '<div class="field"><label>Limite de desconto sem supervisor (%)</label><input id="cfgDesconto" type="number" min="0" max="100" step="1" value="'+c.limiteDescontoPct+'"></div>'+
       '<div class="field"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
       '<div class="field" style="margin-bottom:0;"><label>Alertar sangria quando dinheiro em gaveta passar de</label><input id="cfgAlertaSangria" type="number" min="0" step="0.01" value="'+(c.limiteAlertaSangriaCentavos/100).toFixed(2)+'"></div>'+
     '</div>'+
     '<div class="card">'+
-      '<div class="card-title">Impressão de comprovantes</div>'+
+      '<div class="card-title">Impressão</div>'+
       '<div class="field"><label>Largura da impressora</label><select id="cfgImpressora">'+
         '<option value="80mm" '+(c.impressoraLargura==="80mm"?"selected":"")+'>80mm</option>'+
         '<option value="58mm" '+(c.impressoraLargura==="58mm"?"selected":"")+'>58mm</option>'+
