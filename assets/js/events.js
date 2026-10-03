@@ -11,15 +11,12 @@ function bindEvents(){
 
     if(action==="restaurante-slug-confirmar"){ confirmarRestauranteSlug(); return; }
     if(action==="restaurante-trocar"){ trocarRestaurante(); return; }
-    if(action==="login-select"){ state.loginSelectedUserId = el.dataset.uid; state.pinError=""; render(); return; }
-    if(action==="login-cancel"){ state.loginSelectedUserId = null; state.pinBuffer=""; render(); return; }
-    if(action==="login-pin-digit"){
-      if(state.pinBuffer.length<PIN_LEN) state.pinBuffer += el.dataset.d;
-      if(state.pinBuffer.length===PIN_LEN) login(state.loginSelectedUserId, state.pinBuffer);
-      else render();
+    if(action==="login-confirmar"){
+      var loginUsuario = document.getElementById("loginUsuarioInput").value;
+      var loginSenha = document.getElementById("loginSenhaInput").value;
+      tentarLogin(loginUsuario, loginSenha);
       return;
     }
-    if(action==="login-pin-back"){ state.pinBuffer = state.pinBuffer.slice(0,-1); render(); return; }
     if(action==="logout"){
       var temDraft = state.draft && Object.keys(state.draft.itens||{}).length>0;
       state.modal = {type:"confirmarLogout", temDraft:temDraft};
@@ -304,6 +301,16 @@ function bindEvents(){
     }
     if(action==="auditoria-busca"){ state.auditoriaBusca = e.target.value; render(); return; }
     if(action==="restaurante-slug-input"){ state.restauranteSlugInput = e.target.value; return; }
+    if(action==="login-usuario-input"){ state.loginUsuarioInput = e.target.value; return; }
+    if(action==="login-senha-input"){ state.loginSenhaInput = e.target.value; return; }
+  };
+
+  app.onkeydown = function(e){
+    if(e.key!=="Enter") return;
+    if(e.target.id==="loginUsuarioInput" || e.target.id==="loginSenhaInput"){
+      e.preventDefault();
+      tentarLogin(document.getElementById("loginUsuarioInput").value, document.getElementById("loginSenhaInput").value);
+    }
   };
 
   app.ondragstart = function(e){

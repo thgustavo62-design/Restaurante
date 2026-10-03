@@ -107,24 +107,32 @@ begin
       join restaurante.empresas e on e.id = u.empresa_id
       where u.email_interno is null
     loop
-      v_novo_email := gen_random_uuid()::text || '@' || v_usuario.slug || '.internal';
+      -- cada usuário em seu próprio bloco: uma falha aqui (timeout, erro
+      -- da extensão http, etc. — não só um status HTTP diferente de 200,
+      -- que já era tratado abaixo) não pode mais abortar a transação do
+      -- arquivo inteiro e derrubar a criação da RPC/drop view no final.
+      begin
+        v_novo_email := gen_random_uuid()::text || '@' || v_usuario.slug || '.internal';
 
-      select * into v_resposta from extensions.http((
-        'PUT',
-        'https://ybsyhjqtwiwomtxbloyu.supabase.co/auth/v1/admin/users/' || v_usuario.id::text,
-        ARRAY[
-          extensions.http_header('apikey', v_service_key),
-          extensions.http_header('Authorization', 'Bearer ' || v_service_key)
-        ],
-        'application/json',
-        jsonb_build_object('email', v_novo_email, 'email_confirm', true)::text
-      )::extensions.http_request);
+        select * into v_resposta from extensions.http((
+          'PUT',
+          'https://ybsyhjqtwiwomtxbloyu.supabase.co/auth/v1/admin/users/' || v_usuario.id::text,
+          ARRAY[
+            extensions.http_header('apikey', v_service_key),
+            extensions.http_header('Authorization', 'Bearer ' || v_service_key)
+          ],
+          'application/json',
+          jsonb_build_object('email', v_novo_email, 'email_confirm', true)::text
+        )::extensions.http_request);
 
-      if v_resposta.status = 200 then
-        update restaurante.usuarios set email_interno = v_novo_email where id = v_usuario.id;
-      else
-        raise warning 'Falha ao migrar e-mail do usuário % (%): status %, %', v_usuario.nome, v_usuario.id, v_resposta.status, v_resposta.content;
-      end if;
+        if v_resposta.status = 200 then
+          update restaurante.usuarios set email_interno = v_novo_email where id = v_usuario.id;
+        else
+          raise warning 'Falha ao migrar e-mail do usuário % (%): status %, %', v_usuario.nome, v_usuario.id, v_resposta.status, v_resposta.content;
+        end if;
+      exception when others then
+        raise warning 'Falha ao migrar e-mail do usuário % (%): %', v_usuario.nome, v_usuario.id, sqlerrm;
+      end;
     end loop;
   end if;
 end $$;

@@ -16,42 +16,50 @@ function confirmarRestauranteSlug(){
 function trocarRestaurante(){
   state.restauranteSlug = null;
   state.usuariosLogin = [];
-  state.loginSelectedUserId = null;
+  state.loginUsuarioInput = "";
+  state.loginSenhaInput = "";
+  state.loginErro = "";
   state.restauranteSlugInput = "";
   state.restauranteSlugErro = "";
   try{ localStorage.removeItem("restauranteSlug"); }catch(e){}
   render();
 }
 
-async function login(userId, pin){
-  var candidato = state.usuariosLogin.find(function(x){ return x.id===userId; });
-  if(!candidato) return;
+// Fase 0.4 (ajuste): tela de login deixa de ser "clica no seu nome +
+// PIN no teclado numérico" e passa a ser usuário digitado + senha normal.
+// candidato é resolvido por nome dentro da lista já carregada pro
+// restaurante (usuariosLogin, via usuarios_login_por_empresa) — o backend
+// continua o mesmo: email_interno é só o "nome de usuário" do GoTrue por
+// baixo, nunca exposto na tela.
+async function tentarLogin(nomeDigitado, senha){
+  var nome = (nomeDigitado||"").trim();
+  if(!nome || !senha){ state.loginErro = "Informe usuário e senha."; render(); return; }
   if(pinLockoutAtivo()){
-    state.pinBuffer = "";
-    state.pinError = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s.";
+    state.loginErro = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s.";
     render(); return;
   }
-  state.carregando = true;
+  var candidato = state.usuariosLogin.find(function(x){ return x.nome.trim().toLowerCase()===nome.toLowerCase(); });
+  if(!candidato){ state.loginErro = "Usuário ou senha incorretos."; render(); return; }
+  state.loginVerificando = true; state.loginErro = "";
   render();
   try{
-    var res = await sb.auth.signInWithPassword({email:candidato.email, password:pin});
+    var res = await sb.auth.signInWithPassword({email:candidato.email, password:senha});
     if(res.error) throw res.error;
     var claims = decodeJwt(res.data.session.access_token);
     if(!claims.empresa_id){ throw new Error("Usuário sem empresa vinculada."); }
     limparFalhasPin();
     state.usuarioAtualId = res.data.user.id;
     state.empresaId = claims.empresa_id;
-    state.loginSelectedUserId = null;
-    state.pinBuffer = ""; state.pinError = "";
+    state.loginUsuarioInput = ""; state.loginSenhaInput = ""; state.loginErro = "";
     await carregarTudo();
     state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "dashboard";
     configurarRealtime();
   } catch(e){
-    state.pinBuffer = "";
+    state.loginSenhaInput = "";
     var bloqueado = registrarFalhaPin();
-    state.pinError = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN incorreto.";
+    state.loginErro = bloqueado ? "Muitas tentativas. Aguarde 30s." : "Usuário ou senha incorretos.";
   }
-  state.carregando = false;
+  state.loginVerificando = false;
   render();
 }
 async function logout(){
