@@ -15,19 +15,73 @@ async function carregarComandasPagas(desdeIso){
     return m;
   });
 }
-async function carregarVendasPeriodo(periodo){
-  var dias = periodo==="7D" ? 7 : periodo==="30D" ? 30 : 3650;
-  var desde = new Date(Date.now() - dias*86400000).toISOString();
-  state.vendasPeriodoCarregando = true; render();
-  state.vendasPeriodo = await carregarComandasPagas(desde);
-  state.vendasPeriodoCarregando = false;
+// Fase 0.5 — Relatórios não carrega mais comandas+itens completos pro
+// navegador (chegava a puxar 10 anos de histórico em "Tudo"); agrega tudo
+// no banco via relatorio_vendas (0045), período máximo de 1 ano, "Tudo"
+// virou seleção de mês.
+async function carregarRelatorio(periodo){
+  var hoje = hojeOperacionalStr();
+  var desde, ate;
+  if(periodo==="7D"){ desde = diasA(-6); ate = hoje; }
+  else if(periodo==="30D"){ desde = diasA(-29); ate = hoje; }
+  else if(periodo==="MES"){
+    var mes = state.relatorioMes || hoje.slice(0,7);
+    state.relatorioMes = mes;
+    var partes = mes.split("-").map(Number);
+    var ultimoDia = new Date(partes[0], partes[1], 0).getDate();
+    desde = mes+"-01";
+    ate = mes+"-"+String(ultimoDia).padStart(2,"0");
+  } else {
+    desde = hoje; ate = hoje;
+  }
+  state.relatorioCarregando = true; render();
+  var res = await sb.rpc("relatorio_vendas", {p_desde: desde, p_ate: ate});
+  state.relatorioCarregando = false;
+  if(res.error){
+    toast("err","ERRO AO CARREGAR RELATÓRIO", res.error.message);
+    state.relatorioResultado = null;
+    render(); return;
+  }
+  state.relatorioResultado = res.data;
   render();
 }
 
+// Itens ativos (PENDENTE/PREPARANDO/PRONTO) de comandas do dia operacional
+// de hoje, independente do status da comanda — inclui comandas já PAGA
+// (balcão/ficha paga na hora). Sem isso o KDS perdia o pedido assim que a
+// comanda era paga, mesmo com item ainda não entregue. Consulta leve
+// (só os itens ativos de hoje), não recarrega histórico.
+async function carregarKdsItensHoje(){
+  var hoje = hojeOperacionalStr();
+  var res = await sb.from("comanda_itens")
+    .select("*, comandas!inner(id,codigo,mesa_id,tipo,ficha_numero,status,dia_operacional)")
+    .in("status", ["PENDENTE","PREPARANDO","PRONTO"])
+    .eq("comandas.dia_operacional", hoje);
+  if(res.error){ state.kdsItensAvulsos = []; return; }
+  state.kdsItensAvulsos = res.data
+    .filter(function(row){ return row.comandas.status!=="ABERTA" && row.comandas.status!=="FECHANDO"; })
+    .map(function(row){
+      var item = mapItem(row);
+      item._comanda = {id:row.comandas.id, codigo:row.comandas.codigo, mesaId:row.comandas.mesa_id, tipo:row.comandas.tipo, fichaNumero:row.comandas.ficha_numero};
+      return item;
+    });
+}
+
+// Fase 0.4 — a view antiga (usuarios_login) era aberta pra anon sem filtro
+// de empresa, listando funcionário de qualquer empresa do projeto
+// compartilhado. Agora exige o slug do restaurante (mesmo conceito do
+// cardápio público) e devolve o e-mail de login pronto (nunca mais
+// derivado do nome no client).
 async function carregarUsuariosLogin(){
+  if(!state.restauranteSlug){ render(); return; }
   try{
-    var res = await sb.from("usuarios_login").select("id,nome").order("nome");
-    state.usuariosLogin = res.data || [];
+    var res = await sb.rpc("usuarios_login_por_empresa", {p_slug: state.restauranteSlug});
+    if(res.error){
+      state.usuariosLogin = [];
+      state.restauranteSlugErro = "Restaurante não encontrado.";
+    } else {
+      state.usuariosLogin = res.data || [];
+    }
   }catch(e){ state.usuariosLogin = []; }
   render();
 }
@@ -80,6 +134,7 @@ async function carregarTudo(){
   });
 
   state.vendasHoje = await carregarComandasPagas(inicioDiaOperacionalIso());
+  await carregarKdsItensHoje();
 
   var sessRes = await sb.from("caixa_sessoes").select("*").eq("status","ABERTA").order("abertura_em",{ascending:false}).limit(1);
   var sessData = checar(sessRes,"caixa_sessoes");
@@ -162,31 +217,17 @@ function can(permissao){
   var lista = MATRIZ[u.papel] || [];
   return lista.indexOf(permissao) !== -1;
 }
-async function verificarSupervisor(pin, permissaoNecessaria){
-  var candidatos = state.usuarios.filter(function(u){
-    return u.ativo && (MATRIZ[u.papel]||[]).indexOf(permissaoNecessaria)!==-1;
-  });
-  var temp = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:false}});
-  for(var i=0;i<candidatos.length;i++){
-    try{
-      var res = await temp.auth.signInWithPassword({email:emailInterno(candidatos[i].nome), password:pin});
-      if(!res.error){
-        await temp.auth.signOut();
-        return candidatos[i];
-      }
-    }catch(e){}
-  }
-  return null;
-}
-function registrarAuditoria(entidade, entidadeId, acao, usuarioId, motivo){
+// Fase 0.7 — auditoria só pelo servidor: comandas/usuarios/produtos já têm
+// trigger genérico (fn_audit_trigger, 0021) que grava sozinho em qualquer
+// INSERT/UPDATE, inclusive os feitos por RPC SECURITY DEFINER. A policy
+// auditoria_insert (0047) passa a recusar insert direto do client — então
+// isso aqui é só otimismo visual (a tela de Auditoria já reflete o evento
+// antes do próximo refresh buscar a linha real gravada pelo trigger/RPC).
+function registrarAuditoriaLocal(entidade, entidadeId, acao, usuarioId, motivo){
   state.auditoria.unshift({
     id:uid("aud"), entidade:entidade, entidadeId:entidadeId, acao:acao,
     usuarioId:usuarioId, motivo:motivo||null, createdAt:new Date().toISOString()
   });
-  sb.from("auditoria").insert({
-    empresa_id: state.empresaId, entidade: entidade, entidade_id: entidadeId,
-    acao: acao, usuario_id: usuarioId, motivo: motivo||null
-  }).then(function(res){ if(res.error) console.error("auditoria:", res.error.message); });
 }
 function toast(tipo, titulo, desc){
   var id = uid("toast");
@@ -223,6 +264,11 @@ function totaisComanda(comanda){
   var taxaPct = comanda.taxaServicoAtiva ? state.config.taxaServicoPctPadrao : 0;
   var taxa = Math.round((subtotal - desconto) * taxaPct / 100);
   var total = subtotal - desconto + taxa;
+  // Fase 0.5 — comanda paga já tem o total real travado no momento do
+  // pagamento (comandas.total_centavos, gravado por confirmar_pagamento).
+  // Usa ele em vez de recalcular com a taxa ATUAL, que reescreveria o
+  // histórico de vendas toda vez que a taxa de serviço mudasse.
+  if(comanda.totalCentavos!=null) total = comanda.totalCentavos;
   return {subtotal:subtotal, desconto:desconto, taxaPct:taxaPct, taxa:taxa, total:Math.max(0,total)};
 }
 

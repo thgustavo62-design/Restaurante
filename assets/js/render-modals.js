@@ -2,7 +2,7 @@
 
 function renderModal(){
   var m = state.modal;
-  if(m.type==="supervisor") return renderSupervisorModal(m);
+  if(m.type==="supervisorRpc") return renderSupervisorRpcModal(m);
   if(m.type==="cancelarItem") return renderCancelarItemModal(m);
   if(m.type==="desconto") return renderDescontoModal(m);
   if(m.type==="pagamento") return renderPagamentoModal(m);
@@ -237,12 +237,23 @@ function pinPadHtml(buffer, actionDigit, actionBack){
     }).join("")+'</div>';
 }
 
-function renderSupervisorModal(m){
+function selectSupervisorHtml(permissao, supervisorId, dataAction){
+  var candidatos = candidatosSupervisor(permissao);
+  if(!candidatos.length){
+    return '<div class="pin-error">Nenhum usuário ativo tem essa permissão.</div>';
+  }
+  return '<div class="field" style="text-align:left;"><label>Supervisor</label><select data-action="'+dataAction+'">'+
+    candidatos.map(function(u){ return '<option value="'+u.id+'" '+(supervisorId===u.id?"selected":"")+'>'+escapeHtml(u.nome)+' ('+u.papel+')</option>'; }).join("")+
+  '</select></div>';
+}
+
+function renderSupervisorRpcModal(m){
   return '<div class="modal-overlay"><div class="modal-box" style="text-align:center;">'+
     '<h2>Autorização de supervisor</h2><div class="modal-sub">'+escapeHtml(m.motivo)+'</div>'+
-    pinPadHtml(m.buffer, "supervisor-digit", "supervisor-back")+
+    selectSupervisorHtml(m.permissao, m.supervisorId, "supervisor-rpc-select")+
+    pinPadHtml(m.buffer, "supervisor-rpc-digit", "supervisor-rpc-back")+
     '<div class="pin-error">'+escapeHtml(m.error||"")+'</div>'+
-    '<div style="margin-top:12px;"><button class="btn btn-ghost" data-action="supervisor-cancel">Cancelar</button></div>'+
+    '<div style="margin-top:12px;"><button class="btn btn-ghost" data-action="supervisor-rpc-cancel">Cancelar</button></div>'+
   '</div></div>';
 }
 
@@ -252,6 +263,7 @@ function renderCancelarItemModal(m){
     '<div class="modal-highlight">'+m.item.quantidade+'x '+escapeHtml(m.item.nome)+(m.item.observacao?' — '+escapeHtml(m.item.observacao):'')+'<br><span style="color:var(--text-muted); font-size:11.5px;">Mesa '+m.mesaNum+'</span></div>'+
     '<div class="modal-sub" style="margin-bottom:6px;">Esta ação será registrada na auditoria.</div>'+
     '<div class="field"><label>Motivo</label><textarea id="cancelarMotivoInput" data-action="cancelar-motivo" placeholder="Ex: pedido em duplicidade">'+escapeHtml(m.motivo)+'</textarea></div>'+
+    selectSupervisorHtml(PERM.ITEM_CANCELAR, m.supervisorId, "cancelaritem-supervisor")+
     '<div class="field" style="margin-bottom:6px;"><label>PIN do supervisor</label></div>'+
     pinPadHtml(m.buffer, "cancelaritem-digit", "cancelaritem-back")+
     '<div class="pin-error">'+escapeHtml(m.error||"")+'</div>'+
@@ -348,40 +360,42 @@ function renderCaixaFecharModal(m){
   }
   if(!m.stage || m.stage==="contar"){
     return '<div class="modal-overlay"><div class="modal-box">'+
-      '<h2>Conferência de caixa</h2><div class="modal-sub">Informe os valores contados. Os valores esperados só aparecem depois de confirmar.</div>'+
+      '<h2>Conferência de caixa</h2><div class="modal-sub">Informe os valores contados. O esperado é calculado no servidor e só aparece depois de confirmar.</div>'+
       formas.map(function(f){
         return '<div class="field"><label>'+f+'</label><input type="number" min="0" step="0.01" placeholder="0,00" data-action="fechar-informado" data-forma="'+f+'"></div>';
       }).join("")+
+      (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
       '<div class="action-row">'+
         '<button class="btn btn-ghost" data-action="caixa-fechar-cancelar">Cancelar</button>'+
-        '<button class="btn btn-primary btn-block" data-action="caixa-fechar-informar">Conferir caixa</button>'+
+        '<button class="btn btn-primary btn-block" data-action="caixa-fechar-informar" '+(m.conferindo?"disabled":"")+'>Conferir caixa</button>'+
       '</div>'+
     '</div></div>';
   }
-  var esperados = {}; var diffs = {};
-  formas.forEach(function(f){ esperados[f]=esperadoPorForma(f); diffs[f]=(m.informados[f]||0)-esperados[f]; });
-  var diferencaDinheiro = diffs.DINHEIRO||0;
+  // stage === "resultado" — vem do RPC conferir_fechamento_caixa, nada calculado no client
+  var r = m.resultado;
+  var diferencaDinheiro = r.diferenca_dinheiro;
   var cls = diferencaDinheiro===0 ? "zero" : (diferencaDinheiro>0 ? "pos" : "neg");
-  var precisaJustificar = Math.abs(diferencaDinheiro) > limiteDiferencaCentavos();
+  var precisaJustificar = r.precisa_justificativa;
   return '<div class="modal-overlay"><div class="modal-box">'+
     '<h2>Resultado do fechamento</h2>'+
     '<div style="overflow-x:auto;"><table class="recon-table"><tr><th></th><th>Esperado</th><th>Informado</th><th>Diferença</th></tr>'+
     formas.map(function(f){
-      var d = diffs[f]; var dcls = d===0?"zero":(d>0?"pos":"neg");
-      return '<tr><td>'+f+'</td><td>'+brl(esperados[f])+'</td><td>'+brl(m.informados[f]||0)+'</td><td class="'+dcls+'">'+brl(d)+'</td></tr>';
+      var d = (r.diffs[f]||0); var dcls = d===0?"zero":(d>0?"pos":"neg");
+      return '<tr><td>'+f+'</td><td>'+brl(r.esperados[f]||0)+'</td><td>'+brl(r.informados[f]||0)+'</td><td class="'+dcls+'">'+brl(d)+'</td></tr>';
     }).join("")+'</table></div>'+
     '<div class="diff-box '+cls+'"><div class="lbl">Diferença em dinheiro</div><div class="valor">'+brl(diferencaDinheiro)+'</div></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
     (precisaJustificar ?
-      '<div class="modal-sub" style="color:var(--danger);">Diferença acima do limite de '+brl(limiteDiferencaCentavos())+'. Justifique para confirmar.</div>'+
+      '<div class="modal-sub" style="color:var(--danger);">Diferença acima do limite tolerado. Justifique para confirmar.</div>'+
       '<div class="field"><label>Justificativa</label><textarea id="justificativaInput" placeholder="Explique a diferença"></textarea></div>'+
       '<div class="action-row">'+
         '<button class="btn btn-ghost" data-action="caixa-fechar-cancelar">Cancelar</button>'+
-        '<button class="btn btn-danger btn-block" data-action="caixa-fechar-justificar-confirmar">Confirmar mesmo assim</button>'+
+        '<button class="btn btn-danger btn-block" data-action="caixa-fechar-justificar-confirmar" '+(m.fechando?"disabled":"")+'>Confirmar mesmo assim</button>'+
       '</div>'
       :
       '<div class="action-row">'+
         '<button class="btn btn-ghost" data-action="caixa-fechar-cancelar">Cancelar</button>'+
-        '<button class="btn btn-primary btn-block" data-action="caixa-fechar-confirmar-final">Confirmar fechamento</button>'+
+        '<button class="btn btn-primary btn-block" data-action="caixa-fechar-confirmar-final" '+(m.fechando?"disabled":"")+'>Confirmar fechamento</button>'+
       '</div>'
     )+
   '</div></div>';

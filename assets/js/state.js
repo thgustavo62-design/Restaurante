@@ -9,6 +9,9 @@ function estadoVazio(){
     modal:null,
     toasts:[],
     printHtml:null,
+    restauranteSlug:null,
+    restauranteSlugInput:"",
+    restauranteSlugErro:"",
     loginSelectedUserId:null,
     pinBuffer:"",
     pinError:"",
@@ -36,6 +39,8 @@ function estadoVazio(){
     insumos:[], fichaTecnica:[], estoqueMovimentos:[], contas:[], insumoRendimentos:[],
     fornecedores:[], pedidosCompra:[],
     comandas:[], caixaSessao:null, caixaMovimentos:[], caixaSessoesHistorico:[], auditoria:[],
-    vendasHoje:[], vendasPeriodo:[], vendasPeriodoCarregando:false
+    kdsItensAvulsos:[],
+    vendasHoje:[],
+    relatorioResultado:null, relatorioCarregando:false, relatorioMes:""
   };
 }

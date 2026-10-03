@@ -111,6 +111,7 @@ async function confirmarPagamento(){
 async function kdsSetStatus(comandaId, itemId, novoStatus){
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
   var item = comanda ? comanda.itens.find(function(i){ return i.id===itemId; }) : null;
+  if(!item) item = (state.kdsItensAvulsos||[]).find(function(i){ return i.id===itemId; });
   if(!item) return;
   var anterior = item.status;
   item.status = novoStatus;
@@ -168,41 +169,48 @@ function formasDaSessao(){
   else { formas = formas.filter(function(f){ return f!=="DINHEIRO"; }); formas.unshift("DINHEIRO"); }
   return formas;
 }
-function esperadoPorForma(forma){
-  if(forma==="DINHEIRO") return saldoDinheiroEsperado();
-  return totaisPorForma()[forma] || 0;
-}
-async function confirmarFechamento(justificativa){
-  var informados = state.modal.informados;
-  var esperados = {}; var diffs = {};
-  formasDaSessao().forEach(function(f){
-    esperados[f] = esperadoPorForma(f);
-    diffs[f] = (informados[f]||0) - esperados[f];
+// Fase 0.2 — o esperado é calculado e conferido no servidor (RPCs
+// conferir_fechamento_caixa / fechar_caixa, 0042), nunca no client. O
+// client só manda o que o operador contou; recebe de volta o resultado já
+// pronto. "Conferência cega" de verdade: o esperado não existe no browser
+// antes do operador informar o contado.
+async function conferirFechamento(informados){
+  var m = state.modal;
+  m.informados = informados;
+  m.erro = ""; m.conferindo = true; render();
+  var res = await sb.rpc("conferir_fechamento_caixa", {
+    p_sessao_id: state.caixaSessao.id,
+    p_informados: informados
   });
-  var diferencaDinheiro = diffs.DINHEIRO||0;
-  if(Math.abs(diferencaDinheiro) > limiteDiferencaCentavos() && !justificativa){
-    render(); return;
-  }
-  var fechamentoEm = new Date().toISOString();
-  var res = await sb.from("caixa_sessoes").update({
-    status:"FECHADA", fechamento_em:fechamentoEm, usuario_fechamento:state.usuarioAtualId,
-    saldo_calculado_centavos:esperados.DINHEIRO, saldo_informado_centavos:informados.DINHEIRO||0,
-    diferenca_centavos:diferencaDinheiro, fechamento_detalhe:{esperados:esperados, informados:informados, diffs:diffs}
-  }).eq("id", state.caixaSessao.id);
-  if(res.error){ toast("err","ERRO AO FECHAR CAIXA", res.error.message); return; }
+  m.conferindo = false;
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  m.resultado = res.data;
+  m.stage = "resultado";
+  render();
+}
+
+async function confirmarFechamento(justificativa){
+  var m = state.modal;
+  m.erro = ""; m.fechando = true; render();
+  var res = await sb.rpc("fechar_caixa", {
+    p_sessao_id: state.caixaSessao.id,
+    p_informados: m.informados,
+    p_justificativa: justificativa
+  });
+  m.fechando = false;
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  var r = res.data;
+  var diferencaDinheiro = r.diferenca_dinheiro;
 
   state.caixaSessao.status = "FECHADA";
-  state.caixaSessao.fechamentoEm = fechamentoEm;
+  state.caixaSessao.fechamentoEm = new Date().toISOString();
   state.caixaSessao.usuarioFechamento = state.usuarioAtualId;
-  state.caixaSessao.saldoCalculadoCentavos = esperados.DINHEIRO;
-  state.caixaSessao.saldoInformadoCentavos = informados.DINHEIRO||0;
+  state.caixaSessao.saldoCalculadoCentavos = r.esperados.DINHEIRO||0;
+  state.caixaSessao.saldoInformadoCentavos = r.informados.DINHEIRO||0;
   state.caixaSessao.diferencaCentavos = diferencaDinheiro;
-  state.caixaSessao.fechamentoDetalhe = {esperados:esperados, informados:informados, diffs:diffs};
-  if(justificativa){
-    registrarAuditoria("caixa_sessoes", state.caixaSessao.id, "DIFERENCA_JUSTIFICADA", state.usuarioAtualId, justificativa);
-  }
+  state.caixaSessao.fechamentoDetalhe = r;
   state.caixaSessoesHistorico.push(state.caixaSessao);
-  state.modal.stage = "concluido";
+  m.stage = "concluido";
   render();
   toast(diferencaDinheiro===0?"ok":"err","CAIXA FECHADO", "Diferença "+brl(diferencaDinheiro));
 }

@@ -36,9 +36,9 @@ function diasA(n){
   return d.getFullYear()+"-"+m+"-"+day;
 }
 
-function emailInterno(nome){
-  return nome.trim().toLowerCase().replace(/[^a-z0-9]/g,"") + "@fogo.internal";
-}
+// Fase 0.4 — o e-mail de login deixou de ser derivado do nome
+// (acento sumia, nome duplicado colidia, renomear quebrava o login).
+// Vem pronto do servidor via usuarios_login_por_empresa (data.js).
 
 // dia operacional: um bar que abre à noite e vira a madrugada não deve
 // "trocar de dia" à meia-noite — vendas até a hora de virada configurada

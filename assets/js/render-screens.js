@@ -149,10 +149,17 @@ function renderComanda(){
   var podeFechar = can(PERM.COMANDA_FECHAR) && comanda.status==="ABERTA" && comanda.itens.length>0;
   var podeCancelarComanda = can(PERM.COMANDA_ABRIR) && comanda.status==="ABERTA" && comanda.itens.length===0;
   var podeLancar = can(PERM.ITEM_LANCAR) && comanda.status==="ABERTA";
+  // Fase 0.6 — se o pagamento travou (aba fechou no meio), libera reabrir
+  // manualmente depois de 10 minutos em FECHANDO; nunca reabre sozinho.
+  var podeReabrir = can(PERM.COMANDA_REABRIR) && comanda.status==="FECHANDO" && comanda.updatedAt && minutosDesde(comanda.updatedAt)>10;
   var draftCount = Object.keys(state.draft.itens).reduce(function(s,k){ return s+state.draft.itens[k].qtd; },0);
 
   var sentItemsHtml = comanda.itens.length ? comanda.itens.map(function(it){
-    var podeCancel = it.status!=="CANCELADO" && it.status!=="ENTREGUE" && can(PERM.ITEM_CANCELAR);
+    // Fase 0.3: cancelar item agora exige PIN de supervisor validado no
+    // servidor (RPC cancelar_item) sempre — a trava real não é mais essa
+    // checagem de permissão do próprio usuário, só decide se o botão
+    // aparece. Qualquer um que lança item também pode pedir cancelamento.
+    var podeCancel = it.status!=="CANCELADO" && it.status!=="ENTREGUE" && can(PERM.ITEM_LANCAR);
     return '<div class="item-row">'+
       '<div class="info"><div class="nome">'+it.quantidade+'x '+escapeHtml(it.nome)+'</div>'+
       (it.observacao?'<div class="obs">'+escapeHtml(it.observacao)+'</div>':'')+
@@ -219,11 +226,18 @@ function renderComanda(){
         '<div class="totais-linha total"><span>Total</span><span>'+brl(t.total)+'</span></div>'+
       '</div>'+
       '<div class="action-row">'+
-        (can(PERM.DESCONTO_APLICAR) && comanda.status==="ABERTA" ? '<button class="btn" data-action="desconto-abrir">Desconto</button>' : '')+
+        // idem: desconto acima do limite (ou sem a permissão) pede PIN de
+        // supervisor pelo RPC aplicar_desconto; dentro do limite e com a
+        // permissão, aplica direto — mesma regra de negócio de antes.
+        (can(PERM.COMANDA_ABRIR) && comanda.status==="ABERTA" ? '<button class="btn" data-action="desconto-abrir">Desconto</button>' : '')+
         '<label class="btn" style="cursor:pointer;"><input type="checkbox" data-action="toggle-taxa" '+(comanda.taxaServicoAtiva?"checked":"")+' style="margin-right:6px;">Taxa</label>'+
       '</div>'+
       (podeFechar ? '<button class="btn btn-danger btn-lg btn-block" data-action="fechar-conta-abrir">Fechar conta · '+brl(t.total)+'</button>' : '')+
       (podeCancelarComanda ? '<button class="btn btn-ghost btn-block" data-action="comanda-cancelar-confirmar" data-comanda="'+comanda.id+'" style="margin-top:8px; color:var(--danger); border-color:var(--danger);">'+icon("x",15)+' Cancelar comanda (mesa aberta por engano)</button>' : '')+
+      (podeReabrir ? '<div class="alert-row danger" style="margin-top:8px;">'+icon("alert",16)+
+        '<div style="flex:1;"><span class="t">PAGAMENTO TRAVADO</span><span class="d">Em fechamento há '+fmtMin(minutosDesde(comanda.updatedAt))+' sem concluir.</span></div>'+
+        '<button class="btn btn-sm" data-action="comanda-reabrir-travada" data-comanda="'+comanda.id+'">Reabrir</button>'+
+      '</div>' : '')+
     '</div>';
 
   return '<div class="comanda-head">'+
@@ -248,15 +262,35 @@ function renderKds(){
   var cancelados = [];
   var cargaPorSetor = {};
   SETORES_PRODUCAO.forEach(function(s){ cargaPorSetor[s] = 0; });
-  abertas.forEach(function(c){
+
+  // fontes de itens pro KDS: comandas abertas (normal) + itens avulsos de
+  // comandas já pagas hoje (balcão/ficha) que ainda não foram entregues —
+  // ver carregarKdsItensHoje() em data.js (Fase 0.1).
+  var fontes = abertas.map(function(c){
     var mesa = state.mesas.find(function(m){ return m.id===c.mesaId; });
-    var rotulo = rotuloComanda(c, mesa);
+    return {comandaId:c.id, codigo:c.codigo, rotulo:rotuloComanda(c, mesa), itens:c.itens};
+  });
+  var avulsosPorComanda = {};
+  var ordemAvulsos = [];
+  (state.kdsItensAvulsos||[]).forEach(function(it){
+    var cid = it._comanda.id;
+    if(!avulsosPorComanda[cid]){
+      var mesaAvulsa = state.mesas.find(function(m){ return m.id===it._comanda.mesaId; });
+      avulsosPorComanda[cid] = {comandaId:cid, codigo:it._comanda.codigo, rotulo:rotuloComanda(it._comanda, mesaAvulsa), itens:[]};
+      ordemAvulsos.push(cid);
+    }
+    avulsosPorComanda[cid].itens.push(it);
+  });
+  fontes = fontes.concat(ordemAvulsos.map(function(cid){ return avulsosPorComanda[cid]; }));
+
+  fontes.forEach(function(c){
+    var rotulo = c.rotulo;
     c.itens.forEach(function(it){
       var setorItem = it.setorProducao||"COZINHA";
       if(cards[it.status] && cargaPorSetor[setorItem]!==undefined) cargaPorSetor[setorItem]++;
       if(setorFiltro!=="TODOS" && setorItem!==setorFiltro) return;
-      if(cards[it.status]) cards[it.status].push({comandaId:c.id, codigo:c.codigo, item:it, rotulo:rotulo});
-      if(it.status==="CANCELADO" && it.canceladoAposPreparo) cancelados.push({comandaId:c.id, codigo:c.codigo, item:it, rotulo:rotulo});
+      if(cards[it.status]) cards[it.status].push({comandaId:c.comandaId, codigo:c.codigo, item:it, rotulo:rotulo});
+      if(it.status==="CANCELADO" && it.canceladoAposPreparo) cancelados.push({comandaId:c.comandaId, codigo:c.codigo, item:it, rotulo:rotulo});
     });
   });
   var total = cards.PENDENTE.length+cards.PREPARANDO.length+cards.PRONTO.length;
@@ -631,44 +665,31 @@ function renderFinanceiro(){
 
 function renderRelatorios(){
   var periodo = state.relatorioPeriodo || "HOJE";
-  var pagas = periodo==="HOJE" ? state.vendasHoje : state.vendasPeriodo;
-  if(periodo!=="HOJE" && state.vendasPeriodoCarregando){
-    return renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+
-      '<div class="empty-hint">Carregando período...</div>';
+  var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["MES","Escolher mês"]];
+
+  var cabecalho = renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+
+    '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
+    (periodo==="MES" ? '<div class="field" style="max-width:220px;"><input type="month" id="relatorioMesInput" value="'+escapeHtml(state.relatorioMes||"")+'" data-action="relatorio-mes"></div>' : '');
+
+  if(state.relatorioCarregando || !state.relatorioResultado){
+    return cabecalho+'<div class="empty-hint">Carregando período...</div>';
   }
-  var totalVendas = pagas.reduce(function(s,c){ return s+totaisComanda(c).total; },0);
-  var ticketMedio = pagas.length ? Math.round(totalVendas/pagas.length) : 0;
 
-  var porProduto = {};
-  pagas.forEach(function(c){
-    c.itens.forEach(function(it){
-      if(it.status==="CANCELADO") return;
-      if(!porProduto[it.produtoId]) porProduto[it.produtoId] = {nome:it.nome, qtd:0, total:0};
-      porProduto[it.produtoId].qtd += it.quantidade;
-      porProduto[it.produtoId].total += it.precoUnitCentavos*it.quantidade;
-    });
-  });
-  var ranking = Object.keys(porProduto).map(function(k){ return porProduto[k]; }).sort(function(a,b){ return b.total-a.total; }).slice(0,10);
-
-  var porGarcom = {};
-  pagas.forEach(function(c){
-    var u = state.usuarios.find(function(x){ return x.id===c.usuarioAbertura; });
-    var nome = u ? u.nome : "?";
-    if(!porGarcom[nome]) porGarcom[nome] = {nome:nome, vendas:0, contas:0};
-    porGarcom[nome].vendas += totaisComanda(c).total;
-    porGarcom[nome].contas += 1;
-  });
-  var garcons = Object.keys(porGarcom).map(function(k){ return porGarcom[k]; }).sort(function(a,b){ return b.vendas-a.vendas; });
-
-  var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["TUDO","Tudo"]];
+  // Fase 0.5 — tudo agregado no banco (relatorio_vendas RPC); o client só
+  // exibe, não recalcula mais nada a partir de comandas+itens completos.
+  var r = state.relatorioResultado;
+  var totalVendas = r.total_vendas||0;
+  var contasFechadas = r.contas_fechadas||0;
+  var ticketMedio = contasFechadas ? Math.round(totalVendas/contasFechadas) : 0;
+  var ranking = r.ranking_produtos||[];
+  var garcons = r.desempenho_garcons||[];
   var maxProduto = ranking.length ? ranking[0].total : 0;
   var maxGarcom = garcons.length ? garcons[0].vendas : 0;
 
-  return renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+
-    '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
+  return cabecalho+
     '<div class="metric-grid">'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("trendingUp",20)+'</div><div class="kpi-body"><div class="kpi-label">Vendas no período</div><div class="kpi-value">'+brl(totalVendas)+'</div></div></div>'+
-      '<div class="kpi-card"><div class="kpi-icon">'+icon("utensils",20)+'</div><div class="kpi-body"><div class="kpi-label">Contas fechadas</div><div class="kpi-value">'+pagas.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("utensils",20)+'</div><div class="kpi-body"><div class="kpi-label">Contas fechadas</div><div class="kpi-value">'+contasFechadas+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("target",20)+'</div><div class="kpi-body"><div class="kpi-label">Ticket médio</div><div class="kpi-value">'+brl(ticketMedio)+'</div></div></div>'+
     '</div>'+
     '<div class="grid-2">'+
@@ -682,10 +703,10 @@ function renderRelatorios(){
             '<div class="num">'+brl(r.total)+'</div></div>';
         }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+
       '</div>'+
-      '<div class="card"><div class="card-title">Desempenho por garçom</div>'+
+      '<div class="card"><div class="card-title">Desempenho por garçom</div><div class="modal-sub" style="margin:0 0 8px;">Por quem lançou cada item, não quem abriu a mesa.</div>'+
         (garcons.length ? garcons.map(function(g){
           var pct = Math.max(4, Math.round(g.vendas/maxGarcom*100));
-          return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(g.nome)+'</div><div class="sub">'+g.contas+' conta(s) fechada(s)</div>'+
+          return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(g.nome)+'</div><div class="sub">'+g.contas+' conta(s)</div>'+
               '<div class="stock-bar" style="max-width:none;"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--primary);"></div></div>'+
             '</div><div class="num">'+brl(g.vendas)+'</div></div>';
         }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+

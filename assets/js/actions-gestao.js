@@ -31,14 +31,14 @@ async function salvarProduto(produtoId, nome, categoria, precoCentavos, setorPro
     p.nome = nome.trim(); p.categoria = categoria.trim(); p.categoriaId = categoriaId; p.precoCentavos = precoCentavos;
     p.setorProducao = setorProducao; p.fotoUrl = fotoUrl;
     if(precoAntes!==precoCentavos){
-      registrarAuditoria("produtos", produtoId, "PRECO_ALTERADO", state.usuarioAtualId, nome.trim()+": "+brl(precoAntes)+" -> "+brl(precoCentavos));
+      registrarAuditoriaLocal("produtos", produtoId, "PRECO_ALTERADO", state.usuarioAtualId, nome.trim()+": "+brl(precoAntes)+" -> "+brl(precoCentavos));
     }
   } else {
     var insRes = await sb.from("produtos").insert({empresa_id:state.empresaId, categoria_id:categoriaId, nome:nome.trim(), preco_centavos:precoCentavos, setor_producao:setorProducao, foto_url:fotoUrl||null}).select().single();
     if(insRes.error){ toast("err","ERRO", insRes.error.message); return; }
     var catPorId = {}; catPorId[categoriaId] = categoria.trim();
     state.produtos.push(mapProduto(insRes.data, catPorId));
-    registrarAuditoria("produtos", insRes.data.id, "PRODUTO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+brl(precoCentavos));
+    registrarAuditoriaLocal("produtos", insRes.data.id, "PRODUTO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+brl(precoCentavos));
   }
   state.modal = null;
   render();

@@ -9,6 +9,8 @@ function bindEvents(){
     if(!el) return;
     var action = el.dataset.action;
 
+    if(action==="restaurante-slug-confirmar"){ confirmarRestauranteSlug(); return; }
+    if(action==="restaurante-trocar"){ trocarRestaurante(); return; }
     if(action==="login-select"){ state.loginSelectedUserId = el.dataset.uid; state.pinError=""; render(); return; }
     if(action==="login-cancel"){ state.loginSelectedUserId = null; state.pinBuffer=""; render(); return; }
     if(action==="login-pin-digit"){
@@ -35,7 +37,14 @@ function bindEvents(){
     }
     if(action==="sidebar-abrir"){ state.sidebarMobileAberto = true; render(); return; }
     if(action==="sidebar-fechar"){ state.sidebarMobileAberto = false; render(); return; }
-    if(action==="nav-goto"){ state.view = el.dataset.view; state.viewParams={}; state.sidebarMobileAberto = false; render(); return; }
+    if(action==="nav-goto"){
+      state.view = el.dataset.view; state.viewParams={}; state.sidebarMobileAberto = false;
+      render();
+      if(el.dataset.view==="relatorios" && !state.relatorioResultado && !state.relatorioCarregando){
+        carregarRelatorio(state.relatorioPeriodo||"HOJE");
+      }
+      return;
+    }
     if(action==="salao-filtro"){ state.salaoFiltro = el.dataset.f; render(); return; }
 
     if(action==="balcao-abrir"){ abrirComandaBalcao(); return; }
@@ -74,12 +83,13 @@ function bindEvents(){
       return;
     }
 
-    if(action==="supervisor-digit"){ supervisorDigit(el.dataset.d); return; }
-    if(action==="supervisor-back"){ state.modal.buffer = state.modal.buffer.slice(0,-1); render(); return; }
-    if(action==="supervisor-cancel"){ state.modal=null; render(); return; }
+    if(action==="supervisor-rpc-digit"){ supervisorRpcDigit(el.dataset.d); return; }
+    if(action==="supervisor-rpc-back"){ state.modal.buffer = state.modal.buffer.slice(0,-1); render(); return; }
+    if(action==="supervisor-rpc-cancel"){ state.modal=null; render(); return; }
 
     if(action==="fechar-conta-abrir"){ abrirFecharConta(state.viewParams.comandaId); return; }
     if(action==="comanda-cancelar-confirmar"){ cancelarComanda(el.dataset.comanda); return; }
+    if(action==="comanda-reabrir-travada"){ reabrirComandaTravada(el.dataset.comanda); return; }
     if(action==="pagamento-cancelar"){ fecharModalAtual(); return; }
     if(action==="pagamento-metodo"){ pagamentoAddMetodo(el.dataset.forma); return; }
     if(action==="pagamento-remover"){ pagamentoRemoveLinha(parseInt(el.dataset.idx,10)); return; }
@@ -114,9 +124,8 @@ function bindEvents(){
       var inputs = document.querySelectorAll('[data-action="fechar-informado"]');
       var informados = {};
       inputs.forEach(function(inp){ informados[inp.dataset.forma] = Math.round(parseFloat(inp.value||"0")*100); });
-      state.modal.informados = informados;
-      state.modal.stage = "resultado";
-      render(); return;
+      conferirFechamento(informados);
+      return;
     }
     if(action==="caixa-fechar-justificar-confirmar"){
       var just = document.getElementById("justificativaInput").value.trim();
@@ -207,7 +216,7 @@ function bindEvents(){
     if(action==="relatorio-periodo"){
       state.relatorioPeriodo = el.dataset.p;
       render();
-      if(el.dataset.p!=="HOJE") carregarVendasPeriodo(el.dataset.p);
+      carregarRelatorio(el.dataset.p);
       return;
     }
 
@@ -276,6 +285,9 @@ function bindEvents(){
     }
     if(e.target.dataset.action==="auditoria-filtro-usuario"){ state.auditoriaFiltroUsuario = e.target.value; render(); return; }
     if(e.target.dataset.action==="auditoria-filtro-acao"){ state.auditoriaFiltroAcao = e.target.value; render(); return; }
+    if(e.target.dataset.action==="supervisor-rpc-select"){ state.modal.supervisorId = e.target.value; return; }
+    if(e.target.dataset.action==="cancelaritem-supervisor"){ state.modal.supervisorId = e.target.value; return; }
+    if(e.target.dataset.action==="relatorio-mes"){ state.relatorioMes = e.target.value; carregarRelatorio("MES"); return; }
   };
 
   app.oninput = function(e){
@@ -291,6 +303,7 @@ function bindEvents(){
       return;
     }
     if(action==="auditoria-busca"){ state.auditoriaBusca = e.target.value; render(); return; }
+    if(action==="restaurante-slug-input"){ state.restauranteSlugInput = e.target.value; return; }
   };
 
   app.ondragstart = function(e){

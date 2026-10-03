@@ -15,7 +15,8 @@ function mapComanda(row){
   return {id:row.id, codigo:row.codigo, mesaId:row.mesa_id, tipo:row.tipo, status:row.status,
     abertura:row.abertura, fechamento:row.fechamento, usuarioAbertura:row.usuario_abertura,
     taxaServicoAtiva:row.taxa_servico_ativa, descontoCentavos:row.desconto_centavos,
-    trocoCentavos:row.troco_centavos, fichaNumero:row.ficha_numero, itens:[], pagamentos:[]};
+    trocoCentavos:row.troco_centavos, fichaNumero:row.ficha_numero, totalCentavos:row.total_centavos,
+    updatedAt:row.updated_at, itens:[], pagamentos:[]};
 }
 function mapItem(row){
   return {id:row.id, comandaId:row.comanda_id, produtoId:row.produto_id, nome:row.nome, observacao:row.observacao||"",

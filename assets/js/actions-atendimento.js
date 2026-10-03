@@ -2,6 +2,27 @@
 
 // ---------- ações ----------
 
+// Fase 0.4 — slug do restaurante é resolvido uma vez (URL ?r=slug ou
+// localStorage) e guardado pra não pedir de novo a cada visita; "Trocar
+// restaurante" limpa e volta pra tela de código.
+function confirmarRestauranteSlug(){
+  var slug = (state.restauranteSlugInput||"").trim().toLowerCase().replace(/\s+/g,"-");
+  if(!slug){ state.restauranteSlugErro = "Informe o código do restaurante."; render(); return; }
+  state.restauranteSlugErro = "";
+  state.restauranteSlug = slug;
+  try{ localStorage.setItem("restauranteSlug", slug); }catch(e){}
+  carregarUsuariosLogin();
+}
+function trocarRestaurante(){
+  state.restauranteSlug = null;
+  state.usuariosLogin = [];
+  state.loginSelectedUserId = null;
+  state.restauranteSlugInput = "";
+  state.restauranteSlugErro = "";
+  try{ localStorage.removeItem("restauranteSlug"); }catch(e){}
+  render();
+}
+
 async function login(userId, pin){
   var candidato = state.usuariosLogin.find(function(x){ return x.id===userId; });
   if(!candidato) return;
@@ -13,7 +34,7 @@ async function login(userId, pin){
   state.carregando = true;
   render();
   try{
-    var res = await sb.auth.signInWithPassword({email:emailInterno(candidato.nome), password:pin});
+    var res = await sb.auth.signInWithPassword({email:candidato.email, password:pin});
     if(res.error) throw res.error;
     var claims = decodeJwt(res.data.session.access_token);
     if(!claims.empresa_id){ throw new Error("Usuário sem empresa vinculada."); }
@@ -96,10 +117,20 @@ async function cancelarComanda(comandaId){
   var res = await sb.from("comandas").update({status:"CANCELADA", fechamento:new Date().toISOString()}).eq("id", comandaId);
   if(res.error){ toast("err","ERRO AO CANCELAR COMANDA", res.error.message); return; }
   comanda.status = "CANCELADA";
-  registrarAuditoria("comanda", comandaId, "CANCELAR_COMANDA_VAZIA", state.usuarioAtualId, comanda.codigo);
+  registrarAuditoriaLocal("comanda", comandaId, "CANCELAR_COMANDA_VAZIA", state.usuarioAtualId, comanda.codigo);
   state.view = "salao"; state.viewParams = {};
   render();
   toast("ok","COMANDA CANCELADA", "Mesa liberada.");
+}
+// Fase 0.6 — comanda travada em FECHANDO (aba fechou no meio do
+// pagamento); reabertura manual via RPC (permissão atendimento.comanda.reabrir).
+async function reabrirComandaTravada(comandaId){
+  var res = await sb.rpc("reabrir_comanda", {p_comanda_id: comandaId});
+  if(res.error){ toast("err","ERRO AO REABRIR", res.error.message); return; }
+  var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
+  if(comanda){ comanda.status = "ABERTA"; comanda.updatedAt = res.data.updated_at; }
+  render();
+  toast("ok","COMANDA REABERTA", comanda?comanda.codigo:"");
 }
 function irParaComanda(comandaId){
   state.view = "comanda"; state.viewParams = {comandaId:comandaId};
@@ -156,31 +187,44 @@ async function enviarPedido(){
   toast("ok","PEDIDO ENVIADO", novos.length+" ite"+(novos.length===1?"m":"ns")+" para a cozinha");
 }
 
-function pedirSupervisor(permissaoNecessaria, motivo, onConfirm){
+// Fase 0.3 — autorização de supervisor agora é validada e gravada no
+// servidor (RPCs cancelar_item / aplicar_desconto, 0043). O client só
+// escolhe QUAL supervisor (um só, não testa vários) e manda o PIN dele
+// pra RPC verificar — nunca mais testa senha contra várias contas daqui.
+//
+// pedirSupervisorRpc() é genérico: quem chama passa um onConfirm(supervisorId,
+// pin) assíncrono que faz a chamada RPC específica e devolve true/false.
+function candidatosSupervisor(permissaoNecessaria){
+  return state.usuarios.filter(function(u){
+    return u.ativo && (MATRIZ[u.papel]||[]).indexOf(permissaoNecessaria)!==-1;
+  });
+}
+function pedirSupervisorRpc(permissaoNecessaria, motivo, onConfirm){
+  var candidatos = candidatosSupervisor(permissaoNecessaria);
   state.modal = {
-    type:"supervisor", permissao:permissaoNecessaria, motivo:motivo,
+    type:"supervisorRpc", permissao:permissaoNecessaria, motivo:motivo,
+    supervisorId: candidatos.length?candidatos[0].id:"",
     buffer:"", error:"", onConfirm:onConfirm
   };
   render();
 }
-async function supervisorDigit(d){
+async function supervisorRpcDigit(d){
   var m = state.modal;
   if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
   if(m.buffer.length>=PIN_LEN) return;
+  if(!m.supervisorId){ m.error = "Nenhum supervisor disponível com essa permissão."; render(); return; }
   m.buffer += d;
   if(m.buffer.length===PIN_LEN){
     m.verificando = true; render();
-    var sup = await verificarSupervisor(m.buffer, m.permissao);
+    var sucesso = await m.onConfirm(m.supervisorId, m.buffer);
     if(state.modal!==m) return;
-    if(sup){
+    if(sucesso){
       limparFalhasPin();
-      var cb = m.onConfirm;
       state.modal = null;
-      cb(sup);
     } else {
       m.buffer = "";
       var bloqueado = registrarFalhaPin();
-      m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
+      if(!m.error) m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
       m.verificando = false;
     }
   }
@@ -191,7 +235,9 @@ function abrirCancelarItem(comandaId, itemId){
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
   var item = comanda.itens.find(function(i){ return i.id===itemId; });
   var mesa = state.mesas.find(function(m){ return m.id===comanda.mesaId; });
-  state.modal = {type:"cancelarItem", comandaId:comandaId, itemId:itemId, item:item, mesaNum:mesa?mesa.numero:"?", motivo:"", buffer:"", error:""};
+  var candidatos = candidatosSupervisor(PERM.ITEM_CANCELAR);
+  state.modal = {type:"cancelarItem", comandaId:comandaId, itemId:itemId, item:item, mesaNum:mesa?mesa.numero:"?",
+    motivo:"", buffer:"", error:"", supervisorId: candidatos.length?candidatos[0].id:""};
   render();
 }
 async function cancelarItemDigit(d){
@@ -199,55 +245,55 @@ async function cancelarItemDigit(d){
   if(!m.motivo.trim()){ m.error = "Informe o motivo antes do PIN."; render(); return; }
   if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
   if(m.buffer.length>=PIN_LEN) return;
+  if(!m.supervisorId){ m.error = "Nenhum supervisor disponível com essa permissão."; render(); return; }
   m.error = "";
   m.buffer += d;
   if(m.buffer.length===PIN_LEN){
     m.verificando = true; render();
-    var sup = await verificarSupervisor(m.buffer, PERM.ITEM_CANCELAR);
+    var motivo = m.motivo.trim();
+    var res = await sb.rpc("cancelar_item", {p_item_id: m.itemId, p_motivo: motivo, p_supervisor_id: m.supervisorId, p_supervisor_pin: m.buffer});
     if(state.modal!==m) return;
-    if(sup){
+    if(!res.error){
       limparFalhasPin();
       var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
-      var item = comanda.itens.find(function(i){ return i.id===m.itemId; });
-      var jaPreparado = item.status==="PREPARANDO" || item.status==="PRONTO";
-      var motivo = m.motivo.trim();
-      var res = await sb.from("comanda_itens").update({status:"CANCELADO", cancelado_apos_preparo:jaPreparado, motivo_cancelamento:motivo}).eq("id", m.itemId);
-      if(res.error){ toast("err","ERRO AO CANCELAR", res.error.message); render(); return; }
-      item.status = "CANCELADO";
-      item.canceladoAposPreparo = jaPreparado;
-      item.motivoCancelamento = motivo;
-      registrarAuditoria("comanda_itens", m.itemId, "CANCELAR_ITEM", sup.id, motivo+" (aprovado por "+sup.nome+")"+(jaPreparado?" [já em preparo]":""));
+      var item = comanda ? comanda.itens.find(function(i){ return i.id===m.itemId; }) : null;
+      if(item){
+        item.status = "CANCELADO";
+        item.canceladoAposPreparo = !!res.data.cancelado_apos_preparo;
+        item.motivoCancelamento = res.data.motivo_cancelamento||motivo;
+      }
       state.modal = null;
       render();
-      toast("err","ITEM CANCELADO", item.nome);
+      toast("err","ITEM CANCELADO", item?item.nome:"");
     } else {
       m.buffer="";
       var bloqueado = registrarFalhaPin();
-      m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
+      m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : res.error.message;
       m.verificando = false;
       render();
     }
   } else render();
 }
 
-function aplicarDesconto(comandaId, percentInformado){
+async function aplicarDescontoDireto(comandaId, percentInformado){
+  var res = await sb.rpc("aplicar_desconto", {p_comanda_id: comandaId, p_percentual: percentInformado});
+  if(res.error){ toast("err","ERRO AO APLICAR DESCONTO", res.error.message); return; }
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
-  var t = totaisComanda(comanda);
-  var descontoCentavos = Math.round((t.subtotal) * percentInformado / 100);
-  async function aplicar(){
-    var res = await sb.from("comandas").update({desconto_centavos:descontoCentavos}).eq("id", comandaId);
-    if(res.error){ toast("err","ERRO AO APLICAR DESCONTO", res.error.message); return; }
-    comanda.descontoCentavos = descontoCentavos;
-    state.modal = null;
-    render();
-  }
-  if(percentInformado > limiteDescontoPct()){
-    pedirSupervisor(PERM.DESCONTO_APLICAR, "Desconto de "+percentInformado+"% acima do limite de "+limiteDescontoPct()+"%", function(supervisor){
-      registrarAuditoria("comandas", comandaId, "DESCONTO_ACIMA_LIMITE", supervisor.id, percentInformado+"% aprovado por "+supervisor.nome);
-      aplicar();
+  if(comanda) comanda.descontoCentavos = res.data.desconto_centavos;
+  state.modal = null;
+  render();
+}
+function aplicarDesconto(comandaId, percentInformado){
+  if(percentInformado > limiteDescontoPct() || !can(PERM.DESCONTO_APLICAR)){
+    pedirSupervisorRpc(PERM.DESCONTO_APLICAR, "Desconto de "+percentInformado+"% acima do limite de "+limiteDescontoPct()+"%", async function(supervisorId, pin){
+      var res = await sb.rpc("aplicar_desconto", {p_comanda_id: comandaId, p_percentual: percentInformado, p_supervisor_id: supervisorId, p_supervisor_pin: pin});
+      if(res.error){ return false; }
+      var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
+      if(comanda) comanda.descontoCentavos = res.data.desconto_centavos;
+      return true;
     });
   } else {
-    aplicar();
+    aplicarDescontoDireto(comandaId, percentInformado);
   }
 }
 
