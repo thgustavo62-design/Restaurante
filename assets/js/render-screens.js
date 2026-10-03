@@ -318,7 +318,7 @@ function renderKds(){
 function renderCaixa(){
   if(!state.caixaSessao || state.caixaSessao.status==="FECHADA"){
     var ultima = state.caixaSessao;
-    return '<div class="page-header"><div><div class="page-title">Caixa</div><div class="page-sub">Nenhuma sessão aberta</div></div></div>'+
+    return renderPageHeader("wallet", "Caixa", "Nenhuma sessão aberta")+
       '<div class="card" style="max-width:420px;">'+
       (ultima ? '<div class="alert-row '+(ultima.diferencaCentavos?"danger":"")+'">'+icon("alert",16)+'<div><span class="t">ÚLTIMO FECHAMENTO</span><span class="d">Diferença de '+brl(ultima.diferencaCentavos||0)+'</span></div></div>' : '')+
       '<div class="field"><label>Saldo inicial (troco)</label><input type="number" id="saldoInicialInput" placeholder="0,00" min="0" step="0.01"></div>'+
@@ -332,18 +332,18 @@ function renderCaixa(){
   var movs = movimentosDaSessao();
   var podeVerSaldoEsperado = ["ADMIN","GERENTE"].indexOf(usuarioAtual().papel)!==-1;
   var precisaSangria = podeVerSaldoEsperado && esperadoDinheiro > state.config.limiteAlertaSangriaCentavos;
-  return '<div class="page-header"><div><div class="page-title">Caixa</div><div class="page-sub">'+s.terminal+'</div></div></div>'+
+  return renderPageHeader("wallet", "Caixa", s.terminal)+
     '<div class="card caixa-status-card">'+
       '<div class="left"><div class="t"><span class="status-dot" style="display:inline-block; margin-right:6px;"></span>ABERTO</div>'+
       '<div class="d">Desde '+new Date(s.aberturaEm).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+' · '+escapeHtml(usuarioAtual().nome)+'</div></div>'+
     '</div>'+
     (precisaSangria ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">FAÇA UMA SANGRIA</span><span class="d">Dinheiro em gaveta passou de '+brl(state.config.limiteAlertaSangriaCentavos)+'</span></div></div>' : '')+
     '<div class="metric-grid">'+
-      '<div class="metric-card"><div class="metric-label">Dinheiro em gaveta</div><div class="metric-value">'+(podeVerSaldoEsperado ? brl(esperadoDinheiro) : '••••••')+'</div>'+
-      (podeVerSaldoEsperado ? '' : '<div style="font-size:10px; color:var(--text-muted); margin-top:4px; text-transform:uppercase; letter-spacing:.5px;">Oculto · conferência cega</div>')+
-      '</div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Dinheiro em gaveta</div><div class="kpi-value">'+(podeVerSaldoEsperado ? brl(esperadoDinheiro) : '••••••')+'</div>'+
+      (podeVerSaldoEsperado ? '' : '<div class="kpi-caption">Oculto · conferência cega</div>')+
+      '</div></div>'+
       Object.keys(porForma).map(function(f){
-        return '<div class="metric-card"><div class="metric-label">'+f+'</div><div class="metric-value small">'+brl(porForma[f])+'</div></div>';
+        return '<div class="kpi-card"><div class="kpi-icon">'+icon("landmark",20)+'</div><div class="kpi-body"><div class="kpi-label">'+f+'</div><div class="kpi-value">'+brl(porForma[f])+'</div></div></div>';
       }).join("")+
     '</div>'+
     '<div class="action-row">'+
@@ -353,9 +353,14 @@ function renderCaixa(){
     '</div>'+
     '<div class="shortcut-hint"><span><kbd>F8</kbd> Sangria</span><span><kbd>ESC</kbd> Fechar popup</span><span><kbd>ENTER</kbd> Confirmar</span></div>'+
     '<div class="section-label">Movimentos da sessão</div>'+
-    '<div class="card">'+(movs.length ? movs.slice().reverse().map(function(m){
-      return '<div class="mov-row"><span><span class="mov-tipo '+m.tipo+'">'+m.tipo+'</span>'+(m.motivo?escapeHtml(m.motivo):escapeHtml(m.formaPagamento))+'<div class="tag">'+new Date(m.createdAt).toLocaleTimeString("pt-BR")+'</div></span><span>'+brl(m.valorCentavos)+'</span></div>';
-    }).join("") : '<div class="empty-hint">Nenhum movimento ainda.</div>')+'</div>';
+    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Tipo</th><th>Descrição</th><th>Horário</th><th style="text-align:right;">Valor</th></tr></thead><tbody>'+
+    (movs.length ? movs.slice().reverse().map(function(m){
+      return '<tr><td><span class="mov-tipo '+m.tipo+'">'+m.tipo+'</span></td>'+
+        '<td>'+(m.motivo?escapeHtml(m.motivo):escapeHtml(m.formaPagamento))+'</td>'+
+        '<td>'+new Date(m.createdAt).toLocaleTimeString("pt-BR")+'</td>'+
+        '<td style="text-align:right; font-weight:700;">'+brl(m.valorCentavos)+'</td></tr>';
+    }).join("") : '<tr><td colspan="4"><div class="empty-hint">Nenhum movimento ainda.</div></td></tr>')+
+    '</tbody></table></div></div>';
 }
 
 function renderAuditoria(){
@@ -373,8 +378,16 @@ function renderCardapio(){
   var filtro = state.cardapioFiltro || "Todos";
   var tabs = ["Todos"].concat(state.categorias);
   var lista = state.produtos.filter(function(p){ return filtro==="Todos" || p.categoria===filtro; });
-  return '<div class="page-header"><div><div class="page-title">Cardápio</div><div class="page-sub">'+state.produtos.length+' produtos · '+state.categorias.length+' categorias</div></div>'+
-      (podeEditar ? '<button class="btn btn-primary" data-action="produto-novo">'+icon("plus",15)+' Novo produto</button>' : '')+
+  var ativos = state.produtos.filter(function(p){ return p.ativo; }).length;
+  var esgotados = state.produtos.filter(function(p){ return p.esgotado; }).length;
+  var semFoto = state.produtos.filter(function(p){ return !p.fotoUrl; }).length;
+  return renderPageHeader("book", "Cardápio", state.produtos.length+" produtos · "+state.categorias.length+" categorias",
+      (podeEditar ? '<button class="btn btn-primary" data-action="produto-novo">'+icon("plus",15)+' Novo produto</button>' : ''))+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("book",20)+'</div><div class="kpi-body"><div class="kpi-label">Produtos ativos</div><div class="kpi-value">'+ativos+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("alert",20)+'</div><div class="kpi-body"><div class="kpi-label">Esgotados</div><div class="kpi-value">'+esgotados+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("grid",20)+'</div><div class="kpi-body"><div class="kpi-label">Categorias</div><div class="kpi-value">'+state.categorias.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("image",20)+'</div><div class="kpi-body"><div class="kpi-label">Sem foto</div><div class="kpi-value">'+semFoto+'</div></div></div>'+
     '</div>'+
     '<div class="tabs">'+tabs.map(function(c){ return '<div class="tab '+(filtro===c?"active":"")+'" data-action="cardapio-filtro" data-f="'+escapeHtml(c)+'">'+escapeHtml(c)+'</div>'; }).join("")+'</div>'+
     '<div class="card">'+
@@ -393,33 +406,42 @@ function renderCardapio(){
     '</div>';
 }
 
+function estoqueStatus(i){
+  if(i.estoqueAtual < i.estoqueMinimo) return {lbl:"Crítico", cls:"badge-status-critico"};
+  if(i.estoqueAtual <= i.estoqueMinimo*1.2) return {lbl:"Repor", cls:"badge-status-atencao"};
+  return {lbl:"OK", cls:"badge-status-ok"};
+}
 function renderEstoque(){
   var podeEditar = can(PERM.ESTOQUE);
-  var baixos = state.insumos.filter(function(i){ return i.estoqueAtual<=i.estoqueMinimo; });
-  return '<div class="page-header"><div><div class="page-title">Estoque</div><div class="page-sub">'+state.insumos.length+' insumos · '+baixos.length+' abaixo do mínimo</div></div>'+
-      (podeEditar ? '<button class="btn btn-primary" data-action="insumo-mov-abrir" data-tipo="ENTRADA">'+icon("plus",15)+' Nova entrada</button>' : '')+
+  var baixos = state.insumos.filter(function(i){ return i.estoqueAtual<i.estoqueMinimo; });
+  var valorEstoque = state.insumos.reduce(function(s,i){ return s + Math.round(i.estoqueAtual*i.custoMedioCentavos); },0);
+  return renderPageHeader("package", "Estoque", state.insumos.length+" insumos · "+baixos.length+" abaixo do mínimo",
+      (podeEditar ? '<button class="btn btn-primary" data-action="insumo-mov-abrir" data-tipo="ENTRADA">'+icon("plus",15)+' Nova entrada</button>' : ''))+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("package",20)+'</div><div class="kpi-body"><div class="kpi-label">Insumos cadastrados</div><div class="kpi-value">'+state.insumos.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("alert",20)+'</div><div class="kpi-body"><div class="kpi-label">Abaixo do mínimo</div><div class="kpi-value">'+baixos.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Valor em estoque</div><div class="kpi-value">'+brl(valorEstoque)+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Movimentos recentes</div><div class="kpi-value">'+state.estoqueMovimentos.length+'</div></div></div>'+
     '</div>'+
     (baixos.length ? baixos.map(function(i){
       return '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">ESTOQUE BAIXO</span><span class="d">'+escapeHtml(i.nome)+' — '+i.estoqueAtual+' '+i.unidade+' (mín. '+i.estoqueMinimo+')</span></div></div>';
     }).join("") : "")+
-    '<div class="card">'+
+    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Produto</th><th>Quantidade</th><th>Unidade</th><th>Mínimo</th><th>Status</th>'+(podeEditar?'<th></th>':'')+'</tr></thead><tbody>'+
     state.insumos.map(function(i){
-      var pct = Math.max(4, Math.min(100, Math.round(i.estoqueAtual/(i.estoqueMinimo*2||1)*100)));
-      var baixo = i.estoqueAtual<=i.estoqueMinimo;
+      var st = estoqueStatus(i);
       var rend = state.insumoRendimentos.find(function(r){ return r.insumoId===i.id; });
-      return '<div class="data-row">'+
-        '<div class="main"><div class="nome">'+escapeHtml(i.nome)+' '+(baixo?'<span class="badge badge-baixo">Baixo</span>':'<span class="badge badge-ok">OK</span>')+'</div>'+
-        '<div class="sub">'+i.estoqueAtual+' '+i.unidade+' em estoque · mínimo '+i.estoqueMinimo+' '+i.unidade+' · custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+
-          (rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div>'+
-        '<div class="stock-bar"><div class="stock-bar-fill '+(baixo?"low":"")+'" style="width:'+pct+'%"></div></div></div>'+
-        (podeEditar ? '<div class="acts">'+
+      return '<tr><td><div style="font-weight:700;">'+escapeHtml(i.nome)+'</div>'+
+          '<div style="font-size:10.5px; color:var(--text-muted);">custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+(rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div></td>'+
+        '<td>'+i.estoqueAtual+'</td><td>'+i.unidade+'</td><td>'+i.estoqueMinimo+'</td>'+
+        '<td><span class="badge '+st.cls+'">'+st.lbl+'</span></td>'+
+        (podeEditar ? '<td><div class="acts">'+
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="ENTRADA" data-insumo="'+i.id+'">Entrada</button>'+
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="SAIDA" data-insumo="'+i.id+'">Saída</button>'+
           '<button class="btn btn-sm" data-action="rendimento-abrir" data-insumo="'+i.id+'">Rendimento</button>'+
-        '</div>' : '')+
-      '</div>';
+        '</div></td>' : '')+
+      '</tr>';
     }).join("")+
-    '</div>'+
+    '</tbody></table></div></div>'+
     '<div class="section-label">Movimentações recentes</div>'+
     '<div class="card">'+(state.estoqueMovimentos.length ? state.estoqueMovimentos.slice().reverse().slice(0,20).map(function(m){
       var i = state.insumos.find(function(x){ return x.id===m.insumoId; });
@@ -432,11 +454,18 @@ function renderEstoque(){
 function renderCompras(){
   var podeEditar = can(PERM.ESTOQUE);
   var statusLbl = {RASCUNHO:"Rascunho", PEDIDO_REALIZADO:"Pedido realizado", RECEBIDO:"Recebido"};
-  return '<div class="page-header"><div><div class="page-title">Compras</div><div class="page-sub">'+state.fornecedores.length+' fornecedores · '+state.pedidosCompra.length+' pedidos</div></div>'+
+  var contagem = {RASCUNHO:0, PEDIDO_REALIZADO:0, RECEBIDO:0};
+  state.pedidosCompra.forEach(function(p){ contagem[p.status] = (contagem[p.status]||0)+1; });
+  return renderPageHeader("truck", "Compras", state.fornecedores.length+" fornecedores · "+state.pedidosCompra.length+" pedidos",
       (podeEditar ? '<div class="action-row" style="flex:0 0 auto;">'+
         '<button class="btn" data-action="fornecedor-novo">'+icon("plus",15)+' Fornecedor</button>'+
         (state.fornecedores.length ? '<button class="btn btn-primary" data-action="pedido-compra-novo">'+icon("plus",15)+' Pedido de compra</button>' : '')+
-      '</div>' : '')+
+      '</div>' : ''))+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("truck",20)+'</div><div class="kpi-body"><div class="kpi-label">Fornecedores</div><div class="kpi-value">'+state.fornecedores.length+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:var(--surface-03); color:var(--text-muted);">'+icon("package",20)+'</div><div class="kpi-body"><div class="kpi-label">Em rascunho</div><div class="kpi-value">'+contagem.RASCUNHO+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(245,176,20,.14); color:var(--warning);">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Pedido realizado</div><div class="kpi-value">'+contagem.PEDIDO_REALIZADO+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(34,197,94,.14); color:var(--success);">'+icon("check",20)+'</div><div class="kpi-body"><div class="kpi-label">Recebidos</div><div class="kpi-value">'+contagem.RECEBIDO+'</div></div></div>'+
     '</div>'+
     '<div class="section-label">Fornecedores</div>'+
     '<div class="card">'+

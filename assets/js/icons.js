@@ -31,7 +31,8 @@ var ICONS = {
   chevronRight:'<path d="M9 6l6 6-6 6"></path>',
   trendingUp:'<path d="M3 17l6-6 4 4 8-8"></path><path d="M17 7h4v4"></path>',
   target:'<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"></circle>',
-  truck:'<path d="M3 7h11v9H3z"></path><path d="M14 11h4l3 3v2h-7z"></path><circle cx="7.5" cy="18" r="1.6"></circle><circle cx="17.5" cy="18" r="1.6"></circle>'
+  truck:'<path d="M3 7h11v9H3z"></path><path d="M14 11h4l3 3v2h-7z"></path><circle cx="7.5" cy="18" r="1.6"></circle><circle cx="17.5" cy="18" r="1.6"></circle>',
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path>'
 };
 function icon(name, size, cls){
   size = size||18;
