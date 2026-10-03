@@ -6,17 +6,24 @@
 <title>Cardápio</title>
 <link rel="icon" type="image/png" href="assets/logo/rancho-netto-white-bg.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 :root{
-  --background:#0A0A0B; --surface-01:#101112; --border:#2A2C2F;
-  --text-primary:#F4F2ED; --text-muted:#8E8F92;
-  --primary:#F05A24; --danger:#D83A32;
-  --font-display:'Barlow Condensed','Oswald','Arial Narrow',sans-serif;
+  --background:#050B18; --surface-01:#0A1A30; --border:#16345C;
+  --text-primary:#EAF2FF; --text-muted:#7F95B3;
+  --primary:#1E8BFF; --danger:#EF4444;
+  --font-display:'Exo 2','Oswald','Arial Narrow',sans-serif;
   --font-body:'Inter','Segoe UI',system-ui,sans-serif;
 }
 *{box-sizing:border-box;}
-body{margin:0; background:var(--background); color:var(--text-primary); font-family:var(--font-body); padding:16px 16px 48px;}
+body{
+  margin:0; color:var(--text-primary); font-family:var(--font-body); padding:16px 16px 48px;
+  background:
+    radial-gradient(ellipse 900px 600px at 0% 0%, rgba(30,139,255,.14), transparent 60%),
+    var(--background);
+  background-attachment:fixed;
+}
 h1,h2{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .cp-header{text-align:center; padding:24px 0 12px;}
 .cp-header h1{font-size:28px; font-weight:800;}
@@ -31,6 +38,7 @@ h1,h2{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .cp-item-preco{font-family:var(--font-display); font-size:18px; font-weight:800; color:var(--primary); margin-top:8px;}
 .cp-esgotado-label{color:var(--danger); font-family:var(--font-body); font-size:11px; text-transform:uppercase; letter-spacing:.5px;}
 .cp-erro{max-width:480px; margin:60px auto; text-align:center; color:var(--text-muted); font-size:14px;}
+.cp-footer-marca{text-align:center; margin-top:28px; font-size:10.5px; color:var(--text-muted); letter-spacing:.3px;}
 </style>
 </head>
 <body>

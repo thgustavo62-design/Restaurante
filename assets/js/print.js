@@ -22,8 +22,7 @@ function buildReciboHtml(comanda){
     return '<div class="line"><span>'+p.forma+'</span><span>'+brl(p.valorCentavos)+'</span></div>';
   }).join("");
   return '<div class="receipt-preview" style="width:'+largura+'; max-width:'+largura+';">'+
-    '<img class="receipt-logo" src="assets/logo/rancho-netto-dark.png" alt="">'+
-    '<div class="center bold">'+escapeHtml(state.config.empresaNome)+'</div>'+
+    '<div class="center bold receipt-brand">'+escapeHtml(state.config.empresaNome||"—")+'</div>'+
     '<div class="center">'+escapeHtml(state.config.empresaCnpj)+'</div>'+
     '<hr>'+
     '<div class="center bold">COMPROVANTE DE PAGAMENTO</div>'+
@@ -45,6 +44,7 @@ function buildReciboHtml(comanda){
     (comanda.trocoCentavos>0 ? '<div class="line"><span>Troco</span><span>'+brl(comanda.trocoCentavos)+'</span></div>' : '')+
     '<hr>'+
     '<div class="center">'+escapeHtml(state.config.reciboRodape)+'</div>'+
+    '<div class="center marca-rodape">Vision Food</div>'+
   '</div>';
 }
 
@@ -58,8 +58,7 @@ function buildFechamentoHtml(sessao){
   var suprimentos = movs.filter(function(m){ return m.tipo==="SUPRIMENTO"; });
   var largura = state.config.impressoraLargura==="58mm" ? "58mm" : "80mm";
   return '<div class="receipt-preview" style="width:'+largura+'; max-width:'+largura+';">'+
-    '<img class="receipt-logo" src="assets/logo/rancho-netto-dark.png" alt="">'+
-    '<div class="center bold">'+escapeHtml(state.config.empresaNome)+'</div>'+
+    '<div class="center bold receipt-brand">'+escapeHtml(state.config.empresaNome||"—")+'</div>'+
     '<div class="center bold">FECHAMENTO DE CAIXA</div>'+
     '<hr>'+
     '<div class="line"><span>Terminal</span><span>'+escapeHtml(sessao.terminal)+'</span></div>'+
@@ -79,6 +78,7 @@ function buildFechamentoHtml(sessao){
     '<div class="line bold"><span>Diferença</span><span>'+brl(sessao.diferencaCentavos||0)+'</span></div>'+
     '<hr>'+
     '<div class="center">Relatório gerado localmente — conferência interna</div>'+
+    '<div class="center marca-rodape">Vision Food</div>'+
   '</div>';
 }
 

@@ -3,3 +3,4 @@
 state = estadoVazio();
 render();
 carregarUsuariosLogin();
+iniciarRelogioTopbar();

@@ -3,14 +3,14 @@
 function renderLogin(){
   if(!state.loginSelectedUserId){
     return '<div class="login-wrap"><div class="login-card">'+
-      '<img class="login-logo" src="assets/logo/rancho-netto-white.png" alt="Rancho Netto — Brasa &amp; Fogo">'+
+      '<img class="login-logo" src="assets/logo/vision-food.svg" alt="Vision Food">'+
       '<p>Selecione seu usuário para entrar</p>'+
       '<div class="user-grid">'+
         (state.usuariosLogin.length ? state.usuariosLogin.map(function(u){
           return '<div class="user-card" data-action="login-select" data-uid="'+u.id+'">'+
             '<div class="nome">'+escapeHtml(u.nome)+'</div>'+
           '</div>';
-        }).join("") : '<div class="empty-hint">Conectando ao Supabase...</div>')+
+        }).join("") : '<div class="empty-hint">Conectando...</div>')+
       '</div>'+
     '</div></div>';
   }

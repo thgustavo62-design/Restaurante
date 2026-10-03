@@ -33,8 +33,8 @@ function render(){
   }
   if(state.carregando || !usuarioAtual()){
     app.innerHTML = '<div class="login-wrap"><div class="login-card">'+
-      '<img class="login-logo" src="assets/logo/rancho-netto-white.png" alt="Rancho Netto">'+
-      '<h1>CARREGANDO</h1><p>Sincronizando com o Supabase...</p></div></div>';
+      '<img class="login-logo" src="assets/logo/vision-food.svg" alt="Vision Food">'+
+      '<h1>CARREGANDO</h1><p>Sincronizando dados...</p></div></div>';
     return;
   }
   var html = '<div class="shell">'+
@@ -67,8 +67,9 @@ function renderSidebar(){
   var items = NAV_ITEMS.filter(function(n){ return can(n.perm); });
   return '<div class="sidebar '+(state.sidebarCollapsed?"collapsed":"")+' '+(state.sidebarMobileAberto?"mobile-open":"")+'">'+
     '<div class="sidebar-brand">'+
-      '<img class="sidebar-logo" src="assets/logo/rancho-netto-white.png" alt="Rancho Netto">'+
-      '<div class="brand-text"><div class="name">RANCHO NETTO</div><div class="sub">BRASA &amp; FOGO</div></div>'+
+      '<img class="sidebar-logo" src="assets/logo/vision-food-icon.svg" alt="Vision Food">'+
+      '<div class="brand-text"><div class="name"><span class="vf-vision">VISION</span> <span class="vf-food">FOOD</span></div>'+
+        '<div class="sub">A inovação tecnológica para o seu restaurante</div></div>'+
       '<button class="icon-btn sidebar-close" data-action="sidebar-fechar">'+icon("x",16)+'</button>'+
     '</div>'+
     '<div class="nav-scroll">'+
@@ -86,20 +87,53 @@ function renderSidebar(){
   '</div>';
 }
 
+var MESES_EXTENSO = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+var DIAS_SEMANA_EXTENSO = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
+function formatarDataPorExtenso(d){
+  return DIAS_SEMANA_EXTENSO[d.getDay()]+", "+d.getDate()+" de "+MESES_EXTENSO[d.getMonth()]+" de "+d.getFullYear();
+}
+function formatarHoraMin(d){
+  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+function atualizarRelogioTopbar(){
+  var agora = new Date();
+  var elHora = document.getElementById("topbarHora");
+  var elData = document.getElementById("topbarData");
+  if(elHora) elHora.textContent = formatarHoraMin(agora);
+  if(elData) elData.textContent = formatarDataPorExtenso(agora);
+}
+function iniciarRelogioTopbar(){
+  atualizarRelogioTopbar();
+  setInterval(atualizarRelogioTopbar, 15000);
+}
+
 function renderTopbar(){
   var u = usuarioAtual();
   var title = PAGE_TITLES[state.view] || "";
   var aberto = estaAberto();
+  var agora = new Date();
+
+  // "Sincronizado" reflete o canal Realtime de verdade (data.js), não um
+  // texto fixo — offline, conectando (canal ainda não assinado) ou
+  // sincronizado (canal ativo) são os três estados reais possíveis.
+  var online = navigator.onLine;
+  var canalAtivo = (typeof realtimeChannel !== "undefined") && !!realtimeChannel;
+  var conexaoCor = !online ? "var(--danger)" : (canalAtivo ? "var(--success)" : "var(--warning)");
+  var conexaoTexto = !online ? "SEM CONEXÃO" : (canalAtivo ? "SINCRONIZADO" : "CONECTANDO");
+  var conexaoDetalhe = !online ? "reconectando..." : (canalAtivo ? "tempo real ativo" : "aguardando canal...");
+
   return '<div class="topbar">'+
     '<button class="icon-btn" data-action="toggle-sidebar">'+icon("menu",18)+'</button>'+
     '<div class="topbar-title">'+title+'</div>'+
     '<div class="topbar-spacer"></div>'+
+    '<div class="status-pill topbar-clock"><span class="data-extenso" id="topbarData">'+formatarDataPorExtenso(agora)+'</span>'+
+      '<span style="margin-left:6px;" id="topbarHora">'+formatarHoraMin(agora)+'</span></div>'+
     '<div class="status-pill">'+
       '<span class="status-dot" style="background:'+(aberto?"var(--success)":"var(--danger)")+';"></span>'+
       (aberto?"ABERTO":"FECHADO")+
       ' <span class="pill-detail" style="color:var(--text-muted);">· '+state.config.horarioAbertura+'–'+state.config.horarioFechamento+'</span>'+
     '</div>'+
-    '<div class="status-pill pill-conexao"><span class="status-dot" style="background:'+(navigator.onLine?"var(--success)":"var(--danger)")+';"></span>'+(navigator.onLine?"SUPABASE":"SEM CONEXÃO")+' <span class="pill-detail" style="color:var(--text-muted);">· '+(navigator.onLine?"sincronizado em tempo real":"reconectando...")+'</span></div>'+
+    '<div class="status-pill pill-conexao"><span class="status-dot" style="background:'+conexaoCor+';"></span>'+conexaoTexto+' <span class="pill-detail" style="color:var(--text-muted);">· '+conexaoDetalhe+'</span></div>'+
     '<div class="user-chip">'+
       '<div class="avatar">'+escapeHtml(u.nome.charAt(0))+'</div>'+
       '<div class="meta"><div class="nome">'+escapeHtml(u.nome)+'</div><div class="papel">'+u.papel+'</div></div>'+

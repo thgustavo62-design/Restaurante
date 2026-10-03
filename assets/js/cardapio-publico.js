@@ -75,6 +75,8 @@ async function cpCarregar(){
   });
   if(!temAlgumProduto) html += '<div class="cp-erro">Nenhum produto disponível no momento.</div>';
 
+  html += '<div class="cp-footer-marca">feito com Vision Food</div>';
+
   root.innerHTML = html;
 }
 
