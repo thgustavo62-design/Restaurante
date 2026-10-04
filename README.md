@@ -1,11 +1,18 @@
 # Vision Food
 
 Sistema de gestão para restaurante/bar: atendimento de salão, cozinha (KDS),
-caixa, cardápio, estoque, compras, financeiro, relatórios e equipe — rodando
-**100% sobre o Supabase** (Postgres + Auth + Realtime). Não há backend
-próprio: o front-end fala direto com o banco, e a segurança (quem pode ver
-e escrever o quê) é garantida pelo próprio Postgres via Row Level Security
-(RLS), não pela interface.
+caixa, cardápio, estoque, compras, financeiro, clientes/fidelidade,
+marketing (cupons, reativação, banner), relatórios, equipe e pedido pelo
+QR da mesa (cardápio público completo, com opções/adicionais, sem precisar
+de atendente pra anotar) — rodando **100% sobre o Supabase** (Postgres +
+Auth + Realtime). Não há backend próprio: o front-end fala direto com o
+banco, e a segurança (quem pode ver e escrever o quê) é garantida pelo
+próprio Postgres via Row Level Security (RLS), não pela interface.
+
+Todas as fases do roteiro de evolução (Fase 0 a Fase 5) estão
+implementadas e em produção — ver a tabela de telas, o histórico de
+migrations e [Pendências conhecidas](#pendências-conhecidas) abaixo pro
+que ainda depende de decisão humana ou de um provedor externo pago.
 
 **Vision Food** é o produto/plataforma; o restaurante que usa esta instância
 hoje é o **Rancho Netto — Brasa & Fogo**, cadastrado em `empresas` e exibido
@@ -90,7 +97,7 @@ Configurações continuam soltos, por não terem um par óbvio.
 |---|---|
 | **Dashboard** | Vendas do dia, ticket médio, mesas ocupadas, gráfico de vendas por hora, situação da cozinha e alertas (mesa atrasada, caixa fechado, sangria recomendada). |
 | **Atendimento (Salão)** | Mapa de mesas com status (livre / ocupada / aguardando pagamento) e tempo de ocupação. Botões **Balcão** e **Nova ficha** abrem uma venda sem mesa (fila por balcão ou ficha numerada — number atribuído automaticamente, até o limite configurado de fichas). Painel lateral lista todas as comandas abertas, seja de mesa, balcão ou ficha. |
-| **Comanda** | Catálogo de produtos por categoria (com busca e foto, se cadastrada) pra lançar itens — produto com perguntas/adicionais abre um seletor de opções antes de entrar no pedido; revisão do pedido antes de enviar pra cozinha; cancelar item e aplicar desconto (qualquer garçom pode pedir, mas sempre com PIN de um supervisor escolhido num dropdown — verificado no servidor); transferir item pra outra comanda, transferir a comanda pra outra mesa, juntar com outra mesa; fechar conta — inteira, dividida por pessoas ou **por item escolhido** (pagamento parcial: a comanda só fecha quando o último item é pago). Se o pagamento travar (aba fechou no meio), aparece "Reabrir" depois de 10 minutos em fechamento. |
+| **Comanda** | Catálogo de produtos por categoria (com busca e foto, se cadastrada) pra lançar itens — produto com perguntas/adicionais abre um seletor de opções antes de entrar no pedido; revisão do pedido antes de enviar pra cozinha; cancelar item e aplicar desconto (qualquer garçom pode pedir, mas sempre com PIN de um supervisor escolhido num dropdown — verificado no servidor); transferir item pra outra comanda, transferir a comanda pra outra mesa, juntar com outra mesa; fechar conta — inteira, dividida por pessoas ou **por item escolhido** (pagamento parcial: a comanda só fecha quando o último item é pago). No fechamento (modo "dividir por pessoas"): escolher cliente (ganha pontos de fidelidade), resgatar pontos como desconto, e **aplicar cupom de marketing** (código validado na hora, mostra o desconto antes de confirmar) — os três descontos empilham entre si. Se o pagamento travar (aba fechou no meio), aparece "Reabrir" depois de 10 minutos em fechamento. |
 | **Cozinha (KDS)** | Kanban (Pendente → Preparando → Pronto → Entregue) dos itens lançados, com abas pra filtrar por setor de produção (Bar / Cozinha / Brasa / Sobremesa) — cada produto tem um setor, gravado no item no momento do lançamento. Botão de som (precisa de 1 clique pra ativar, por causa do autoplay do navegador) toca um bipe quando chega pedido novo em qualquer terminal. Ticket com mais de um item ganha um botão pra avançar todos de uma vez, além do botão por item. Ordenado do pedido mais antigo pro mais novo. Atraso configurável por setor (Configurações). Mostra itens de qualquer comanda do dia operacional, **inclusive já paga** (balcão/ficha paga na hora não some mais da cozinha antes de sair). Alerta separado pra item cancelado depois de já estar em preparo. |
 | **Atendimento (Salão)** — aviso de pronto | Mesa com item marcado **PRONTO** pela cozinha pisca um destaque amarelo no mapa de mesas, e a tela da comanda mostra um aviso "pronto para servir" — sem precisar recarregar (via Realtime). |
 | **Atendimento (Salão)** — pedido pelo QR e delivery | Botões **Delivery** (escolhe cliente, endereço/bairro com taxa sugerida, agenda horário) e card de **pedidos pelo QR da mesa** aguardando confirmação do garçom (aceitar lança os itens na cozinha; rejeitar descarta) — nunca vai direto pra cozinha sem um humano aprovar. |
@@ -102,7 +109,7 @@ Configurações continuam soltos, por não terem um par óbvio.
 | **Clientes** | CRM básico: nome, telefone, endereço/bairro (pra delivery), aniversário, observações, consentimento LGPD. Ficha do cliente mostra saldo de fiado em aberto, **pontos de fidelidade** e histórico de visitas. Cliente é opcional em qualquer pagamento (ganha pontos — padrão 1 ponto por R$1, configurável) e obrigatório no fiado (não é mais texto livre); pontos acumulados podem ser resgatados como desconto na hora de fechar a conta. |
 | **Relatórios** | Aba **Vendas**: ranking de produtos e desempenho por garçom (por quem **lançou** o item), por período (hoje / 7 dias / 30 dias / escolher mês). Aba **Gestão**: CMV e margem por produto (alerta quando custo ≥ preço), relatório anti-fraude (cancelamentos e descontos por funcionário), taxa de serviço estimada por garçom, curva ABC, heatmap de vendas por dia×hora e taxas pagas às maquininhas. Aba **DRE mensal**: faturamento − CMV − despesas = resultado, por mês. Tudo agregado no banco — não carrega mais comandas/itens completos no navegador, e o total de cada venda é o valor travado no pagamento, não recalculado com a taxa de serviço atual. |
 | **QR Codes das mesas** | Gera o QR de cada mesa cadastrada direto no navegador (biblioteca client-side, sem nenhum serviço externo), aponta pra `/cardapio/:slug?mesa=N`. Imprimir individual, imprimir todas numa grade, ou baixar PNG. Dentro do grupo **Atendimento** no menu. |
-| **Marketing** | Três abas: **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos — aplicado no fechamento da conta via `confirmar_pagamento`, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (quem não compra há N dias, pra reativação manual); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público). |
+| **Marketing** | Três abas: **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos; ativar/desativar; contador de usos — aplicado direto na tela de pagamento do Caixa, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (busca por "sem comprar há N dias", com telefone e saldo de pontos, pra reativação manual); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público, visível a qualquer cliente que escaneie o QR). |
 | **Equipe** | Criar funcionário (nome, papel, PIN), ativar/desativar, e **trocar PIN** de um funcionário existente sem precisar recriá-lo. |
 | **Auditoria** | Trilha de ações sensíveis (desconto aprovado, item cancelado, preço alterado, caixa fechado com diferença, PIN alterado, etc.), com quem fez e quando. |
 | **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, e o **link do cardápio público** (a tela QR Codes das mesas já gera o QR pronto pra imprimir — este link aqui é só pra referência/compartilhar manualmente). |
@@ -111,23 +118,55 @@ Configurações continuam soltos, por não terem um par óbvio.
 
 Página HTML separada, sem login, acessível em `/cardapio/:slug` (rewrite
 configurado em `vercel.json`, servido estaticamente igual ao app
-principal). Lê só nome, preço, categoria, status de esgotado e foto dos
-produtos *ativos* — nunca estoque, custo, funcionários ou vendas. Usa seu
-próprio script (`assets/js/cardapio-publico.js`), com a mesma chave pública
-do Supabase, mas via políticas de RLS específicas para o papel `anon`
+principal) ou em `cardapio.html?slug=:slug`. Lê só nome, preço, categoria,
+status de esgotado, foto e opções/adicionais dos produtos *ativos* — nunca
+estoque, custo, funcionários ou vendas. Usa seu próprio script
+(`assets/js/cardapio-publico.js`), com a mesma chave pública do Supabase,
+mas via políticas de RLS específicas para o papel `anon`
 (ver `0030_cardapio_publico_restaurante.sql`).
 
-**Pedido pelo QR da mesa (Fase 3.3)**: link com `?mesa=N` (o QR impresso
-em cada mesa já codifica isso) libera carrinho de pedido — produto com
-grupo de opção obrigatório fica marcado "peça direto com o garçom" (não
-dá pra escolher opção pelo celular ainda). O pedido cai em
-`restaurante.pedidos_qr`, status `PENDENTE`, **nunca** direto em
-`comanda_itens` — só vira item de cozinha de verdade quando um garçom
-confirma pela tela de Atendimento (RPC `confirmar_pedido_qr`, que relê o
-preço do banco igual qualquer outro lançamento). anon não tem nenhuma
-policy de insert/select direto nessa tabela, só a RPC grava; no máximo 1
-pedido pendente por mesa por vez (trava spam — só dá pra mandar outro
-depois do garçom confirmar ou rejeitar o anterior).
+Sempre visível, com ou sem mesa (modo só-leitura pra quem só quer ver o
+cardápio sem pedir):
+
+- **Busca** (filtra por nome, em tempo real) e **navegação por categoria**
+  (chips no topo que rolam até a seção — fica fixo no topo da tela ao
+  rolar).
+- **Banner opcional** (Fase 5/Marketing): texto + produto em destaque,
+  configurado em Marketing → Banner do cardápio; some automaticamente se
+  não tiver sido ativado.
+
+**Pedido pelo QR da mesa (Fase 3.3, completo na Fase 5)**: link com
+`?mesa=N` (o QR impresso em cada mesa — gerado na tela **QR Codes das
+mesas** do app — já codifica isso) libera o carrinho de pedido:
+
+- Produto **sem** nenhuma opção/adicional: botões `+`/`−` direto no card,
+  igual uma loja comum.
+- Produto **com** grupo de opção (obrigatório ou não — ex: "Ponto da
+  carne", "Adicionais") abre um modal de escolha antes de entrar no
+  carrinho, com a mesma validação de mínimo/máximo/obrigatoriedade que o
+  app interno já usa pra qualquer lançamento de garçom
+  (`trg_comanda_itens_calcula_preco`, `0051`/`0056`) — **nenhum produto
+  fica de fora do autoatendimento**. Combinações diferentes de opções do
+  mesmo produto (ex: "Picanha ao ponto" × "Picanha mal passada") viram
+  linhas separadas no carrinho.
+- Revisão do pedido antes de enviar: +/−/remover por linha, observação
+  geral opcional, total recalculado na hora.
+- O pedido cai em `restaurante.pedidos_qr`, status `PENDENTE`, **nunca**
+  direto em `comanda_itens` — só vira item de cozinha de verdade quando um
+  garçom confirma pela tela de Atendimento (card "Pedidos pelo QR da
+  mesa", mostrando os itens **e** as opções escolhidas antes de aceitar).
+  RPC `confirmar_pedido_qr` relê e revalida tudo do banco de novo nesse
+  momento (preço, opções, produto ainda ativo/não esgotado) — nunca confia
+  no que ficou gravado entre o pedido e a confirmação. anon não tem
+  nenhuma policy de insert/select direto na tabela `pedidos_qr`, só a RPC
+  `criar_pedido_qr` grava; no máximo 1 pedido pendente por mesa por vez
+  (trava spam — só dá pra mandar outro depois do garçom confirmar ou
+  rejeitar o anterior).
+- **Por que ainda passa pelo garçom**: decisão deliberada, não limitação
+  técnica — nenhum pedido vira produção/cobrança sem um humano conferir
+  (produto esgotado na hora, erro de digitação do cliente, mesa errada).
+  Tirar essa aprovação é uma mudança de risco real (ver
+  [Pendências conhecidas](#pendências-conhecidas)), não foi pedida.
 
 ### Contingência sem internet (Fase 3.5)
 
@@ -370,8 +409,17 @@ Consequências práticas:
   próprio dispositivo), `caixa_movimentos`, `pagamentos`.
 - **Financeiro**: `contas`.
 - **Compras**: `fornecedores`, `pedidos_compra`, `pedidos_compra_itens`.
-- **Cardápio público**: view `cardapio_publico_empresa` + policies `*_select_publico`
-  (`to anon`) em `produtos`/`categorias`/`grupos_opcoes`/`opcoes`.
+- **Clientes** (`0055`): `clientes` (CRM — nome, telefone, endereço/bairro,
+  aniversário, LGPD, `pontos_fidelidade`); `comandas.cliente_id` e
+  `contas.cliente_id` vinculam venda e fiado a um cliente de verdade.
+- **Pedido pelo QR da mesa** (`0059`, opções na `0063`): `pedidos_qr`
+  (fila de aprovação do garçom — nunca escrito direto em `comanda_itens`).
+- **Marketing** (`0062`): `cupons` (código único por empresa, percentual
+  ou valor fixo, validade, limite de usos); banner do cardápio público
+  fica em `empresas.config.marketing`, nunca numa tabela própria.
+- **Cardápio público**: view `cardapio_publico_empresa` (nome, slug e os
+  3 campos seguros do banner — nunca o `config` inteiro) + policies
+  `*_select_publico` (`to anon`) em `produtos`/`categorias`/`grupos_opcoes`/`opcoes`.
 
 Todas numeradas e aplicadas em ordem em
 [`supabase/migrations/`](supabase/migrations/). Migrations `0001` a `0020`
@@ -405,7 +453,13 @@ produto Vision Food) desacoplam a URL do projeto Supabase de dentro das
 RPCs que chamam a Admin API do GoTrue e corrigem uma regressão real
 achada na revisão — `verificar_pin_supervisor` tinha voltado a
 reconstruir e-mail a partir do nome em vez de `email_interno` (`0060`) —
-e adicionam a função de onboarding de novo restaurante (`0061`).
+e adicionam a função de onboarding de novo restaurante (`0061`). As
+migrations `0062` e `0063` (Fase 5 — menu em grupos, QR Codes das mesas e
+Marketing) adicionam: cupons de desconto, relatório de clientes inativos e
+banner do cardápio público (`0062`), e opções/adicionais no pedido pelo QR
+da mesa — removendo a restrição que deixava produto com opção obrigatória
+fora do autoatendimento (`0063`). Menu em grupos e a tela QR Codes das
+mesas são só front-end, sem migration própria.
 
 ## Migração pra projeto Supabase exclusivo (Fase 4.1)
 
@@ -593,9 +647,14 @@ construído aqui dentro, sem terceiro — foram implementados.**
   (nunca direto em `comanda_itens` como pronto pra cozinha).
 - **Riscos**: é a única do grupo sem custo externo, mas tem risco de
   abuso — sem autenticação, qualquer um com o link pode mandar pedido
-  (spam, pedido de brincadeira). Precisa de rate limit por mesa/sessão e
-  confirmação obrigatória do garçom antes de qualquer coisa ir pra
-  cozinha ou virar cobrança.
+  (spam, pedido de brincadeira). Mitigado com 1 pedido pendente por mesa
+  por vez (índice único em `pedidos_qr`) e confirmação obrigatória do
+  garçom antes de qualquer coisa ir pra cozinha ou virar cobrança — não
+  tem rate limit por IP/sessão além disso.
+- **Status**: implementado e completo (Fase 5, migration `0063`) —
+  inclusive produto com opção obrigatória, que ficou de fora até então.
+  Ver [Cardápio público](#cardápio-público-cardapiohtml) acima pro
+  funcionamento atual.
 
 ### 3.4 — iFood
 
@@ -763,10 +822,20 @@ de rodar `npm test` pela primeira vez.
   (`admin.clientes.editar`, `admin.marketing.editar`). Mesma situação que
   o `docs/ER.md` tinha antes de ser reescrito — `papeis_permissoes` nas
   migrations é a fonte de verdade até alguém reescrever esse documento.
-- **Cupom de desconto (Fase 5/Marketing) ainda não tem botão no
-  fechamento de conta**: `confirmar_pagamento` já aceita e valida
-  `p_cupom_codigo` (migration `0062`), e a tela Marketing já cadastra/
-  ativa/desativa cupons — só falta o campo "Aplicar cupom" no modal de
-  pagamento (Caixa). Escopo deixado de fora desta entrega por mexer numa
-  função já complexa e que lida com dinheiro de verdade; cadastrar e usar
-  via RPC direta já funciona, só não tem UI ainda.
+- **Pedido pelo QR sem aprovação do garçom**: decisão deliberada, não
+  limitação — todo pedido feito pelo celular cai pendente em
+  `pedidos_qr` até um humano confirmar (produto esgotado, erro de
+  digitação, mesa errada). Tirar essa aprovação (autoatendimento 100%
+  automático) é uma mudança de risco real, não implementada até alguém
+  pedir explicitamente.
+- **Preview de desconto no modal de pagamento não recalcula a taxa de
+  serviço sobre a base já descontada**: ao resgatar pontos de fidelidade
+  ou aplicar cupom, o Caixa mostra o total como "valor cheio menos o
+  desconto direto", mas o servidor (`confirmar_pagamento`) calcula a taxa
+  de serviço **já sobre** a base descontada (valor um pouco menor). A
+  diferença se resolve sozinha no troco (o sistema sempre calcula o troco
+  certo em cima do total real do servidor), então nenhum valor é cobrado
+  errado — só o número exibido antes de confirmar não bate centavo a
+  centavo com o que o servidor vai cobrar. Pré-existente desde a Fase 3.6
+  (pontos), não causado pelo cupom — não corrigido ainda por exigir mexer
+  na fórmula de taxa usada em várias telas (dashboard, recibo, relatórios).
