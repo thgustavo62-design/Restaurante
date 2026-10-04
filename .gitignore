@@ -21,3 +21,7 @@ Thumbs.db
 
 # MCP server do Supabase (tem o access token pessoal da conta) — nunca versionar
 .mcp.json
+
+# Arquivo combinado temporário pra colar migrations de uma vez no SQL
+# Editor — conveniência local, nunca deve ir pro repositório
+MIGRATIONS_*_COLAR_NO_SQL_EDITOR.sql
