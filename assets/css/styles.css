@@ -248,6 +248,8 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .mesa-block.livre{border-left-color:var(--success);}
 .mesa-block.ocupada{border-left-color:var(--primary);}
 .mesa-block.pagamento{border-left-color:var(--danger);}
+.mesa-block.pronto{border-left-color:var(--warning); box-shadow:0 0 0 2px rgba(245,176,20,.25) inset; animation:mesa-pronto-pulse 1.6s ease-in-out infinite;}
+@keyframes mesa-pronto-pulse{0%,100%{box-shadow:0 0 0 2px rgba(245,176,20,.25) inset;}50%{box-shadow:0 0 0 2px rgba(245,176,20,.55) inset;}}
 .mesa-top .num{font-family:var(--font-display); font-size:26px; font-weight:800; line-height:1;}
 .mesa-top .label{font-size:9.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px;}
 .mesa-mid{font-size:11px; color:var(--text-secondary); margin-top:6px;}

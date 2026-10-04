@@ -18,6 +18,42 @@ function fmtMin(min){
   if(min>=60){ var h=Math.floor(min/60), m=min%60; return (h<10?"0"+h:h)+"H"+(m<10?"0"+m:m); }
   return min+" MIN";
 }
+// Fase 1.4 — bipe de pedido novo no KDS. Web Audio puro (sem arquivo de
+// áudio); autoplay do navegador exige um clique antes de tocar qualquer
+// som, por isso o primeiro toque acontece no próprio botão "Ativar som"
+// (events.js, kds-som-toggle).
+function tocarBipKds(){
+  try{
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if(!Ctx) return;
+    if(!window.__kdsAudioCtx) window.__kdsAudioCtx = new Ctx();
+    var ctx = window.__kdsAudioCtx;
+    var o = ctx.createOscillator();
+    var g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = 880;
+    g.gain.value = 0.001;
+    g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.35);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime+0.36);
+  }catch(e){}
+}
+// Fase 2.9 — exportação pro contador: monta e baixa um CSV simples
+// (sem lib externa — são poucas colunas, não vale a pena trazer uma
+// dependência só pra isso).
+function baixarCsv(nomeArquivo, colunas, linhas){
+  var esc = function(v){
+    v = v==null ? "" : String(v);
+    return /[",;\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+  };
+  var conteudo = colunas.join(";")+"\n"+linhas.map(function(l){ return l.map(esc).join(";"); }).join("\n");
+  var blob = new Blob(["﻿"+conteudo], {type:"text/csv;charset=utf-8;"});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = nomeArquivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 function splitCentavos(total, partes){
   partes = Math.max(1, partes|0);
   var base = Math.floor(total/partes);

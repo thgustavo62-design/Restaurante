@@ -16,7 +16,8 @@ function buildReciboHtml(comanda){
   var atendente = state.usuarios.find(function(u){ return u.id===comanda.usuarioAbertura; });
   var largura = state.config.impressoraLargura==="58mm" ? "58mm" : "80mm";
   var itensHtml = comanda.itens.filter(function(it){ return it.status!=="CANCELADO"; }).map(function(it){
-    return '<div class="line"><span>'+it.quantidade+'x '+escapeHtml(it.nome)+'</span><span>'+brl(it.precoUnitCentavos*it.quantidade)+'</span></div>';
+    var opcoesTxt = (it.opcoesSelecionadas&&it.opcoesSelecionadas.length) ? it.opcoesSelecionadas.map(function(o){return o.nome;}).join(", ") : "";
+    return '<div class="line"><span>'+it.quantidade+'x '+escapeHtml(it.nome)+(opcoesTxt?' ('+escapeHtml(opcoesTxt)+')':'')+'</span><span>'+brl(it.precoUnitCentavos*it.quantidade)+'</span></div>';
   }).join("");
   var pagamentosHtml = (comanda.pagamentos||[]).map(function(p){
     return '<div class="line"><span>'+p.forma+'</span><span>'+brl(p.valorCentavos)+'</span></div>';

@@ -1,0 +1,12 @@
+{
+  "name": "vision-food-tests",
+  "private": true,
+  "description": "Testes automatizados das RPCs críticas — rodam SÓ contra um projeto Supabase de teste, nunca o de produção (ver README.md desta pasta).",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

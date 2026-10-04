@@ -16,6 +16,22 @@ async function salvarConta(tipo, descricao, categoria, valorCentavos, vencimento
   render();
   toast("ok","CONTA CRIADA", descricao.trim());
 }
+// Fase 2.9 — exportação pro contador: 3 CSVs (vendas por forma, contas,
+// fechamentos de caixa) do mês escolhido, agregados no banco (0057).
+async function exportarParaContador(mes){
+  if(!mes) return;
+  var res = await sb.rpc("relatorio_exportacao_contador", {p_mes: mes+"-01"});
+  if(res.error){ toast("err","ERRO AO EXPORTAR", res.error.message); return; }
+  var d = res.data;
+  baixarCsv("vendas-por-forma-"+d.mes+".csv", ["forma","total_centavos","quantidade"],
+    d.vendas_por_forma.map(function(v){ return [v.forma, v.total, v.quantidade]; }));
+  baixarCsv("contas-"+d.mes+".csv", ["tipo","descricao","categoria","valor_centavos","vencimento","pago_em"],
+    d.contas.map(function(c){ return [c.tipo, c.descricao, c.categoria, c.valor_centavos, c.vencimento, c.pago_em||""]; }));
+  baixarCsv("fechamentos-caixa-"+d.mes+".csv", ["terminal","abertura_em","fechamento_em","saldo_inicial_centavos","saldo_calculado_centavos","saldo_informado_centavos","diferenca_centavos"],
+    d.fechamentos_caixa.map(function(f){ return [f.terminal, f.abertura_em, f.fechamento_em, f.saldo_inicial_centavos, f.saldo_calculado_centavos, f.saldo_informado_centavos, f.diferenca_centavos]; }));
+  toast("ok","EXPORTAÇÃO CONCLUÍDA", "3 arquivos CSV de "+d.mes+" baixados");
+}
+
 async function marcarContaPaga(contaId){
   var c = state.contas.find(function(x){ return x.id===contaId; });
   var agora = new Date().toISOString();
@@ -24,6 +40,46 @@ async function marcarContaPaga(contaId){
   c.pagoEm = agora;
   render();
   toast("ok","CONTA PAGA", c.descricao);
+}
+
+// Fase 2.7 — cadastro de clientes (CRM básico).
+function abrirClienteForm(clienteId){
+  var c = clienteId ? state.clientes.find(function(x){ return x.id===clienteId; }) : null;
+  state.modal = {type:"clienteForm", clienteId:clienteId||null,
+    nome: c?c.nome:"", telefone: c?c.telefone:"", aniversario: c?c.aniversario:"",
+    observacoes: c?c.observacoes:"", consentimentoLgpd: c?c.consentimentoLgpd:false,
+    endereco: c?c.endereco:"", bairro: c?c.bairro:"", erro:"", salvando:false};
+  render();
+}
+async function salvarCliente(nome, telefone, aniversario, observacoes, consentimentoLgpd, endereco, bairro){
+  var m = state.modal;
+  if(!nome.trim()){ m.erro = "Informe o nome do cliente."; render(); return; }
+  m.salvando = true; render();
+  var payload = {
+    nome: nome.trim(), telefone: telefone.trim()||null, aniversario: aniversario||null,
+    observacoes: observacoes.trim()||null, consentimento_lgpd: consentimentoLgpd,
+    consentimento_em: consentimentoLgpd ? new Date().toISOString() : null,
+    endereco: endereco.trim()||null, bairro: bairro.trim()||null
+  };
+  var res;
+  if(m.clienteId){
+    res = await sb.from("clientes").update(payload).eq("id", m.clienteId).select().single();
+  } else {
+    res = await sb.from("clientes").insert(Object.assign({empresa_id:state.empresaId}, payload)).select().single();
+  }
+  m.salvando = false;
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  var mapeado = mapCliente(res.data);
+  if(m.clienteId){
+    var idx = state.clientes.findIndex(function(c){ return c.id===m.clienteId; });
+    if(idx!==-1) state.clientes[idx] = mapeado;
+  } else {
+    state.clientes.push(mapeado);
+    state.clientes.sort(function(a,b){ return a.nome.localeCompare(b.nome); });
+  }
+  state.modal = null;
+  render();
+  toast("ok", m.clienteId?"CLIENTE ATUALIZADO":"CLIENTE CRIADO", mapeado.nome);
 }
 
 function abrirUsuarioForm(){
@@ -81,7 +137,14 @@ async function salvarConfig(campos){
     reciboRodape: campos.reciboRodape.trim(),
     horarioAbertura: campos.horarioAbertura || c.horarioAbertura,
     horarioFechamento: campos.horarioFechamento || c.horarioFechamento,
-    chavePix: campos.chavePix.trim()
+    chavePix: campos.chavePix.trim(),
+    atrasoPorSetor: campos.atrasoPorSetor || c.atrasoPorSetor,
+    taxasMaquininha: campos.taxasMaquininha || c.taxasMaquininha,
+    produtoCouvertId: campos.produtoCouvertId,
+    happyHoraInicio: campos.happyHoraInicio,
+    happyHoraFim: campos.happyHoraFim,
+    fidelidade: campos.fidelidade || c.fidelidade,
+    bairrosTaxaEntrega: campos.bairrosTaxaEntrega || c.bairrosTaxaEntrega
   });
   delete novoConfig.empresaNome; delete novoConfig.empresaCnpj; delete novoConfig.totalFichas; delete novoConfig.slug;
   var res = await sb.from("empresas").update({

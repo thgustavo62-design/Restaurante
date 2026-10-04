@@ -105,12 +105,14 @@ function renderSalao(){
     var min = mesaMinutos(m.id);
     var timeCls = min>=60?"danger":(min>=30?"warn":"");
     var soma = abertas.reduce(function(s,c){ return s + totaisComanda(c).total; },0);
-    return '<div class="mesa-block '+st+'" data-action="mesa-open" data-mesa="'+m.id+'">'+
+    var pronto = st!=="livre" && mesaTemItemPronto(m.id);
+    return '<div class="mesa-block '+st+(pronto?" pronto":"")+'" data-action="mesa-open" data-mesa="'+m.id+'">'+
       '<div class="mesa-top"><div class="num">'+String(m.numero).padStart(2,"0")+'</div><div class="label">Mesa</div></div>'+
       (st==="livre" ?
         '<div><div class="mesa-mid">'+m.capacidade+' lugares</div><div class="mesa-status-txt" style="margin-top:8px;">Livre</div></div>'
         :
         '<div><div class="mesa-mid">'+m.capacidade+' lugares</div>'+
+        (pronto ? '<div class="mesa-status-txt" style="color:var(--warning); font-weight:700;">'+icon("check",12)+' PRONTO</div>' : '')+
         '<div class="mesa-bottom"><span class="mesa-valor">'+brl(soma)+'</span>'+
         '<span class="mesa-time '+timeCls+'">'+icon("clock",11)+' '+fmtMin(min)+'</span></div></div>'
       )+
@@ -122,7 +124,9 @@ function renderSalao(){
       (can(PERM.COMANDA_ABRIR) ? '<div class="action-row" style="flex:0 0 auto;">'+
         '<button class="btn btn-primary" data-action="balcao-abrir">'+icon("plus",15)+' Balcão</button>'+
         '<button class="btn btn-primary" data-action="ficha-abrir">'+icon("plus",15)+' Ficha</button>'+
+        '<button class="btn btn-primary" data-action="delivery-abrir">'+icon("truck",15)+' Delivery</button>'+
       '</div>' : ''))+
+    (state.pedidosQr.length && can(PERM.ITEM_LANCAR) ? renderPedidosQrPendentes() : '')+
     '<div class="tabs">'+tabs.map(function(t){ return '<div class="tab '+(filtro===t[0]?"active":"")+'" data-action="salao-filtro" data-f="'+t[0]+'">'+t[1]+'</div>'; }).join("")+'</div>'+
     '<div class="grid-2">'+
       '<div class="mesas-grid">'+(cards||'<div class="empty-hint">Nenhuma mesa neste filtro.</div>')+'</div>'+
@@ -140,36 +144,65 @@ function renderSalao(){
     '</div>';
 }
 
+// Fase 3.3 — pedidos vindos do QR da mesa, aguardando confirmação do
+// garçom (nunca vão direto pra cozinha).
+function renderPedidosQrPendentes(){
+  return '<div class="card" style="margin-bottom:14px; border-left:4px solid var(--primary);">'+
+    '<div class="card-title">'+icon("bell",16)+' Pedidos pelo QR da mesa ('+state.pedidosQr.length+')</div>'+
+    state.pedidosQr.map(function(p){
+      var mesa = state.mesas.find(function(m){ return m.id===p.mesaId; });
+      var totalItens = p.itens.reduce(function(s,it){ return s+Number(it.quantidade); },0);
+      return '<div class="data-row">'+
+        '<div class="main"><div class="nome">Mesa '+(mesa?mesa.numero:"?")+'</div>'+
+        '<div class="sub">'+p.itens.map(function(it){ return it.quantidade+'x '+escapeHtml(it.nome); }).join(", ")+
+        (p.observacao?' · '+escapeHtml(p.observacao):'')+'</div></div>'+
+        '<div class="acts">'+
+          '<button class="btn btn-sm btn-success" data-action="pedidoqr-confirmar" data-pedido="'+p.id+'">Confirmar</button>'+
+          '<button class="btn btn-sm" data-action="pedidoqr-rejeitar" data-pedido="'+p.id+'" style="color:var(--danger);">Rejeitar</button>'+
+        '</div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+}
+
 function renderComanda(){
   var comanda = state.comandas.find(function(c){ return c.id===state.viewParams.comandaId; });
   if(!comanda) return '<div class="empty-hint">Comanda não encontrada.</div>';
   if(!state.draft || state.draft.comandaId!==comanda.id) irParaComanda(comanda.id);
   var mesa = state.mesas.find(function(m){ return m.id===comanda.mesaId; });
   var t = totaisComanda(comanda);
-  var podeFechar = can(PERM.COMANDA_FECHAR) && comanda.status==="ABERTA" && comanda.itens.length>0;
+  var naoPagos = itensNaoPagos(comanda);
+  var podeFechar = can(PERM.COMANDA_FECHAR) && comanda.status==="ABERTA" && naoPagos.length>0;
   var podeCancelarComanda = can(PERM.COMANDA_ABRIR) && comanda.status==="ABERTA" && comanda.itens.length===0;
   var podeLancar = can(PERM.ITEM_LANCAR) && comanda.status==="ABERTA";
+  var itensProntos = comanda.itens.filter(function(it){ return it.status==="PRONTO"; });
   // Fase 0.6 — se o pagamento travou (aba fechou no meio), libera reabrir
   // manualmente depois de 10 minutos em FECHANDO; nunca reabre sozinho.
   var podeReabrir = can(PERM.COMANDA_REABRIR) && comanda.status==="FECHANDO" && comanda.updatedAt && minutosDesde(comanda.updatedAt)>10;
-  var draftCount = Object.keys(state.draft.itens).reduce(function(s,k){ return s+state.draft.itens[k].qtd; },0);
+  var draftCount = Object.keys(state.draft.itens).reduce(function(s,k){ return s+state.draft.itens[k].qtd; },0)
+    + (state.draft.itensComOpcoes||[]).reduce(function(s,l){ return s+l.qtd; },0);
 
   var sentItemsHtml = comanda.itens.length ? comanda.itens.map(function(it){
     // Fase 0.3: cancelar item agora exige PIN de supervisor validado no
     // servidor (RPC cancelar_item) sempre — a trava real não é mais essa
     // checagem de permissão do próprio usuário, só decide se o botão
     // aparece. Qualquer um que lança item também pode pedir cancelamento.
-    var podeCancel = it.status!=="CANCELADO" && it.status!=="ENTREGUE" && can(PERM.ITEM_LANCAR);
+    var podeCancel = it.status!=="CANCELADO" && it.status!=="ENTREGUE" && !it.pagoEm && can(PERM.ITEM_LANCAR);
+    var podeTransferirItem = it.status!=="CANCELADO" && !it.pagoEm && can(PERM.COMANDA_TRANSFERIR) && comanda.status==="ABERTA";
     return '<div class="item-row">'+
       '<div class="info"><div class="nome">'+it.quantidade+'x '+escapeHtml(it.nome)+'</div>'+
+      ((it.opcoesSelecionadas&&it.opcoesSelecionadas.length)?'<div class="obs">'+it.opcoesSelecionadas.map(function(o){return escapeHtml(o.nome);}).join(" + ")+'</div>':'')+
       (it.observacao?'<div class="obs">'+escapeHtml(it.observacao)+'</div>':'')+
-      '<div class="meta"><span class="status-badge status-'+it.status+'">'+it.status+'</span></div></div>'+
+      '<div class="meta"><span class="status-badge status-'+it.status+'">'+it.status+'</span>'+
+      (it.pagoEm?'<span class="badge badge-status-ok" style="margin-left:6px;">PAGO</span>':'')+
+      (it._pendingSync?'<span class="badge badge-status-atencao" style="margin-left:6px;">OFFLINE · sincronizando</span>':'')+'</div></div>'+
       '<div class="preco">'+brl(it.precoUnitCentavos*it.quantidade)+'</div>'+
+      (podeTransferirItem ? '<button class="icon-btn" data-action="item-transferir" data-item="'+it.id+'" title="Transferir pra outra comanda">'+icon("arrowLeft",14)+'</button>' : '')+
       (podeCancel ? '<button class="icon-btn" data-action="item-cancelar" data-item="'+it.id+'" style="color:var(--danger);">'+icon("x",14)+'</button>' : '')+
     '</div>';
   }).join("") : '<div class="empty-hint">Nenhum item enviado ainda.</div>';
 
-  var draftHtml = draftCount>0 ? Object.keys(state.draft.itens).map(function(pid){
+  var draftHtmlSimples = Object.keys(state.draft.itens).map(function(pid){
     var p = state.produtos.find(function(x){ return x.id===pid; });
     var d = state.draft.itens[pid];
     var chipsHtml = '<div class="ingrediente-chips">'+INGREDIENTES_COMUNS.map(function(nome){
@@ -188,7 +221,23 @@ function renderComanda(){
       chipsHtml+
       '<input class="obs-input" id="obs-'+pid+'" data-action="draft-obs" data-produto="'+pid+'" placeholder="Observação extra (ex: ponto da carne)" value="'+escapeHtml(d.obs)+'">'+
     '</div>';
-  }).join("") : '<div class="empty-hint" style="padding:16px;">Toque num produto para adicionar.</div>';
+  }).join("");
+  var draftHtmlComOpcoes = (state.draft.itensComOpcoes||[]).map(function(l){
+    var p = state.produtos.find(function(x){ return x.id===l.produtoId; });
+    return '<div class="draft-line">'+
+      '<div class="draft-line-top"><div class="nome">'+escapeHtml(p?p.nome:"?")+
+        (l.opcoesSelecionadas.length ? ' <span style="color:var(--text-muted); font-weight:400; font-size:11.5px;">— '+l.opcoesSelecionadas.map(function(o){return escapeHtml(o.nome);}).join(" + ")+'</span>' : '')+
+      '</div>'+
+        '<div class="qty-ctrl">'+
+          '<button data-action="draftopt-menos" data-linha="'+l.id+'">'+icon("minus",13)+'</button>'+
+          '<span>'+l.qtd+'</span>'+
+          '<button data-action="draftopt-mais" data-linha="'+l.id+'">'+icon("plus",13)+'</button>'+
+        '</div></div>'+
+      (l.obs?'<div class="obs">'+escapeHtml(l.obs)+'</div>':'')+
+      '<button class="btn btn-ghost btn-sm" style="margin-top:6px; color:var(--danger);" data-action="draftopt-remover" data-linha="'+l.id+'">'+icon("x",13)+' Remover</button>'+
+    '</div>';
+  }).join("");
+  var draftHtml = draftCount===0 ? '<div class="empty-hint" style="padding:16px;">Toque num produto para adicionar.</div>' : (draftHtmlSimples+draftHtmlComOpcoes);
 
   var produtosFiltrados = state.produtos.filter(function(p){
     if(!p.ativo) return false;
@@ -208,9 +257,10 @@ function renderComanda(){
         return '<div class="product-card" style="opacity:.4; cursor:not-allowed;">'+
           '<div class="nome">'+escapeHtml(p.nome)+'</div><div class="preco" style="color:var(--text-muted);">ESGOTADO</div></div>';
       }
-      return '<div class="product-card" data-action="draft-mais" data-produto="'+p.id+'">'+
+      var temOpcoes = gruposDoProduto(p.id).length>0;
+      return '<div class="product-card" data-action="produto-clicar" data-produto="'+p.id+'">'+
         (p.fotoUrl ? '<img class="thumb" src="'+escapeHtml(p.fotoUrl)+'" onerror="this.style.display=\'none\'">' : '')+
-        '<div class="nome">'+escapeHtml(p.nome)+'</div><div class="preco">'+brl(p.precoCentavos)+'</div></div>';
+        '<div class="nome">'+escapeHtml(p.nome)+(temOpcoes?' <span style="color:var(--text-muted); font-size:9.5px;">(opções)</span>':'')+'</div><div class="preco">'+brl(p.precoCentavos)+'</div></div>';
     }).join("")+'</div>';
 
   var orderPanel = '<div class="order-panel">'+
@@ -223,6 +273,7 @@ function renderComanda(){
         '<div class="totais-linha"><span>Subtotal</span><span>'+brl(t.subtotal)+'</span></div>'+
         (t.desconto>0 ? '<div class="totais-linha"><span>Desconto</span><span>-'+brl(t.desconto)+'</span></div>' : '')+
         '<div class="totais-linha"><span>Taxa de serviço ('+t.taxaPct+'%)</span><span>'+brl(t.taxa)+'</span></div>'+
+        (t.taxaEntrega>0 ? '<div class="totais-linha"><span>Taxa de entrega</span><span>'+brl(t.taxaEntrega)+'</span></div>' : '')+
         '<div class="totais-linha total"><span>Total</span><span>'+brl(t.total)+'</span></div>'+
       '</div>'+
       '<div class="action-row">'+
@@ -232,7 +283,15 @@ function renderComanda(){
         (can(PERM.COMANDA_ABRIR) && comanda.status==="ABERTA" ? '<button class="btn" data-action="desconto-abrir">Desconto</button>' : '')+
         '<label class="btn" style="cursor:pointer;"><input type="checkbox" data-action="toggle-taxa" '+(comanda.taxaServicoAtiva?"checked":"")+' style="margin-right:6px;">Taxa</label>'+
       '</div>'+
-      (podeFechar ? '<button class="btn btn-danger btn-lg btn-block" data-action="fechar-conta-abrir">Fechar conta · '+brl(t.total)+'</button>' : '')+
+      (podeLancar && comanda.tipo==="MESA" ? '<div class="action-row" style="align-items:center;">'+
+        '<input type="number" min="0" step="1" placeholder="Nº pessoas" value="'+(comanda.pessoas||"")+'" style="width:100px;" data-action="comanda-pessoas" data-comanda="'+comanda.id+'">'+
+        (state.config.produtoCouvertId && comanda.pessoas>0 ? '<button class="btn btn-sm" data-action="comanda-couvert-adicionar" data-comanda="'+comanda.id+'">'+icon("plus",14)+' Couvert ('+comanda.pessoas+')</button>' : '')+
+      '</div>' : '')+
+      (can(PERM.COMANDA_TRANSFERIR) && comanda.status==="ABERTA" ? '<div class="action-row">'+
+        (comanda.tipo==="MESA" ? '<button class="btn" data-action="comanda-transferir-mesa-abrir" data-comanda="'+comanda.id+'">'+icon("arrowLeft",15)+' Transferir mesa</button>' : '')+
+        '<button class="btn" data-action="comanda-juntar-abrir" data-comanda="'+comanda.id+'">'+icon("plus",15)+' Juntar com outra mesa</button>'+
+      '</div>' : '')+
+      (podeFechar ? '<button class="btn btn-danger btn-lg btn-block" data-action="fechar-conta-abrir">Fechar conta · '+brl(totaisNaoPagos(comanda).total)+'</button>' : '')+
       (podeCancelarComanda ? '<button class="btn btn-ghost btn-block" data-action="comanda-cancelar-confirmar" data-comanda="'+comanda.id+'" style="margin-top:8px; color:var(--danger); border-color:var(--danger);">'+icon("x",15)+' Cancelar comanda (mesa aberta por engano)</button>' : '')+
       (podeReabrir ? '<div class="alert-row danger" style="margin-top:8px;">'+icon("alert",16)+
         '<div style="flex:1;"><span class="t">PAGAMENTO TRAVADO</span><span class="d">Em fechamento há '+fmtMin(minutosDesde(comanda.updatedAt))+' sem concluir.</span></div>'+
@@ -245,6 +304,20 @@ function renderComanda(){
       '<div class="sub">Aberta há '+fmtMin(minutosDesde(comanda.abertura))+' · '+comanda.status+'</div></div>'+
       '<button class="btn btn-ghost" data-action="nav-goto" data-view="salao">'+icon("arrowLeft",16)+' Salão</button>'+
     '</div>'+
+    (itensProntos.length ? '<div class="alert-row">'+icon("check",16)+
+      '<div><span class="t">PRONTO PARA SERVIR</span><span class="d">'+
+      itensProntos.map(function(it){ return it.quantidade+'x '+escapeHtml(it.nome); }).join(" · ")+
+      '</span></div></div>' : '')+
+    (comanda._pendingSync ? '<div class="alert-row">'+icon("wifiOff",16)+
+      '<div><span class="t">FECHADA OFFLINE</span><span class="d">Pagamento guardado localmente, sincroniza sozinho quando a conexão voltar.</span></div></div>' : '')+
+    (comanda.tipo==="DELIVERY" ? '<div class="card" style="margin-bottom:14px;">'+
+      '<div class="card-title">Entrega</div>'+
+      '<p style="font-size:13px; color:var(--text-secondary); margin:0 0 10px;">'+escapeHtml(comanda.enderecoEntrega)+'</p>'+
+      (comanda.agendadoPara ? '<p style="font-size:12px; color:var(--text-muted); margin:0 0 10px;">Agendado para '+new Date(comanda.agendadoPara).toLocaleString("pt-BR")+'</p>' : '')+
+      '<div style="display:flex; align-items:center; gap:10px;">'+
+        '<span class="badge '+(comanda.statusEntregador==="ENTREGUE"?"badge-status-ok":(comanda.statusEntregador==="SAIU_PARA_ENTREGA"?"badge-status-atencao":""))+'">'+(comanda.statusEntregador||"PENDENTE")+'</span>'+
+        (PROXIMO_STATUS_ENTREGADOR[comanda.statusEntregador] ? '<button class="btn btn-sm" data-action="comanda-entregador-avancar" data-comanda="'+comanda.id+'">Avançar pra '+PROXIMO_STATUS_ENTREGADOR[comanda.statusEntregador]+'</button>' : '')+
+      '</div></div>' : '')+
     '<div class="split '+(state.draft.mobileCatalog?"mobile-catalog":"")+'">'+
       '<div class="split-main">'+catalogHtml+'</div>'+
       '<div class="split-side">'+orderPanel+'</div>'+
@@ -282,6 +355,9 @@ function renderKds(){
     avulsosPorComanda[cid].itens.push(it);
   });
   fontes = fontes.concat(ordemAvulsos.map(function(cid){ return avulsosPorComanda[cid]; }));
+
+  var atrasoPorSetor = state.config.atrasoPorSetor || {};
+  function limiteAtraso(setor){ return atrasoPorSetor[setor]||10; }
 
   fontes.forEach(function(c){
     var rotulo = c.rotulo;
@@ -326,28 +402,40 @@ function renderKds(){
         if(!porComanda[c.comandaId]){ porComanda[c.comandaId] = {codigo:c.codigo, rotulo:c.rotulo, itens:[]}; ordem.push(c.comandaId); }
         porComanda[c.comandaId].itens.push(c.item);
       });
+      // Fase 1.4 — mais antigo primeiro, pra cozinha trabalhar na ordem
+      // de chegada em vez da ordem em que as comandas foram abertas.
+      ordem.sort(function(a,b){
+        var maxA = Math.max.apply(null, porComanda[a].itens.map(function(it){ return minutosDesde(it.enviadoEm); }));
+        var maxB = Math.max.apply(null, porComanda[b].itens.map(function(it){ return minutosDesde(it.enviadoEm); }));
+        return maxB - maxA;
+      });
       return '<div class="kanban-col" data-status="'+status+'">'+
         '<div class="kanban-col-head"><span class="t">'+col[1]+'</span><span class="n">'+lista.length+'</span></div>'+
         (ordem.length ? ordem.map(function(comandaId){
           var ticket = porComanda[comandaId];
+          var itensAtrasados = ticket.itens.filter(function(it){ return minutosDesde(it.enviadoEm) > limiteAtraso(it.setorProducao||"COZINHA"); });
           var minTicket = Math.max.apply(null, ticket.itens.map(function(it){ return minutosDesde(it.enviadoEm); }));
-          var atrasoTicket = minTicket>10;
+          var atrasoTicket = itensAtrasados.length>0;
+          var idsTicket = ticket.itens.map(function(it){ return it.id; }).join(",");
           return '<div class="kanban-card col-'+status+'">'+
             '<div class="kanban-card-top"><span class="codigo">'+ticket.codigo+'</span><span class="tempo '+(atrasoTicket?"atraso":"")+'">'+icon("clock",11)+' '+fmtMin(minTicket)+'</span></div>'+
             '<div class="mesa">'+ticket.rotulo.toUpperCase()+'</div>'+
             ticket.itens.map(function(item){
               var min = minutosDesde(item.enviadoEm);
-              var atraso = min>10;
+              var atraso = min > limiteAtraso(item.setorProducao||"COZINHA");
               var user = state.usuarios.find(function(u){ return u.id===item.usuarioId; });
               var setorItem = item.setorProducao||"COZINHA";
               return '<div class="kanban-item" draggable="true" data-comanda="'+comandaId+'" data-item="'+item.id+'">'+
                 '<div class="produto">'+item.quantidade+'x '+escapeHtml(item.nome).toUpperCase()+' <span class="tempo '+(atraso?"atraso":"")+'" style="float:right;">'+fmtMin(min)+'</span></div>'+
                 '<span class="badge" style="background:rgba(255,255,255,.08); color:'+SETOR_COR[setorItem]+'; margin-top:4px;">'+setorItem+'</span>'+
+                ((item.opcoesSelecionadas&&item.opcoesSelecionadas.length)?'<div class="obs" style="font-weight:700;">'+item.opcoesSelecionadas.map(function(o){return escapeHtml(o.nome).toUpperCase();}).join(" + ")+'</div>':'')+
                 (item.observacao?'<div class="obs">'+escapeHtml(item.observacao)+'</div>':'')+
+                (item._pendingSync?'<div class="obs" style="color:var(--warning);">OFFLINE · sincronizando</div>':'')+
                 (user?'<div class="garcom">Garçom: '+escapeHtml(user.nome)+'</div>':'')+
                 (can(PERM.ITEM_STATUS) ? '<button class="btn '+(status==="PRONTO"?"btn-success":"btn-primary")+' btn-block btn-sm" style="margin-top:8px;" data-action="kds-set" data-comanda="'+comandaId+'" data-item="'+item.id+'" data-status="'+nextStatus[status]+'">'+col[2]+'</button>' : '')+
               '</div>';
             }).join("")+
+            (can(PERM.ITEM_STATUS) && ticket.itens.length>1 ? '<button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px;" data-action="kds-avancar-ticket" data-comanda="'+comandaId+'" data-itens="'+idsTicket+'" data-status="'+nextStatus[status]+'">'+col[2]+' · TICKET INTEIRO ('+ticket.itens.length+')</button>' : '')+
           '</div>';
         }).join("") : '<div class="empty-hint">Vazio</div>')+
       '</div>';
@@ -355,7 +443,8 @@ function renderKds(){
   '</div>';
 
   return '<div class="kds-grande">'+
-    renderPageHeader("chef", "Cozinha", total+" pedidos ativos")+
+    renderPageHeader("chef", "Cozinha", total+" pedidos ativos",
+      '<button class="btn '+(state.kdsSomAtivo?"btn-primary":"")+'" data-action="kds-som-toggle">'+icon("bell",15)+' '+(state.kdsSomAtivo?"Som ativado":"Ativar som")+'</button>')+
     kpisHtml+
     '<div class="tabs">'+setorTabs.map(function(s){ return '<div class="chip '+(setorFiltro===s?"chip-active":"")+'" data-action="kds-filtro" data-f="'+s+'">'+(s==="TODOS"?"Todos":s)+'</div>'; }).join("")+'</div>'+
     (cancelados.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">CANCELADO DEPOIS DE PRONTO/EM PREPARO — PARE</span><span class="d">'+
@@ -372,6 +461,7 @@ function renderCaixa(){
     return renderPageHeader("wallet", "Caixa", "Nenhuma sessão aberta")+
       '<div class="card" style="max-width:420px;">'+
       (ultima ? '<div class="alert-row '+(ultima.diferencaCentavos?"danger":"")+'">'+icon("alert",16)+'<div><span class="t">ÚLTIMO FECHAMENTO</span><span class="d">Diferença de '+brl(ultima.diferencaCentavos||0)+'</span></div></div>' : '')+
+      '<div class="field"><label>Nome deste terminal</label><input id="terminalNomeInput" value="'+escapeHtml(state.caixaTerminalNome)+'" placeholder="Ex: Terminal 1, Caixa Bar"></div>'+
       '<div class="field"><label>Saldo inicial (troco)</label><input type="number" id="saldoInicialInput" placeholder="0,00" min="0" step="0.01"></div>'+
       '<button class="btn btn-primary btn-lg btn-block" data-action="caixa-abrir-confirmar">Abrir caixa</button>'+
       (state.caixaSessoesHistorico.length ? '<button class="btn btn-block" style="margin-top:10px;" data-action="fechamento-imprimir" data-sessao="'+state.caixaSessoesHistorico[state.caixaSessoesHistorico.length-1].id+'">'+icon("book",15)+' Reimprimir último fechamento</button>' : '')+
@@ -503,6 +593,7 @@ function renderCardapio(){
         '<div class="num">'+brl(p.precoCentavos)+'</div>'+
         (podeEditar ? '<div class="acts">'+
           '<button class="btn btn-sm" data-action="produto-esgotar" data-produto="'+p.id+'">'+(p.esgotado?"Reativar":"Esgotar")+'</button>'+
+          '<button class="btn btn-sm" data-action="opcoesproduto-abrir" data-produto="'+p.id+'">Opções</button>'+
           '<button class="icon-btn" data-action="produto-editar" data-produto="'+p.id+'">'+icon("edit",15)+'</button>'+
         '</div>' : '')+
       '</div>';
@@ -519,24 +610,35 @@ function renderEstoque(){
   var podeEditar = can(PERM.ESTOQUE);
   var baixos = state.insumos.filter(function(i){ return i.estoqueAtual<i.estoqueMinimo; });
   var valorEstoque = state.insumos.reduce(function(s,i){ return s + Math.round(i.estoqueAtual*i.custoMedioCentavos); },0);
+  var hoje = diasA(0);
+  var emSeteDias = diasA(7);
+  var vencendo = state.insumos.filter(function(i){ return i.validade && i.validade<=emSeteDias; });
   return renderPageHeader("package", "Estoque", state.insumos.length+" insumos · "+baixos.length+" abaixo do mínimo",
-      (podeEditar ? '<button class="btn btn-primary" data-action="insumo-mov-abrir" data-tipo="ENTRADA">'+icon("plus",15)+' Nova entrada</button>' : ''))+
+      (podeEditar ? '<div class="action-row" style="flex:0 0 auto;">'+
+        '<button class="btn" data-action="inventario-abrir">'+icon("edit",15)+' Fazer inventário</button>'+
+        '<button class="btn btn-primary" data-action="insumo-mov-abrir" data-tipo="ENTRADA">'+icon("plus",15)+' Nova entrada</button>'+
+      '</div>' : ''))+
     '<div class="metric-grid">'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("package",20)+'</div><div class="kpi-body"><div class="kpi-label">Insumos cadastrados</div><div class="kpi-value">'+state.insumos.length+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("alert",20)+'</div><div class="kpi-body"><div class="kpi-label">Abaixo do mínimo</div><div class="kpi-value">'+baixos.length+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Valor em estoque</div><div class="kpi-value">'+brl(valorEstoque)+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Movimentos recentes</div><div class="kpi-value">'+state.estoqueMovimentos.length+'</div></div></div>'+
     '</div>'+
-    (baixos.length ? baixos.map(function(i){
-      return '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">ESTOQUE BAIXO</span><span class="d">'+escapeHtml(i.nome)+' — '+i.estoqueAtual+' '+i.unidade+' (mín. '+i.estoqueMinimo+')</span></div></div>';
+    (baixos.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div style="flex:1;"><span class="t">ESTOQUE BAIXO</span><span class="d">'+
+      baixos.map(function(i){ return escapeHtml(i.nome)+' ('+i.estoqueAtual+'/'+i.estoqueMinimo+' '+i.unidade+')'; }).join(" · ")+
+      '</span></div>'+(podeEditar?'<button class="btn btn-sm" data-action="sugerir-pedido-compra">Sugerir pedido</button>':'')+'</div>' : "")+
+    (vencendo.length ? vencendo.map(function(i){
+      var venceu = i.validade<hoje;
+      return '<div class="alert-row '+(venceu?"danger":"")+'">'+icon("alert",16)+'<div><span class="t">'+(venceu?"VENCIDO":"VENCE EM BREVE")+'</span><span class="d">'+escapeHtml(i.nome)+' — '+new Date(i.validade+"T00:00:00").toLocaleDateString("pt-BR")+'</span></div></div>';
     }).join("") : "")+
-    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Produto</th><th>Quantidade</th><th>Unidade</th><th>Mínimo</th><th>Status</th>'+(podeEditar?'<th></th>':'')+'</tr></thead><tbody>'+
+    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Produto</th><th>Quantidade</th><th>Unidade</th><th>Mínimo</th><th>Validade</th><th>Status</th>'+(podeEditar?'<th></th>':'')+'</tr></thead><tbody>'+
     state.insumos.map(function(i){
       var st = estoqueStatus(i);
       var rend = state.insumoRendimentos.find(function(r){ return r.insumoId===i.id; });
       return '<tr><td><div style="font-weight:700;">'+escapeHtml(i.nome)+'</div>'+
           '<div style="font-size:10.5px; color:var(--text-muted);">custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+(rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div></td>'+
         '<td>'+i.estoqueAtual+'</td><td>'+i.unidade+'</td><td>'+i.estoqueMinimo+'</td>'+
+        '<td>'+(podeEditar ? '<input type="date" style="width:140px;" value="'+(i.validade||"")+'" data-action="insumo-validade" data-insumo="'+i.id+'">' : (i.validade?new Date(i.validade+"T00:00:00").toLocaleDateString("pt-BR"):"—"))+'</td>'+
         '<td><span class="badge '+st.cls+'">'+st.lbl+'</span></td>'+
         (podeEditar ? '<td><div class="acts">'+
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="ENTRADA" data-insumo="'+i.id+'">Entrada</button>'+
@@ -550,7 +652,7 @@ function renderEstoque(){
     '<div class="card">'+(state.estoqueMovimentos.length ? state.estoqueMovimentos.slice().reverse().slice(0,20).map(function(m){
       var i = state.insumos.find(function(x){ return x.id===m.insumoId; });
       var cls = m.tipo==="ENTRADA" ? "ENTRADA" : "SAIDA";
-      var sinal = m.tipo==="ENTRADA" ? "+" : "-";
+      var sinal = (m.tipo==="ENTRADA" || (m.tipo==="AJUSTE" && m.motivo && m.motivo.indexOf("sobra")!==-1)) ? "+" : "-";
       return '<div class="mov-row"><span><span class="mov-tipo '+cls+'">'+(m.tipo==="VENDA"?"VENDA":m.tipo)+'</span>'+(i?escapeHtml(i.nome):"?")+(m.motivo?" — "+escapeHtml(m.motivo):"")+'<div class="tag">'+new Date(m.createdAt).toLocaleString("pt-BR")+'</div></span><span>'+sinal+m.quantidade+' '+(i?i.unidade:"")+'</span></div>';
     }).join("") : '<div class="empty-hint">Nenhuma movimentação ainda.</div>')+'</div>';
 }
@@ -638,6 +740,11 @@ function renderFinanceiro(){
 
   return renderPageHeader("landmark", "Financeiro", "Contas a pagar e a receber",
       (podeEditar ? '<button class="btn btn-primary" data-action="conta-nova">'+icon("plus",15)+' Nova conta</button>' : ''))+
+    (can(PERM.FINANCEIRO) ? '<div class="card" style="margin-bottom:14px;"><div class="card-title">Exportar pro contador</div>'+
+      '<div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">'+
+        '<div class="field" style="margin-bottom:0;"><label>Mês</label><input type="month" id="exportMesInput" value="'+hojeOperacionalStr().slice(0,7)+'"></div>'+
+        '<button class="btn" data-action="exportar-contador">'+icon("book",15)+' Baixar CSVs</button>'+
+      '</div></div>' : '')+
     '<div class="grid-2">'+
       renderResumoContas("Contas a pagar", "trendingUp", "var(--danger)", contasPagar, hoje, fimSemana)+
       renderResumoContas("Contas a receber", "trendingUp", "var(--success)", contasReceber, hoje, fimSemana)+
@@ -663,11 +770,67 @@ function renderFinanceiro(){
     '</tbody></table></div></div>';
 }
 
+function renderClientes(){
+  var podeEditar = can(PERM.CLIENTES);
+  var busca = (state.clienteBusca||"").trim().toLowerCase();
+  var lista = state.clientes.filter(function(c){ return !busca || c.nome.toLowerCase().indexOf(busca)!==-1; });
+  return renderPageHeader("users", "Clientes", state.clientes.length+" cadastrados",
+      (podeEditar ? '<button class="btn btn-primary" data-action="cliente-novo">'+icon("plus",15)+' Novo cliente</button>' : ''))+
+    '<div class="search-box" style="max-width:360px; margin-bottom:12px;">'+icon("search",16)+
+      '<input placeholder="Buscar por nome..." value="'+escapeHtml(state.clienteBusca||"")+'" data-action="cliente-busca">'+
+    '</div>'+
+    '<div class="card">'+
+    (lista.length ? lista.map(function(c){
+      return '<div class="data-row" data-action="cliente-abrir" data-cliente="'+c.id+'" style="cursor:pointer;">'+
+        '<div class="main"><div class="nome">'+escapeHtml(c.nome)+'</div>'+
+        '<div class="sub">'+(c.telefone?escapeHtml(c.telefone):"sem telefone")+(c.aniversario?' · aniversário '+new Date(c.aniversario+"T00:00:00").toLocaleDateString("pt-BR"):'')+(c.pontosFidelidade?' · '+c.pontosFidelidade+' ponto(s)':'')+'</div></div>'+
+        (c.consentimentoLgpd ? '<span class="badge badge-status-ok">LGPD OK</span>' : '<span class="badge badge-status-atencao">SEM CONSENTIMENTO</span>')+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nenhum cliente cadastrado.</div>')+
+    '</div>';
+}
+
+function renderClienteDetalhe(){
+  var c = state.clientes.find(function(x){ return x.id===state.clienteDetalheId; });
+  if(!c) return '<div class="empty-hint">Cliente não encontrado.</div>';
+  var podeEditar = can(PERM.CLIENTES);
+  var cabecalho = '<div class="comanda-head">'+
+      '<div><div class="titulo">'+escapeHtml(c.nome).toUpperCase()+'</div>'+
+      '<div class="sub">'+(c.telefone?escapeHtml(c.telefone):"sem telefone")+'</div></div>'+
+      '<button class="btn btn-ghost" data-action="nav-goto" data-view="clientes">'+icon("arrowLeft",16)+' Clientes</button>'+
+    '</div>';
+  if(!state.clienteFicha) return cabecalho+'<div class="empty-hint">Carregando...</div>';
+  var f = state.clienteFicha;
+  return cabecalho+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Fiado em aberto</div><div class="kpi-value">'+brl(f.saldo_devedor)+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(34,197,94,.14); color:var(--success);">'+icon("target",20)+'</div><div class="kpi-body"><div class="kpi-label">Pontos de fidelidade</div><div class="kpi-value">'+c.pontosFidelidade+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("utensils",20)+'</div><div class="kpi-body"><div class="kpi-label">Últimas visitas</div><div class="kpi-value">'+f.ultimas_visitas.length+'</div></div></div>'+
+    '</div>'+
+    (c.endereco ? '<div class="card" style="margin-bottom:14px;"><div class="card-title">Endereço</div><p style="font-size:13px; color:var(--text-secondary); margin:0;">'+escapeHtml(c.endereco)+(c.bairro?' — '+escapeHtml(c.bairro):'')+'</p></div>' : '')+
+    (c.observacoes ? '<div class="card" style="margin-bottom:14px;"><div class="card-title">Observações</div><p style="font-size:13px; color:var(--text-secondary); margin:0;">'+escapeHtml(c.observacoes)+'</p></div>' : '')+
+    (podeEditar ? '<button class="btn" style="margin-bottom:14px;" data-action="cliente-editar" data-cliente="'+c.id+'">'+icon("edit",15)+' Editar cadastro</button>' : '')+
+    '<div class="card"><div class="card-title">Histórico de visitas</div>'+
+    (f.ultimas_visitas.length ? f.ultimas_visitas.map(function(v){
+      return '<div class="data-row"><div class="main"><div class="nome">'+v.codigo+'</div><div class="sub">'+new Date(v.fechamento).toLocaleString("pt-BR")+'</div></div><div class="num">'+brl(v.total_centavos)+'</div></div>';
+    }).join("") : '<div class="empty-hint">Nenhuma visita registrada ainda.</div>')+
+    '</div>';
+}
+
 function renderRelatorios(){
+  var aba = state.relatorioAba||"vendas";
+  var abaTabsHtml = '<div class="tabs" style="margin-bottom:10px;">'+
+      '<div class="tab '+(aba==="vendas"?"active":"")+'" data-action="relatorio-aba" data-aba="vendas">Vendas</div>'+
+      '<div class="tab '+(aba==="gestao"?"active":"")+'" data-action="relatorio-aba" data-aba="gestao">Gestão</div>'+
+      '<div class="tab '+(aba==="dre"?"active":"")+'" data-action="relatorio-aba" data-aba="dre">DRE mensal</div>'+
+    '</div>';
+  if(aba==="dre") return renderPageHeader("chart", "Relatórios", "Demonstrativo de resultado")+abaTabsHtml+renderDre();
+  if(aba==="gestao") return renderPageHeader("chart", "Relatórios", "CMV, margem, anti-fraude e curva ABC")+abaTabsHtml+renderRelatorioGestao();
+
   var periodo = state.relatorioPeriodo || "HOJE";
   var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["MES","Escolher mês"]];
 
-  var cabecalho = renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+
+  var cabecalho = renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+abaTabsHtml+
     '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
     (periodo==="MES" ? '<div class="field" style="max-width:220px;"><input type="month" id="relatorioMesInput" value="'+escapeHtml(state.relatorioMes||"")+'" data-action="relatorio-mes"></div>' : '');
 
@@ -711,6 +874,99 @@ function renderRelatorios(){
             '</div><div class="num">'+brl(g.vendas)+'</div></div>';
         }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+
       '</div>'+
+    '</div>';
+}
+
+function renderRelatorioGestao(){
+  var periodo = state.relatorioPeriodo || "HOJE";
+  var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["MES","Escolher mês"]];
+  var cabecalho = '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
+    (periodo==="MES" ? '<div class="field" style="max-width:220px;"><input type="month" id="relatorioMesInput" value="'+escapeHtml(state.relatorioMes||"")+'" data-action="relatorio-mes"></div>' : '');
+  if(state.relatorioGestaoCarregando || !state.relatorioGestaoResultado){
+    return cabecalho+'<div class="empty-hint">Carregando período...</div>';
+  }
+  var g = state.relatorioGestaoResultado;
+  var cmv = g.cmv_por_produto||[];
+  var antiFraude = g.anti_fraude||[];
+  var taxaGarcom = g.taxa_por_garcom||[];
+  var abc = g.curva_abc||[];
+  var heatmap = g.heatmap||[];
+  var diasSemana = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  var maxHeat = Math.max(1, Math.max.apply(null, heatmap.map(function(h){ return h.total; }).concat([0])));
+  var heatPorDiaHora = {};
+  heatmap.forEach(function(h){ heatPorDiaHora[h.dia_semana+"-"+h.hora] = h; });
+
+  return cabecalho+
+    '<div class="card" style="margin-bottom:14px;"><div class="card-title">CMV e margem por produto</div>'+
+      '<div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Produto</th><th>Categoria</th><th style="text-align:right;">Preço</th><th style="text-align:right;">Custo (CMV)</th><th style="text-align:right;">Margem</th><th style="text-align:right;">Vendido</th></tr></thead><tbody>'+
+      (cmv.length ? cmv.map(function(c){
+        var margemPct = c.preco_centavos>0 ? Math.round((1 - c.custo_centavos/c.preco_centavos)*100) : 0;
+        var neg = c.custo_centavos >= c.preco_centavos;
+        return '<tr'+(neg?' style="background:rgba(239,68,68,.1);"':'')+'><td>'+escapeHtml(c.nome)+'</td><td>'+escapeHtml(c.categoria)+'</td>'+
+          '<td style="text-align:right;">'+brl(c.preco_centavos)+'</td><td style="text-align:right;">'+brl(c.custo_centavos)+'</td>'+
+          '<td style="text-align:right; color:'+(neg?"var(--danger)":"var(--success)")+'; font-weight:700;">'+margemPct+'%</td>'+
+          '<td style="text-align:right;">'+c.qtd_vendida+'</td></tr>';
+      }).join("") : '<tr><td colspan="6"><div class="empty-hint">Sem vendas no período.</div></td></tr>')+
+      '</tbody></table></div></div>'+
+    '<div class="grid-2">'+
+      '<div class="card"><div class="card-title">Anti-fraude · cancelamentos e descontos por funcionário</div>'+
+        (antiFraude.length ? antiFraude.map(function(f){
+          return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(f.nome)+'</div>'+
+            '<div class="sub">'+f.cancelamentos_qtd+' cancelamento(s) · '+f.descontos_qtd+' desconto(s)</div></div>'+
+            '<div class="num">'+brl(f.valor_total)+'</div></div>';
+        }).join("") : '<div class="empty-hint">Nenhum cancelamento/desconto no período.</div>')+
+      '</div>'+
+      '<div class="card"><div class="card-title">Taxa de serviço por garçom</div><div class="modal-sub" style="margin:0 0 8px;">Estimada proporcionalmente ao que cada um lançou.</div>'+
+        (taxaGarcom.length ? taxaGarcom.map(function(t){
+          return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(t.nome)+'</div><div class="sub">Subtotal '+brl(t.subtotal)+'</div></div>'+
+            '<div class="num">'+brl(t.taxa_estim)+'</div></div>';
+        }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+
+      '</div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:14px;"><div class="card-title">Taxas pagas às maquininhas</div>'+
+      ((state.relatorioTaxasResultado||[]).length ? state.relatorioTaxasResultado.map(function(t){
+        return '<div class="data-row"><div class="main"><div class="nome">'+t.forma+'</div><div class="sub">Bruto '+brl(t.bruto)+' · '+t.taxa_pct+'%</div></div>'+
+          '<div class="num" style="color:var(--danger);">-'+brl(t.taxa_paga)+'</div></div>';
+      }).join("") : '<div class="empty-hint">Sem vendas em cartão/voucher no período.</div>')+
+    '</div>'+
+    '<div class="card" style="margin-top:14px;"><div class="card-title">Curva ABC de produtos</div>'+
+      (abc.length ? abc.map(function(a){
+        var cls = a.classe==="A"?"badge-status-ok":(a.classe==="B"?"badge-status-atencao":"badge-status-critico");
+        return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(a.nome)+'</div></div>'+
+          '<span class="badge '+cls+'" style="margin-right:10px;">CLASSE '+a.classe+'</span>'+
+          '<div class="num">'+brl(a.total)+'</div></div>';
+      }).join("") : '<div class="empty-hint">Sem vendas no período.</div>')+
+    '</div>'+
+    '<div class="card" style="margin-top:14px;"><div class="card-title">Heatmap · vendas por dia da semana × hora</div>'+
+      '<div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Dia</th>'+
+        Array.from({length:24}).map(function(_,h){ return '<th style="text-align:center; font-size:9px;">'+h+'</th>'; }).join("")+
+      '</tr></thead><tbody>'+
+      diasSemana.map(function(nomeDia, dow){
+        return '<tr><td>'+nomeDia+'</td>'+
+          Array.from({length:24}).map(function(_,h){
+            var cel = heatPorDiaHora[dow+"-"+h];
+            var intensidade = cel ? Math.round((cel.total/maxHeat)*100) : 0;
+            return '<td style="text-align:center; padding:2px;"><div title="'+(cel?brl(cel.total):"")+'" style="width:100%; height:18px; border-radius:3px; background:rgba(30,139,255,'+(intensidade/100*0.85+(intensidade>0?0.1:0))+');"></div></td>';
+          }).join("")+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div>'+
+    '</div>';
+}
+
+function renderDre(){
+  var mes = state.relatorioDreMes || hojeOperacionalStr().slice(0,7);
+  var cabecalho = '<div class="field" style="max-width:220px;"><input type="month" id="dreMesInput" value="'+escapeHtml(mes)+'" data-action="dre-mes"></div>';
+  if(state.relatorioDreCarregando || !state.relatorioDreResultado){
+    return cabecalho+'<div class="empty-hint">Carregando mês...</div>';
+  }
+  var d = state.relatorioDreResultado;
+  return cabecalho+
+    '<div class="card" style="max-width:480px;">'+
+      '<div class="totais-linha"><span>Faturamento</span><span>'+brl(d.faturamento)+'</span></div>'+
+      '<div class="totais-linha"><span>(-) CMV</span><span>-'+brl(d.cmv)+'</span></div>'+
+      '<div class="totais-linha"><span>(-) Despesas (contas a pagar do mês)</span><span>-'+brl(d.despesas)+'</span></div>'+
+      '<div class="totais-linha total" style="color:'+(d.resultado>=0?"var(--success)":"var(--danger)")+';"><span>Resultado</span><span>'+brl(d.resultado)+'</span></div>'+
     '</div>';
 }
 
@@ -775,6 +1031,65 @@ function renderConfiguracoes(){
       '<div class="field"><label>Limite de desconto sem supervisor (%)</label><input id="cfgDesconto" type="number" min="0" max="100" step="1" value="'+c.limiteDescontoPct+'"></div>'+
       '<div class="field"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
       '<div class="field" style="margin-bottom:0;"><label>Alertar sangria quando dinheiro em gaveta passar de</label><input id="cfgAlertaSangria" type="number" min="0" step="0.01" value="'+(c.limiteAlertaSangriaCentavos/100).toFixed(2)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Cozinha (KDS) — atraso por setor</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Minutos até um item ser marcado como atrasado no KDS, por setor de produção.</p>'+
+      SETORES_PRODUCAO.map(function(s, i){
+        return '<div class="field" '+(i===SETORES_PRODUCAO.length-1?'style="margin-bottom:0;"':'')+'><label>'+s+'</label>'+
+          '<input id="cfgAtraso'+s+'" type="number" min="1" step="1" value="'+((c.atrasoPorSetor&&c.atrasoPorSetor[s])||10)+'"></div>';
+      }).join("")+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Delivery — taxa por bairro</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Cadastro manual (sem cálculo automático de distância).</p>'+
+      Object.keys(c.bairrosTaxaEntrega||{}).map(function(b){
+        return '<div class="pagamento-linha"><span class="forma">'+escapeHtml(b)+'</span>'+
+          '<input type="number" min="0" step="0.01" value="'+(c.bairrosTaxaEntrega[b]/100).toFixed(2)+'" data-action="bairro-taxa-editar" data-bairro="'+escapeHtml(b)+'">'+
+          '<button class="icon-btn" data-action="bairro-taxa-remover" data-bairro="'+escapeHtml(b)+'" style="color:var(--danger);">'+icon("x",14)+'</button></div>';
+      }).join("")+
+      '<div style="display:flex; gap:8px; margin-top:8px;">'+
+        '<input id="novoBairroNome" placeholder="Bairro" style="flex:2;">'+
+        '<input id="novoBairroTaxa" type="number" min="0" step="0.01" placeholder="R$" style="flex:1;">'+
+        '<button class="btn btn-sm" data-action="bairro-taxa-adicionar">'+icon("plus",14)+'</button>'+
+      '</div>'+
+    '</div>'+
+    (usuarioAtual().papel==="ADMIN" ? '<div class="card">'+
+      '<div class="card-title">Verificação em duas etapas (sua conta)</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Código de um app autenticador (Google Authenticator, Authy etc.) além do PIN, só pra esta conta ADMIN.</p>'+
+      (state.mfaFactors.length ? state.mfaFactors.map(function(f){
+        return '<div class="data-row"><div class="main"><div class="nome">Ativada</div><div class="sub">desde '+new Date(f.created_at).toLocaleDateString("pt-BR")+'</div></div>'+
+          '<button class="btn btn-sm" data-action="mfa-desativar" data-fator="'+f.id+'" style="color:var(--danger);">Desativar</button></div>';
+      }).join("") : '<button class="btn" data-action="mfa-ativar-abrir">Ativar</button>')+
+    '</div>' : '')+
+    '<div class="card">'+
+      '<div class="card-title">Bar — couvert e happy hour</div>'+
+      '<div class="field"><label>Produto usado como couvert</label><select id="cfgProdutoCouvert">'+
+        '<option value="">Nenhum</option>'+
+        state.produtos.map(function(p){ return '<option value="'+p.id+'" '+(c.produtoCouvertId===p.id?"selected":"")+'>'+escapeHtml(p.nome)+'</option>'; }).join("")+
+      '</select></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Janela de happy hour</label>'+
+        '<div style="display:flex; gap:8px;">'+
+          '<input id="cfgHappyInicio" type="time" value="'+(c.happyHoraInicio||"")+'">'+
+          '<input id="cfgHappyFim" type="time" value="'+(c.happyHoraFim||"")+'">'+
+        '</div></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Fidelidade por pontos</div>'+
+      '<div class="field"><label>Pontos ganhos por R$1 pago</label><input id="cfgPontosPorReal" type="number" min="0" step="0.1" value="'+((c.fidelidade&&c.fidelidade.pontosPorReal)||0)+'"></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Valor de 1 ponto no resgate (R$)</label><input id="cfgValorPonto" type="number" min="0" step="0.01" value="'+(((c.fidelidade&&c.fidelidade.valorPontoCentavos)||0)/100).toFixed(2)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Taxas das maquininhas</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Desconta automaticamente da conta a receber gerada no pagamento, com o prazo configurado aqui.</p>'+
+      ["DEBITO","CREDITO","VOUCHER"].map(function(f, i){
+        var t = (c.taxasMaquininha&&c.taxasMaquininha[f])||{pct:0,prazoDias:0};
+        return '<div class="field" '+(i===2?'style="margin-bottom:0;"':'')+'><label>'+f+'</label>'+
+          '<div style="display:flex; gap:8px;">'+
+            '<input id="cfgTaxaPct'+f+'" type="number" min="0" max="100" step="0.1" value="'+t.pct+'" placeholder="Taxa %" style="flex:1;">'+
+            '<input id="cfgTaxaPrazo'+f+'" type="number" min="0" step="1" value="'+t.prazoDias+'" placeholder="Prazo (dias)" style="flex:1;">'+
+          '</div></div>';
+      }).join("")+
     '</div>'+
     '<div class="card">'+
       '<div class="card-title">Impressão</div>'+

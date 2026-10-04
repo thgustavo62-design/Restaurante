@@ -12,10 +12,13 @@ function estadoVazio(){
     restauranteSlug:null,
     restauranteSlugInput:"",
     restauranteSlugErro:"",
+    caixaTerminalNome:"Terminal 1",
     loginUsuarioInput:"",
     loginSenhaInput:"",
     loginErro:"",
     loginVerificando:false,
+    loginMfaPendente:null, loginMfaCodigo:"",
+    mfaFactors:[],
     loginTentativas:0,
     loginBloqueadoAte:null,
     sidebarCollapsed:false,
@@ -34,14 +37,26 @@ function estadoVazio(){
     config:{
       empresaNome:"", empresaCnpj:"", taxaServicoPctPadrao:10, limiteDescontoPct:10,
       limiteDiferencaCentavos:500, limiteAlertaSangriaCentavos:100000, impressoraLargura:"80mm", reciboRodape:"",
-      horarioAbertura:"18:00", horarioFechamento:"00:00", chavePix:"", totalFichas:50, slug:""
+      horarioAbertura:"18:00", horarioFechamento:"00:00", chavePix:"", totalFichas:50, slug:"",
+      atrasoPorSetor:{BAR:10, COZINHA:10, BRASA:10, SOBREMESA:10},
+      taxasMaquininha:{DEBITO:{pct:0, prazoDias:1}, CREDITO:{pct:0, prazoDias:30}, VOUCHER:{pct:0, prazoDias:30}},
+      produtoCouvertId:"", happyHoraInicio:"", happyHoraFim:"",
+      fidelidade:{pontosPorReal:1, valorPontoCentavos:1}, bairrosTaxaEntrega:{}
     },
-    usuarios:[], categorias:[], categoriaIdPorNome:{}, produtos:[], mesas:[],
+    kdsSomAtivo:false,
+    kdsSomVistos:{},
+    kdsBaselineFeito:false,
+    usuarios:[], categorias:[], categoriaIdPorNome:{}, produtos:[], gruposOpcoes:[], opcoes:[], mesas:[],
     insumos:[], fichaTecnica:[], estoqueMovimentos:[], contas:[], insumoRendimentos:[],
     fornecedores:[], pedidosCompra:[],
     comandas:[], caixaSessao:null, caixaMovimentos:[], caixaSessoesHistorico:[], auditoria:[],
+    clientes:[], clienteDetalheId:null, clienteFicha:null, clienteBusca:"",
+    pedidosQr:[],
     kdsItensAvulsos:[],
     vendasHoje:[],
-    relatorioResultado:null, relatorioCarregando:false, relatorioMes:""
+    relatorioResultado:null, relatorioCarregando:false, relatorioMes:"",
+    relatorioAba:"vendas",
+    relatorioGestaoResultado:null, relatorioGestaoCarregando:false, relatorioTaxasResultado:[],
+    relatorioDreResultado:null, relatorioDreCarregando:false, relatorioDreMes:""
   };
 }

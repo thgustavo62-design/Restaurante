@@ -37,14 +37,32 @@ h1,h2{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .cp-item-nome{font-size:13px; font-weight:600; line-height:1.3; min-height:34px;}
 .cp-item-preco{font-family:var(--font-display); font-size:18px; font-weight:800; color:var(--primary); margin-top:8px;}
 .cp-esgotado-label{color:var(--danger); font-family:var(--font-body); font-size:11px; text-transform:uppercase; letter-spacing:.5px;}
+.cp-opcoes-grupo{font-size:10.5px; color:var(--text-muted); margin-top:6px; line-height:1.4;}
 .cp-erro{max-width:480px; margin:60px auto; text-align:center; color:var(--text-muted); font-size:14px;}
 .cp-footer-marca{text-align:center; margin-top:28px; font-size:10.5px; color:var(--text-muted); letter-spacing:.3px;}
+
+/* Fase 3.3 — pedido pelo QR da mesa */
+.cp-qty-ctrl{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px;}
+.cp-qty-btn{width:30px; height:30px; border-radius:6px; border:1px solid var(--border); background:var(--surface-01); color:var(--text-primary); font-size:16px; cursor:pointer;}
+#cp-barra-pedido{display:none; position:fixed; left:0; right:0; bottom:0; background:var(--primary); color:#fff; padding:14px 18px; align-items:center; justify-content:space-between; font-weight:700; z-index:50;}
+.cp-btn-pedido{background:#fff; color:var(--primary); border:none; border-radius:999px; padding:9px 18px; font-weight:800; cursor:pointer;}
+.cp-btn-secundario{background:transparent; color:var(--text-primary); border:1px solid var(--border); border-radius:999px; padding:9px 18px; font-weight:700; cursor:pointer;}
+#cp-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); align-items:flex-end; justify-content:center; z-index:60;}
+.cp-modal{background:var(--surface-01); border:1px solid var(--border); border-radius:14px 14px 0 0; padding:20px; width:100%; max-width:480px; max-height:80vh; overflow-y:auto;}
+.cp-modal-linha{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px;}
+.cp-modal-total{font-weight:800; font-size:15px; border-bottom:none;}
+.cp-modal textarea{width:100%; margin-top:12px; background:var(--background); border:1px solid var(--border); border-radius:8px; color:var(--text-primary); padding:10px; font-family:var(--font-body); min-height:60px;}
+.cp-modal-acoes{display:flex; gap:10px; margin-top:14px;}
+.cp-modal-acoes button{flex:1;}
+.cp-erro-inline{color:var(--danger); font-size:12px; margin-top:8px;}
 </style>
 </head>
 <body>
 <div id="cp-root">
   <div class="cp-erro">Carregando cardápio...</div>
 </div>
+<div id="cp-barra-pedido"></div>
+<div id="cp-overlay"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="assets/js/cardapio-publico.js"></script>

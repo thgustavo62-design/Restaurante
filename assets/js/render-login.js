@@ -10,6 +10,17 @@ function renderLogin(){
       '<button class="btn btn-primary btn-block" data-action="restaurante-slug-confirmar">Entrar</button>'+
     '</div></div>';
   }
+  if(state.loginMfaPendente){
+    return '<div class="login-wrap"><div class="login-card">'+
+      '<img class="login-logo" src="assets/logo/vision-food.png" alt="Vision Food">'+
+      '<p>Verificação em duas etapas</p>'+
+      '<div class="modal-sub">Digite o código de 6 dígitos do app autenticador</div>'+
+      '<div class="field" style="text-align:left;"><input id="loginMfaCodigoInput" inputmode="numeric" maxlength="6" placeholder="000000" value="'+escapeHtml(state.loginMfaCodigo||"")+'" data-action="login-mfa-codigo"></div>'+
+      (state.loginErro ? '<div class="pin-error">'+escapeHtml(state.loginErro)+'</div>' : '')+
+      '<button class="btn btn-primary btn-block" data-action="login-mfa-confirmar" '+(state.loginVerificando?"disabled":"")+'>'+(state.loginVerificando?"Verificando...":"Confirmar")+'</button>'+
+      '<div style="margin-top:16px;"><button class="btn btn-ghost btn-sm" data-action="login-mfa-cancelar">Voltar</button></div>'+
+    '</div></div>';
+  }
   return '<div class="login-wrap"><div class="login-card">'+
     '<img class="login-logo" src="assets/logo/vision-food.png" alt="Vision Food">'+
     '<p>Entrar</p>'+
