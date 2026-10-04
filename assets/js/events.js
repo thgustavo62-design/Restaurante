@@ -167,7 +167,7 @@ function bindEvents(){
     if(action==="pagamento-cliente-trocar"){ state.modal.escolhendoCliente = true; state.modal.buscaCliente=""; render(); return; }
     if(action==="pagamento-cliente-voltar"){ state.modal.escolhendoCliente = false; render(); return; }
     if(action==="pagamento-cliente-escolher"){ state.modal.fiadoClienteId = el.dataset.cliente; state.modal.escolhendoCliente = false; state.modal.pontosResgatados = 0; render(); return; }
-    if(action==="pagamento-modo"){ state.modal.modo = el.dataset.modo; state.modal.linhas = []; state.modal.pontosResgatados = 0; state.modal.erro=""; render(); return; }
+    if(action==="pagamento-modo"){ state.modal.modo = el.dataset.modo; state.modal.linhas = []; state.modal.pontosResgatados = 0; state.modal.cupomCodigo=""; state.modal.erro=""; render(); return; }
     if(action==="pagamento-item-toggle"){
       var iid = el.dataset.item;
       if(state.modal.itensSelecionados[iid]) delete state.modal.itensSelecionados[iid];
@@ -511,6 +511,7 @@ function bindEvents(){
     if(action==="cancelar-motivo"){ state.modal.motivo = e.target.value; return; }
     if(action==="pagamento-cliente-busca"){ state.modal.buscaCliente = e.target.value; render(); return; }
     if(action==="pagamento-pontos"){ state.modal.pontosResgatados = parseInt(e.target.value||"0",10); render(); return; }
+    if(action==="pagamento-cupom"){ state.modal.cupomCodigo = e.target.value; render(); return; }
     if(action==="cliente-busca"){ state.clienteBusca = e.target.value; render(); return; }
     if(action==="pagamento-valor"){
       var idx = parseInt(e.target.dataset.idx,10);

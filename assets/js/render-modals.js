@@ -621,7 +621,12 @@ function renderPagamentoModal(m){
   var maxPontosUteis = (modo==="pessoas" && valorPontoCentavos>0) ? Math.min(saldoPontos, Math.ceil(t.total/valorPontoCentavos)) : 0;
   var pontosResgatados = Math.min(m.pontosResgatados||0, maxPontosUteis);
   var descontoPontos = pontosResgatados*valorPontoCentavos;
-  var totalFinal = Math.max(0, t.total - descontoPontos);
+  // Fase 5 — cupom: mesma trava do servidor (0062), só vale fechando a
+  // conta inteira, nunca no modo "dividir por item".
+  var cupomValido = modo==="pessoas" ? buscarCupomValido(m.cupomCodigo) : null;
+  var baseCupom = Math.max(0, t.subtotal - t.desconto - descontoPontos);
+  var descontoCupom = calcularDescontoCupom(cupomValido, baseCupom);
+  var totalFinal = Math.max(0, t.total - descontoPontos - descontoCupom);
   var soma = m.linhas.reduce(function(s,l){ return s+l.valorCentavos; },0);
   var restante = totalFinal - soma;
   var formas = ["DINHEIRO","PIX","DEBITO","CREDITO","VOUCHER","FIADO"];
@@ -642,6 +647,7 @@ function renderPagamentoModal(m){
       (naoPagos.length<comanda.itens.filter(function(i){return i.status!=="CANCELADO";}).length ? 'Falta pagar ' : 'Total ')+
       '<b style="color:var(--text-primary); font-size:15px;">'+brl(totalFinal)+'</b>'+
       (descontoPontos>0 ? ' <span style="color:var(--success); font-size:11.5px;">(-'+brl(descontoPontos)+' em pontos)</span>' : '')+
+      (descontoCupom>0 ? ' <span style="color:var(--success); font-size:11.5px;">(-'+brl(descontoCupom)+' cupom '+escapeHtml(cupomValido.codigo)+')</span>' : '')+
     '</div>'+
     '<div class="tabs" style="margin-bottom:12px;">'+
       '<div class="tab '+(modo==="pessoas"?"active":"")+'" data-action="pagamento-modo" data-modo="pessoas">Dividir por pessoas</div>'+
@@ -674,6 +680,12 @@ function renderPagamentoModal(m){
     (clienteEscolhido && maxPontosUteis>0 ? '<div class="field"><label>Usar pontos (até '+maxPontosUteis+', vale '+brl(valorPontoCentavos)+' cada)</label>'+
       '<input type="number" min="0" max="'+maxPontosUteis+'" step="1" value="'+pontosResgatados+'" data-action="pagamento-pontos">'+
     '</div>' : '')+
+    (modo==="pessoas" ? '<div class="field"><label>Cupom de desconto (opcional)</label>'+
+      '<input id="pagamentoCupomInput" value="'+escapeHtml(m.cupomCodigo||"")+'" placeholder="Código do cupom" style="text-transform:uppercase;" data-action="pagamento-cupom">'+
+      (m.cupomCodigo && m.cupomCodigo.trim() ? (cupomValido
+        ? '<div style="color:var(--success); font-size:11px; margin-top:4px;">Cupom válido — '+(cupomValido.tipo==="PERCENTUAL"?cupomValido.valor+"%":brl(cupomValido.valor))+' de desconto</div>'
+        : '<div style="color:var(--danger); font-size:11px; margin-top:4px;">Cupom inválido, inativo, expirado ou esgotado</div>') : '')+
+    '</div>' : '')+
     (temPix ? '<div class="receipt-preview" style="margin:10px auto;">'+
       '<div class="center bold">PIX — '+brl(pixValor)+'</div>'+
       pixQrGridHtml(comanda.codigo+pixValor)+
@@ -687,7 +699,9 @@ function renderPagamentoModal(m){
     (m.erro ? '<div class="pin-error" style="margin-top:8px;">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="pagamento-cancelar">Cancelar</button>'+
-      '<button class="btn btn-success btn-lg btn-block" data-action="pagamento-confirmar" '+((t.total===0 || soma<totalFinal || (temFiado && !m.fiadoClienteId))?"disabled":"")+'>Confirmar pagamento</button>'+
+      '<button class="btn btn-success btn-lg btn-block" data-action="pagamento-confirmar" '+
+        ((t.total===0 || soma<totalFinal || (temFiado && !m.fiadoClienteId) || (m.cupomCodigo && m.cupomCodigo.trim() && !cupomValido))?"disabled":"")+
+      '>Confirmar pagamento</button>'+
     '</div>'+
   '</div></div>';
 }

@@ -461,6 +461,26 @@ function verificarNovosPedidosKds(){
   state.kdsSomVistos = idsPendentes;
   if(novo && state.kdsSomAtivo) tocarBipKds();
 }
+// Fase 5 — cupom: validação espelhada aqui só pra preview no modal de
+// pagamento (mostrar se o código digitado é válido e quanto desconta
+// antes de confirmar) — a validação de verdade é sempre refeita no
+// servidor dentro de confirmar_pagamento (0062), nunca confiada nisto.
+function buscarCupomValido(codigo){
+  if(!codigo) return null;
+  var alvo = codigo.trim().toUpperCase();
+  if(!alvo) return null;
+  var hoje = diasA(0);
+  return state.cupons.find(function(c){
+    return c.codigo.toUpperCase()===alvo && c.ativo
+      && (!c.validoDe || c.validoDe<=hoje) && (!c.validoAte || c.validoAte>=hoje)
+      && (!c.usosMax || c.usosAtuais<c.usosMax);
+  }) || null;
+}
+function calcularDescontoCupom(cupom, baseCentavos){
+  if(!cupom) return 0;
+  if(cupom.tipo==="PERCENTUAL") return Math.round(Math.max(0,baseCentavos) * cupom.valor/100);
+  return Math.min(cupom.valor, Math.max(0, baseCentavos));
+}
 function totaisNaoPagos(comanda, apenasIds){
   var itens = itensNaoPagos(comanda);
   if(apenasIds) itens = itens.filter(function(it){ return apenasIds[it.id]; });

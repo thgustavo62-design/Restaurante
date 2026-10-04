@@ -5,7 +5,7 @@ async function abrirFecharConta(comandaId){
   var res = await sb.from("comandas").update({status:"FECHANDO"}).eq("id", comandaId);
   if(res.error){ toast("err","ERRO", res.error.message); return; }
   comanda.status = "FECHANDO";
-  state.modal = {type:"pagamento", comandaId:comandaId, linhas:[], dividirPessoas:1, modo:"pessoas", itensSelecionados:{}, fiadoClienteId:null, escolhendoCliente:false, buscaCliente:"", pontosResgatados:0};
+  state.modal = {type:"pagamento", comandaId:comandaId, linhas:[], dividirPessoas:1, modo:"pessoas", itensSelecionados:{}, fiadoClienteId:null, escolhendoCliente:false, buscaCliente:"", pontosResgatados:0, cupomCodigo:""};
   render();
 }
 function fecharModalAtual(){
@@ -49,7 +49,10 @@ function pagamentoAddMetodo(forma){
   var valorPonto = (state.config.fidelidade&&state.config.fidelidade.valorPontoCentavos)||0;
   var maxPontos = (m.modo==="pessoas" && cliente && valorPonto>0) ? Math.min(cliente.pontosFidelidade, Math.ceil(t.total/valorPonto)) : 0;
   var pontos = Math.min(m.pontosResgatados||0, maxPontos);
-  var totalFinal = Math.max(0, t.total - pontos*valorPonto);
+  var descontoPontos = pontos*valorPonto;
+  var cupom = m.modo==="pessoas" ? buscarCupomValido(m.cupomCodigo) : null;
+  var descontoCupom = calcularDescontoCupom(cupom, Math.max(0, t.subtotal - t.desconto - descontoPontos));
+  var totalFinal = Math.max(0, t.total - descontoPontos - descontoCupom);
   var soma = state.modal.linhas.reduce(function(s,l){ return s+l.valorCentavos; },0);
   var restante = Math.max(0, totalFinal - soma);
   state.modal.linhas.push({forma:forma, valorCentavos: restante>0?restante:0});
@@ -76,7 +79,10 @@ async function confirmarPagamento(){
   var valorPonto = (state.config.fidelidade&&state.config.fidelidade.valorPontoCentavos)||0;
   var maxPontos = (modo==="pessoas" && cliente && valorPonto>0) ? Math.min(cliente.pontosFidelidade, Math.ceil(t.total/valorPonto)) : 0;
   var pontosResgatados = Math.min(state.modal.pontosResgatados||0, maxPontos);
-  var totalFinal = Math.max(0, t.total - pontosResgatados*valorPonto);
+  var descontoPontos = pontosResgatados*valorPonto;
+  var cupomValido = modo==="pessoas" ? buscarCupomValido(state.modal.cupomCodigo) : null;
+  var descontoCupom = calcularDescontoCupom(cupomValido, Math.max(0, t.subtotal - t.desconto - descontoPontos));
+  var totalFinal = Math.max(0, t.total - descontoPontos - descontoCupom);
   var soma = state.modal.linhas.reduce(function(s,l){ return s+l.valorCentavos; },0);
   if(t.total===0){
     state.modal.erro = "Selecione ao menos um item."; render(); return;
@@ -90,15 +96,19 @@ async function confirmarPagamento(){
     state.modal.erro = "Escolha um cliente cadastrado para gerar a conta a receber do fiado.";
     render(); return;
   }
+  if(state.modal.cupomCodigo && state.modal.cupomCodigo.trim() && !cupomValido){
+    state.modal.erro = "Cupom inválido, inativo, expirado ou esgotado — apague o código ou corrija antes de confirmar.";
+    render(); return;
+  }
 
-  // Fase 3.5 — escopo mínimo offline: só dinheiro, sem fiado/pontos/cartão
-  // (não dá pra validar saldo de pontos ou gerar conta a receber líquida
-  // sem o banco). Fecha a comanda localmente como "sincronizando" e manda
-  // de verdade quando a conexão voltar.
+  // Fase 3.5 — escopo mínimo offline: só dinheiro, sem fiado/pontos/cupom/
+  // cartão (não dá pra validar saldo de pontos, cupom ou gerar conta a
+  // receber líquida sem o banco). Fecha a comanda localmente como
+  // "sincronizando" e manda de verdade quando a conexão voltar.
   var soDinheiro = state.modal.linhas.length===1 && state.modal.linhas[0].forma==="DINHEIRO";
   if(!navigator.onLine){
-    if(!soDinheiro || temFiado || pontosResgatados>0){
-      state.modal.erro = "Sem internet: só dá pra fechar em dinheiro, sem fiado nem pontos.";
+    if(!soDinheiro || temFiado || pontosResgatados>0 || cupomValido){
+      state.modal.erro = "Sem internet: só dá pra fechar em dinheiro, sem fiado, pontos ou cupom.";
       render(); return;
     }
     await confirmarPagamentoOffline(comanda, itemIds, totalFinal);
@@ -118,10 +128,11 @@ async function confirmarPagamento(){
     p_cliente_id: state.modal.fiadoClienteId || null,
     p_item_ids: itemIds,
     p_sessao_id: state.caixaSessao.id,
-    p_pontos_resgatados: pontosResgatados
+    p_pontos_resgatados: pontosResgatados,
+    p_cupom_codigo: cupomValido ? cupomValido.codigo : null
   });
   if(res.error){
-    if(soDinheiro && !temFiado && pontosResgatados===0 && typeof erroDeRede==="function" && erroDeRede(res)){
+    if(soDinheiro && !temFiado && pontosResgatados===0 && !cupomValido && typeof erroDeRede==="function" && erroDeRede(res)){
       await confirmarPagamentoOffline(comanda, itemIds, totalFinal);
       return;
     }
@@ -136,6 +147,10 @@ async function confirmarPagamento(){
     var insumo = state.insumos.find(function(i){ return i.id===m.insumo_id; });
     if(insumo) insumo.estoqueAtual = Math.max(0, insumo.estoqueAtual - Number(m.quantidade));
   });
+  if(out.cupom_codigo){
+    var cupomUsado = state.cupons.find(function(c){ return c.codigo===out.cupom_codigo; });
+    if(cupomUsado) cupomUsado.usosAtuais = (cupomUsado.usosAtuais||0) + 1;
+  }
 
   comanda.totalCentavos = out.comanda.total_centavos;
   // marca como pago exatamente o que esta chamada liquidou: o subconjunto
