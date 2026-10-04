@@ -49,6 +49,66 @@ function renderPageHeader(iconName, title, sub, acoesHtml){
     '</div>';
 }
 
+// 0.11 — componente genérico de sub-abas: cada tela com abas (Relatórios,
+// Marketing, e as que vierem depois) declara um array de
+// {id, rotulo, permissao, render, carregar?, carregado?} em SUB_ABAS[tela]
+// — aba sem permissão não aparece, dado só é buscado quando a aba é
+// aberta pela primeira vez (nunca em carregarTudo), e o estado vai pra
+// URL (#tela/aba) pra dar pra linkar direto. Rolagem horizontal no
+// celular vem de .tabs-scroll (CSS).
+var SUB_ABAS = {};
+function renderSubAbas(tela, extraAntesDasAbas){
+  var abas = SUB_ABAS[tela]||[];
+  var visiveis = abas.filter(function(a){ return !a.permissao || can(a.permissao); });
+  if(!visiveis.length) return '<div class="empty-hint">Nenhuma aba disponível pro seu papel.</div>';
+  var atual = state.subAba[tela];
+  if(!atual || !visiveis.some(function(a){ return a.id===atual; })) atual = visiveis[0].id;
+  state.subAba[tela] = atual;
+  var aba = visiveis.find(function(a){ return a.id===atual; });
+  var tabsHtml = '<div class="tabs">'+visiveis.map(function(a){
+    return '<div class="tab '+(a.id===atual?"active":"")+'" data-action="subaba-ir" data-tela="'+tela+'" data-aba="'+a.id+'">'+escapeHtml(a.rotulo)+'</div>';
+  }).join("")+'</div>';
+  return tabsHtml + (extraAntesDasAbas||"") + aba.render();
+}
+function subAbaIr(tela, abaId){
+  state.subAba[tela] = abaId;
+  try{ window.location.hash = tela+"/"+abaId; }catch(e){}
+  render();
+  garantirSubAbaCarregada(tela);
+}
+// chamado depois de render() (nunca de dentro — mesmo padrão do resto do
+// app, side-effect assíncrono sempre fora da função de view) sempre que a
+// tela muda (nav-goto, login) ou a aba muda (subAbaIr): busca o dado da
+// aba ATUALMENTE selecionada se ela ainda não tiver sido carregada.
+function garantirSubAbaCarregada(tela){
+  var abas = SUB_ABAS[tela];
+  if(!abas || !abas.length) return;
+  var visiveis = abas.filter(function(a){ return !a.permissao || can(a.permissao); });
+  if(!visiveis.length) return;
+  var atual = state.subAba[tela];
+  if(!atual || !visiveis.some(function(a){ return a.id===atual; })) atual = visiveis[0].id;
+  var aba = visiveis.find(function(a){ return a.id===atual; });
+  if(aba && aba.carregar && (!aba.carregado || !aba.carregado())) aba.carregar();
+}
+// lê #tela/aba da URL (deep link) — chamado uma vez no login/troca de
+// papel; se a tela/aba não existir ou o usuário não tiver permissão,
+// simplesmente não aplica nada (fica no padrão do papel, como sempre foi).
+function aplicarHashInicial(){
+  var hash = (window.location.hash||"").replace(/^#/,"");
+  if(!hash) return false;
+  var partes = hash.split("/");
+  var tela = partes[0], abaId = partes[1];
+  var navItem = NAV_ITEMS.reduce(function(acc, n){
+    if(acc) return acc;
+    if(n.group) return (n.items||[]).find(function(x){ return x.view===tela; });
+    return n.view===tela ? n : null;
+  }, null);
+  if(!navItem || !can(navItem.perm)) return false;
+  state.view = tela;
+  if(abaId && SUB_ABAS[tela]) state.subAba[tela] = abaId;
+  return true;
+}
+
 function render(){
   var active = document.activeElement;
   var activeId = (active && active.id) ? active.id : null;

@@ -190,6 +190,12 @@ async function carregarTudo(){
   var pqrRes = await sb.from("pedidos_qr").select("*").eq("status","PENDENTE").order("created_at");
   state.pedidosQr = (checar(pqrRes,"pedidos_qr")||[]).map(mapPedidoQr);
 
+  // 0.5 — conflitos de sincronização offline pendentes de decisão
+  // (GERENTE/ADMIN); RLS já restringe pra quem tem a permissão, então
+  // pedir pra todo mundo só devolve vazio pra quem não pode ver.
+  var syncRes = await sb.from("sync_conflitos").select("*").eq("status","PENDENTE").order("created_at");
+  state.syncConflitos = (checar(syncRes,"sync_conflitos")||[]).map(mapSyncConflito);
+
   var comRes = await sb.from("comandas").select("*, comanda_itens(*)").in("status",["ABERTA","FECHANDO"]);
   state.comandas = (checar(comRes,"comandas")||[]).map(function(c){
     var m = mapComanda(c);
@@ -460,26 +466,6 @@ function verificarNovosPedidosKds(){
   var novo = Object.keys(idsPendentes).some(function(id){ return !state.kdsSomVistos[id]; });
   state.kdsSomVistos = idsPendentes;
   if(novo && state.kdsSomAtivo) tocarBipKds();
-}
-// Fase 5 — cupom: validação espelhada aqui só pra preview no modal de
-// pagamento (mostrar se o código digitado é válido e quanto desconta
-// antes de confirmar) — a validação de verdade é sempre refeita no
-// servidor dentro de confirmar_pagamento (0062), nunca confiada nisto.
-function buscarCupomValido(codigo){
-  if(!codigo) return null;
-  var alvo = codigo.trim().toUpperCase();
-  if(!alvo) return null;
-  var hoje = diasA(0);
-  return state.cupons.find(function(c){
-    return c.codigo.toUpperCase()===alvo && c.ativo
-      && (!c.validoDe || c.validoDe<=hoje) && (!c.validoAte || c.validoAte>=hoje)
-      && (!c.usosMax || c.usosAtuais<c.usosMax);
-  }) || null;
-}
-function calcularDescontoCupom(cupom, baseCentavos){
-  if(!cupom) return 0;
-  if(cupom.tipo==="PERCENTUAL") return Math.round(Math.max(0,baseCentavos) * cupom.valor/100);
-  return Math.min(cupom.valor, Math.max(0, baseCentavos));
 }
 function totaisNaoPagos(comanda, apenasIds){
   var itens = itensNaoPagos(comanda);

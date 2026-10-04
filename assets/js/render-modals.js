@@ -610,7 +610,11 @@ function renderPagamentoModal(m){
   }
   var modo = m.modo||"pessoas";
   var naoPagos = itensNaoPagos(comanda);
-  var t = modo==="itens" ? totaisNaoPagos(comanda, m.itensSelecionados) : totaisNaoPagos(comanda);
+  // 0.1 — total sempre vem do servidor (calcular_total_pagamento, mesma
+  // função usada por confirmar_pagamento) — nunca mais recalculado aqui
+  // com fórmula própria, que foi a causa da cobrança a mais no cartão
+  // quando tinha cupom/pontos (ver docs/ER.md "Decisões de modelagem").
+  var totais = m.totaisServidor;
   var temFiado = m.linhas.some(function(l){ return l.forma==="FIADO"; });
   // Fase 3.6 — fidelidade: cliente é opcional em qualquer pagamento (ganha
   // pontos), só vira obrigatório se tiver linha FIADO. Resgate de pontos
@@ -618,15 +622,14 @@ function renderPagamentoModal(m){
   var clienteEscolhido = m.fiadoClienteId ? state.clientes.find(function(c){ return c.id===m.fiadoClienteId; }) : null;
   var valorPontoCentavos = (state.config.fidelidade&&state.config.fidelidade.valorPontoCentavos)||0;
   var saldoPontos = clienteEscolhido ? clienteEscolhido.pontosFidelidade : 0;
-  var maxPontosUteis = (modo==="pessoas" && valorPontoCentavos>0) ? Math.min(saldoPontos, Math.ceil(t.total/valorPontoCentavos)) : 0;
+  var totalBruto = totais ? totais.subtotal - totais.desconto : (modo==="itens" ? totaisNaoPagos(comanda, m.itensSelecionados) : totaisNaoPagos(comanda)).total;
+  var maxPontosUteis = (modo==="pessoas" && valorPontoCentavos>0) ? Math.min(saldoPontos, Math.ceil(totalBruto/valorPontoCentavos)) : 0;
   var pontosResgatados = Math.min(m.pontosResgatados||0, maxPontosUteis);
-  var descontoPontos = pontosResgatados*valorPontoCentavos;
-  // Fase 5 — cupom: mesma trava do servidor (0062), só vale fechando a
-  // conta inteira, nunca no modo "dividir por item".
-  var cupomValido = modo==="pessoas" ? buscarCupomValido(m.cupomCodigo) : null;
-  var baseCupom = Math.max(0, t.subtotal - t.desconto - descontoPontos);
-  var descontoCupom = calcularDescontoCupom(cupomValido, baseCupom);
-  var totalFinal = Math.max(0, t.total - descontoPontos - descontoCupom);
+  var cupomValido = totais && totais.cupom_codigo ? {codigo:totais.cupom_codigo} : null;
+  var descontoPontos = totais ? totais.desconto_pontos : 0;
+  var descontoCupom = totais ? totais.desconto_cupom : 0;
+  var totalFinal = totais ? totais.total : totalBruto;
+  var precisaSupervisor = totais && totais.pct_desconto_total > limiteDescontoPct();
   var soma = m.linhas.reduce(function(s,l){ return s+l.valorCentavos; },0);
   var restante = totalFinal - soma;
   var formas = ["DINHEIRO","PIX","DEBITO","CREDITO","VOUCHER","FIADO"];
@@ -646,9 +649,11 @@ function renderPagamentoModal(m){
     '<h2>Fechar conta</h2><div class="modal-sub">'+comanda.codigo+' · '+
       (naoPagos.length<comanda.itens.filter(function(i){return i.status!=="CANCELADO";}).length ? 'Falta pagar ' : 'Total ')+
       '<b style="color:var(--text-primary); font-size:15px;">'+brl(totalFinal)+'</b>'+
+      (m.totaisCarregando ? ' <span style="color:var(--text-muted); font-size:11.5px;">(recalculando...)</span>' : '')+
       (descontoPontos>0 ? ' <span style="color:var(--success); font-size:11.5px;">(-'+brl(descontoPontos)+' em pontos)</span>' : '')+
       (descontoCupom>0 ? ' <span style="color:var(--success); font-size:11.5px;">(-'+brl(descontoCupom)+' cupom '+escapeHtml(cupomValido.codigo)+')</span>' : '')+
     '</div>'+
+    (precisaSupervisor ? '<div class="modal-sub" style="color:var(--warning);">Desconto total acima do limite de '+limiteDescontoPct()+'% — vai pedir PIN de supervisor ao confirmar.</div>' : '')+
     '<div class="tabs" style="margin-bottom:12px;">'+
       '<div class="tab '+(modo==="pessoas"?"active":"")+'" data-action="pagamento-modo" data-modo="pessoas">Dividir por pessoas</div>'+
       '<div class="tab '+(modo==="itens"?"active":"")+'" data-action="pagamento-modo" data-modo="itens">Dividir por item</div>'+
@@ -700,7 +705,7 @@ function renderPagamentoModal(m){
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="pagamento-cancelar">Cancelar</button>'+
       '<button class="btn btn-success btn-lg btn-block" data-action="pagamento-confirmar" '+
-        ((t.total===0 || soma<totalFinal || (temFiado && !m.fiadoClienteId) || (m.cupomCodigo && m.cupomCodigo.trim() && !cupomValido))?"disabled":"")+
+        ((!totais || m.totaisCarregando || totais.subtotal===0 || soma<totalFinal || (temFiado && !m.fiadoClienteId) || (m.cupomCodigo && m.cupomCodigo.trim() && !cupomValido))?"disabled":"")+
       '>Confirmar pagamento</button>'+
     '</div>'+
   '</div></div>';

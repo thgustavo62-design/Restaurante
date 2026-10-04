@@ -71,7 +71,12 @@ async function tentarLogin(nomeDigitado, senha){
     state.empresaId = claims.empresa_id;
     state.loginUsuarioInput = ""; state.loginSenhaInput = ""; state.loginErro = "";
     await carregarTudo();
-    state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "dashboard";
+    // 0.11 — #tela/aba na URL (ex: link compartilhado, favorito do
+    // navegador) manda em cima do padrão por papel, só se o papel logado
+    // realmente tiver acesso àquela tela.
+    if(!aplicarHashInicial()){
+      state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "dashboard";
+    }
     configurarRealtime();
   } catch(e){
     state.loginSenhaInput = "";
@@ -96,7 +101,9 @@ async function confirmarMfaLogin(codigo){
   state.empresaId = m.claims.empresa_id;
   state.loginMfaPendente = null; state.loginMfaCodigo = "";
   await carregarTudo();
-  state.view = (m.claims.papel==="COZINHA") ? "kds" : (m.claims.papel==="GARCOM"||m.claims.papel==="CAIXA") ? "salao" : "dashboard";
+  if(!aplicarHashInicial()){
+    state.view = (m.claims.papel==="COZINHA") ? "kds" : (m.claims.papel==="GARCOM"||m.claims.papel==="CAIXA") ? "salao" : "dashboard";
+  }
   configurarRealtime();
   state.loginVerificando = false;
   render();
@@ -653,6 +660,18 @@ async function imprimirTodasQrCodes(){
     }
     imprimir(buildQrPrintHtml(itens));
   }catch(e){ toast("err","NÃO FOI POSSÍVEL GERAR OS QR CODES", e.message); }
+}
+// 0.6 — invalida o QR impresso hoje pra essa mesa (ex: foi parar em rede
+// social, ou a mesa física mudou de lugar/número) — gera um token novo,
+// o link antigo (mesmo com ?mesa=N certo) para de funcionar na hora,
+// porque o token não bate mais.
+async function rotacionarQrCodeMesa(mesaId){
+  var res = await sb.rpc("rotacionar_qr_mesa", {p_mesa_id: mesaId});
+  if(res.error){ toast("err","ERRO AO GERAR NOVO QR", res.error.message); return; }
+  var mesa = state.mesas.find(function(m){ return m.id===mesaId; });
+  if(mesa) mesa.qrToken = res.data.qr_token;
+  render();
+  toast("ok","NOVO QR GERADO", "O QR impresso antes agora é inválido — imprima o novo.");
 }
 async function baixarQrCodeMesa(mesaId){
   var mesa = state.mesas.find(function(m){ return m.id===mesaId; });

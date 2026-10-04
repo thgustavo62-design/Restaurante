@@ -39,6 +39,10 @@ function cpSlugAtual(){
 // impresso em cada mesa já codifica isso). Sem mesa, a página continua
 // só-leitura, igual sempre foi.
 var cpMesaNumero = parseInt(new URLSearchParams(window.location.search).get("mesa")||"", 10) || null;
+// 0.6 — token da mesa (?t=...) impede abrir pedido em outra mesa trocando
+// só o número na URL; sem token, o servidor só aceita dentro da carência
+// configurada (QR impresso antes dessa fase não tinha token nenhum).
+var cpToken = new URLSearchParams(window.location.search).get("t") || null;
 var cpSlugGlobal = null;
 var cpEnviando = false;
 var cpPedidoEnviado = false;
@@ -267,7 +271,7 @@ async function cpEnviarPedido(){
   });
   var obs = document.getElementById("cp-observacao").value;
   var res = await cpSb.rpc("criar_pedido_qr", {
-    p_slug: cpSlugGlobal, p_mesa_numero: cpMesaNumero, p_itens: itens, p_observacao: obs
+    p_slug: cpSlugGlobal, p_mesa_numero: cpMesaNumero, p_itens: itens, p_observacao: obs, p_token: cpToken
   });
   cpEnviando = false;
   if(res.error){

@@ -97,22 +97,22 @@ Configurações continuam soltos, por não terem um par óbvio.
 |---|---|
 | **Dashboard** | Vendas do dia, ticket médio, mesas ocupadas, gráfico de vendas por hora, situação da cozinha e alertas (mesa atrasada, caixa fechado, sangria recomendada). |
 | **Atendimento (Salão)** | Mapa de mesas com status (livre / ocupada / aguardando pagamento) e tempo de ocupação. Botões **Balcão** e **Nova ficha** abrem uma venda sem mesa (fila por balcão ou ficha numerada — number atribuído automaticamente, até o limite configurado de fichas). Painel lateral lista todas as comandas abertas, seja de mesa, balcão ou ficha. |
-| **Comanda** | Catálogo de produtos por categoria (com busca e foto, se cadastrada) pra lançar itens — produto com perguntas/adicionais abre um seletor de opções antes de entrar no pedido; revisão do pedido antes de enviar pra cozinha; cancelar item e aplicar desconto (qualquer garçom pode pedir, mas sempre com PIN de um supervisor escolhido num dropdown — verificado no servidor); transferir item pra outra comanda, transferir a comanda pra outra mesa, juntar com outra mesa; fechar conta — inteira, dividida por pessoas ou **por item escolhido** (pagamento parcial: a comanda só fecha quando o último item é pago). No fechamento (modo "dividir por pessoas"): escolher cliente (ganha pontos de fidelidade), resgatar pontos como desconto, e **aplicar cupom de marketing** (código validado na hora, mostra o desconto antes de confirmar) — os três descontos empilham entre si. Se o pagamento travar (aba fechou no meio), aparece "Reabrir" depois de 10 minutos em fechamento. |
+| **Comanda** | Catálogo de produtos por categoria (com busca e foto, se cadastrada) pra lançar itens — produto com perguntas/adicionais abre um seletor de opções antes de entrar no pedido; revisão do pedido antes de enviar pra cozinha; cancelar item e aplicar desconto (qualquer garçom pode pedir, mas sempre com PIN de um supervisor escolhido num dropdown — verificado no servidor); transferir item pra outra comanda, transferir a comanda pra outra mesa, juntar com outra mesa; fechar conta — inteira, dividida por pessoas ou **por item escolhido** (pagamento parcial: a comanda só fecha quando o último item é pago). No fechamento (modo "dividir por pessoas"): escolher cliente (ganha pontos de fidelidade), resgatar pontos como desconto, e **aplicar cupom de marketing** (código validado na hora, mostra o desconto antes de confirmar) — os três descontos empilham entre si, e o total exibido vem sempre do servidor (`calcular_total_pagamento`, recalculado a cada mudança — nunca mais fórmula própria no navegador, ETAPA 0.1); empilhado passando do limite configurado pede PIN de supervisor (ETAPA 0.2); pagar a mais sem nenhuma linha em dinheiro é recusado (sem pra onde ir o troco). Se o pagamento travar (aba fechou no meio), aparece "Reabrir" depois de 10 minutos em fechamento. |
 | **Cozinha (KDS)** | Kanban (Pendente → Preparando → Pronto → Entregue) dos itens lançados, com abas pra filtrar por setor de produção (Bar / Cozinha / Brasa / Sobremesa) — cada produto tem um setor, gravado no item no momento do lançamento. Botão de som (precisa de 1 clique pra ativar, por causa do autoplay do navegador) toca um bipe quando chega pedido novo em qualquer terminal. Ticket com mais de um item ganha um botão pra avançar todos de uma vez, além do botão por item. Ordenado do pedido mais antigo pro mais novo. Atraso configurável por setor (Configurações). Mostra itens de qualquer comanda do dia operacional, **inclusive já paga** (balcão/ficha paga na hora não some mais da cozinha antes de sair). Alerta separado pra item cancelado depois de já estar em preparo. |
 | **Atendimento (Salão)** — aviso de pronto | Mesa com item marcado **PRONTO** pela cozinha pisca um destaque amarelo no mapa de mesas, e a tela da comanda mostra um aviso "pronto para servir" — sem precisar recarregar (via Realtime). |
 | **Atendimento (Salão)** — pedido pelo QR e delivery | Botões **Delivery** (escolhe cliente, endereço/bairro com taxa sugerida, agenda horário) e card de **pedidos pelo QR da mesa** aguardando confirmação do garçom (aceitar lança os itens na cozinha; rejeitar descarta) — nunca vai direto pra cozinha sem um humano aprovar. |
 | **Caixa** | Terminal com nome configurável (lembrado neste dispositivo) — dois terminais com caixa aberto ao mesmo tempo fecham cada um só as próprias vendas. Abrir sessão com saldo inicial, registrar sangria/suprimento, ver movimentos da sessão. Fechamento é por **conferência cega calculada no servidor**: o client nunca recebe o esperado antes de mandar o valor contado; diferença acima do limite configurado exige justificativa escrita. |
 | **Cardápio** | CRUD de produtos (nome, categoria, preço, foto por URL, setor de produção) e de categorias (criadas on-the-fly no formulário de produto). Marcar produto como esgotado/reativado sem precisar editar o preço. Botão **Opções** por produto: grupos de perguntas/adicionais (ex: "Ponto da carne" obrigatório, "Adicionais" opcional até N), cada opção com preço próprio opcional — aparecem no lançamento do pedido, no KDS, no recibo e no cardápio público. |
-| **Estoque** | Insumos com estoque atual/mínimo, validade e custo médio; entrada/saída manual com motivo obrigatório; alerta de estoque baixo e de validade vencendo/vencida; botão **Fazer inventário** (contagem física de todos os insumos de uma vez, gera ajuste só no que divergir do sistema); botão **Sugerir pedido** nos itens abaixo do mínimo, pré-preenchendo um pedido de compra; botão **Rendimento** pra registrar o fator de perda medido de um insumo (ex: 85% depois de limpar/aparar) — hoje é só registro/consulta, não altera o cálculo de baixa automática (ver [Pendências](#pendências-conhecidas)). |
+| **Estoque** | Insumos com estoque atual/mínimo, validade e custo médio — **pode ficar negativo** (selo "Furo — investigar" em vermelho + alerta no topo, ETAPA 0.8) em vez de travar em zero; entrada/saída manual com motivo obrigatório; alerta de estoque baixo e de validade vencendo/vencida; botão **Fazer inventário** (contagem física de todos os insumos de uma vez, gera ajuste só no que divergir do sistema); botão **Sugerir pedido** nos itens abaixo do mínimo, pré-preenchendo um pedido de compra; botão **Rendimento** pra registrar o fator de perda medido de um insumo (ex: 85% depois de limpar/aparar) — entra direto na baixa automática por venda e no CMV dos relatórios (ETAPA 0.9). |
 | **Compras** | Cadastro de fornecedores e pedidos de compra (Rascunho → Pedido realizado → Recebido). Receber um pedido lança entrada de estoque automaticamente e recalcula o custo médio ponderado do insumo. |
 | **Financeiro** | Contas a pagar e a receber (as de receber de fiado/débito/crédito/voucher são geradas automaticamente ao fechar uma conta, já líquidas da taxa da maquininha configurada), com status pago/pendente/vencido. Botão **Exportar pro contador**: baixa 3 CSVs do mês (vendas por forma, contas, fechamentos de caixa). |
 | **Clientes** | CRM básico: nome, telefone, endereço/bairro (pra delivery), aniversário, observações, consentimento LGPD. Ficha do cliente mostra saldo de fiado em aberto, **pontos de fidelidade** e histórico de visitas. Cliente é opcional em qualquer pagamento (ganha pontos — padrão 1 ponto por R$1, configurável) e obrigatório no fiado (não é mais texto livre); pontos acumulados podem ser resgatados como desconto na hora de fechar a conta. |
-| **Relatórios** | Aba **Vendas**: ranking de produtos e desempenho por garçom (por quem **lançou** o item), por período (hoje / 7 dias / 30 dias / escolher mês). Aba **Gestão**: CMV e margem por produto (alerta quando custo ≥ preço), relatório anti-fraude (cancelamentos e descontos por funcionário), taxa de serviço estimada por garçom, curva ABC, heatmap de vendas por dia×hora e taxas pagas às maquininhas. Aba **DRE mensal**: faturamento − CMV − despesas = resultado, por mês. Tudo agregado no banco — não carrega mais comandas/itens completos no navegador, e o total de cada venda é o valor travado no pagamento, não recalculado com a taxa de serviço atual. |
-| **QR Codes das mesas** | Gera o QR de cada mesa cadastrada direto no navegador (biblioteca client-side, sem nenhum serviço externo), aponta pra `/cardapio/:slug?mesa=N`. Imprimir individual, imprimir todas numa grade, ou baixar PNG. Dentro do grupo **Atendimento** no menu. |
-| **Marketing** | Três abas: **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos; ativar/desativar; contador de usos — aplicado direto na tela de pagamento do Caixa, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (busca por "sem comprar há N dias", com telefone e saldo de pontos, pra reativação manual); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público, visível a qualquer cliente que escaneie o QR). |
+| **Relatórios** | Três sub-abas (componente genérico de sub-abas, ETAPA 0.11 — dado busca só ao abrir a aba, link direto tipo `#relatorios/dre` abre nela). Aba **Vendas**: ranking de produtos e desempenho por garçom (por quem **lançou** o item), por período (hoje / 7 dias / 30 dias / escolher mês). Aba **Gestão**: CMV e margem por produto (alerta quando custo ≥ preço), relatório anti-fraude (cancelamentos e descontos por funcionário), taxa de serviço estimada por garçom, curva ABC, heatmap de vendas por dia×hora e taxas pagas às maquininhas. Aba **DRE mensal**: faturamento − CMV − despesas = resultado, por mês. Tudo agregado no banco — não carrega mais comandas/itens completos no navegador, e o total de cada venda é o valor travado no pagamento, não recalculado com a taxa de serviço atual. |
+| **QR Codes das mesas** | Gera o QR de cada mesa cadastrada direto no navegador (biblioteca client-side, sem nenhum serviço externo), aponta pra `/cardapio/:slug?mesa=N&t=token` — o token (ETAPA 0.6) impede trocar o número da URL e abrir pedido em outra mesa. Imprimir individual, imprimir todas numa grade, baixar PNG, ou **Gerar novo QR** (invalida o impresso na hora). Dentro do grupo **Atendimento** no menu. |
+| **Marketing** | Três sub-abas (mesmo componente genérico de Relatórios, ETAPA 0.11): **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos; ativar/desativar; contador de usos — aplicado direto na tela de pagamento do Caixa, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (busca por "sem comprar há N dias", com telefone e saldo de pontos, pra reativação manual); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público, visível a qualquer cliente que escaneie o QR). |
 | **Equipe** | Criar funcionário (nome, papel, PIN), ativar/desativar, e **trocar PIN** de um funcionário existente sem precisar recriá-lo. |
 | **Auditoria** | Trilha de ações sensíveis (desconto aprovado, item cancelado, preço alterado, caixa fechado com diferença, PIN alterado, etc.), com quem fez e quando. |
-| **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, e o **link do cardápio público** (a tela QR Codes das mesas já gera o QR pronto pra imprimir — este link aqui é só pra referência/compartilhar manualmente). |
+| **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, carência de QR Code sem token (ETAPA 0.6), e o **link do cardápio público** (a tela QR Codes das mesas já gera o QR pronto pra imprimir — este link aqui é só pra referência/compartilhar manualmente). Card **Conflitos de sincronização offline** (ETAPA 0.5, só aparece quando tem pendência) — Aplicar mesmo assim ou Descartar. Editar config, criar funcionário e trocar PIN exigem o segundo fator (2FA) se a conta ADMIN tiver MFA ativo (ETAPA 0.7). |
 
 ### Cardápio público (`cardapio.html`)
 
@@ -196,15 +196,14 @@ de verdade).
 
 ## Papéis e permissões
 
-Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 25
+Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 26
 permissões no formato `modulo.recurso.acao` (ex:
 `atendimento.comanda.item.cancelar`), cada uma concedida por papel numa
 tabela de configuração (`papeis_permissoes`, semeada nas migrations, não é
-dado de exemplo). `docs/rotas-permissoes.md` descreve o desenho original
-(catálogo incompleto, rotas de uma arquitetura React que não existe neste
-app) — **desatualizado**, mesma situação que o `docs/ER.md` tinha antes de
-ser corrigido; use `papeis_permissoes` nas migrations como fonte de verdade
-até alguém reescrever esse documento também.
+dado de exemplo). Catálogo completo e matriz papel × permissão em
+[`docs/rotas-permissoes.md`](docs/rotas-permissoes.md) (reescrito na
+ETAPA 0, item 0.12, a partir do catálogo real — a versão anterior descrevia
+uma arquitetura React que este app nunca usou).
 
 Dois lugares guardam esse catálogo e precisam ficar em sincronia manual:
 a tabela `papeis_permissoes` no banco (quem efetivamente bloqueia) e o
@@ -384,21 +383,29 @@ Consequências práticas:
 
 ### Principais tabelas
 
-- **Núcleo**: `empresas` (com `slug`, agora com trigger de auditoria),
-  `usuarios` (com `email_interno`, estável — não é mais derivado do nome),
+- **Núcleo**: `empresas` (com `slug`, agora com trigger de auditoria **e**
+  de 2FA obrigatório pra editar config quando o ADMIN tem MFA, `0064`),
+  `usuarios` (com `email_interno`, estável — não é mais derivado do nome
+  —, trigger de 2FA pra ativar/desativar/trocar papel, `0064`),
   `papeis_permissoes`, `auditoria`, `tentativas_autorizacao` (rate limit
-  das RPCs de supervisor, sem policy pro client).
+  das RPCs de supervisor, sem policy pro client), `erros_cliente` (log
+  técnico de erro do front-end — `window.onerror`/falha de RPC/promise
+  rejeitada, 20/min por usuário, sem policy de select pro client, `0064`).
 - **Cardápio/estoque**: `categorias`, `produtos` (com `setor_producao`,
-  `foto_url`), `insumos`, `ficha_tecnica`, `estoque_movimentos`,
-  `insumo_rendimentos`.
-- **Atendimento**: `mesas`, `comandas` (tipo `MESA`/`BALCAO`/`FICHA`,
-  `ficha_numero`, `dia_operacional`, `total_centavos` acumulado a cada
-  pagamento — parcial ou não, `updated_at`), `comanda_itens` (com
-  `setor_producao`, `motivo_cancelamento`, `pago_em` — nulo até o item
-  entrar num pagamento, parcial ou não — e `opcoes_selecionadas` jsonb),
-  `venda_movimentacoes` (log de transferência/junção de mesa, `0027`,
-  gravado só pelas RPCs `transferir_item`/`transferir_comanda`/
-  `juntar_comandas`, `0048`).
+  `foto_url`), `insumos`, `ficha_tecnica`, `estoque_movimentos`
+  (estoque pode ficar negativo desde `0064`), `insumo_rendimentos`
+  (agora entra de verdade na baixa de estoque e no CMV, `0064`).
+- **Atendimento**: `mesas` (com `qr_token`, `0064`), `comandas` (tipo
+  `MESA`/`BALCAO`/`FICHA`, `ficha_numero`, `dia_operacional`,
+  `total_centavos` acumulado a cada pagamento — parcial ou não,
+  `updated_at`), `comanda_itens` (com `setor_producao`,
+  `motivo_cancelamento`, `pago_em` — nulo até o item entrar num
+  pagamento, parcial ou não —, `opcoes_selecionadas` jsonb e
+  `estoque_baixado_em` — trava contra baixar o mesmo item duas vezes,
+  `0064`), `venda_movimentacoes` (log de transferência/junção de mesa,
+  `0027`, gravado só pelas RPCs `transferir_item`/`transferir_comanda`/
+  `juntar_comandas`, `0048`), `sync_conflitos` (pagamento offline em
+  conflito aguardando decisão de GERENTE/ADMIN, `0064`).
 - **Cardápio — perguntas/adicionais** (`0051`): `grupos_opcoes` (por
   produto, obrigatório ou não, mínimo/máximo de escolhas),
   `opcoes` (dentro de um grupo, com preço adicional opcional),
@@ -459,7 +466,17 @@ Marketing) adicionam: cupons de desconto, relatório de clientes inativos e
 banner do cardápio público (`0062`), e opções/adicionais no pedido pelo QR
 da mesa — removendo a restrição que deixava produto com opção obrigatória
 fora do autoatendimento (`0063`). Menu em grupos e a tela QR Codes das
-mesas são só front-end, sem migration própria.
+mesas são só front-end, sem migration própria. A migration `0064`
+(ETAPA 0 — correções de erros reais + base de sub-abas) reescreve
+`confirmar_pagamento` com um cálculo de total compartilhado com o preview
+do modal (acabando com a cobrança a mais no cartão quando tinha cupom/
+pontos), desconto empilhado acima do limite exigindo supervisor, baixa de
+estoque por pagamento parcial sem duplicar, rendimento entrando na baixa,
+estoque podendo ficar negativo, token por mesa no QR Code, 2FA obrigatório
+em operação sensível de ADMIN quando a conta tem MFA, LGPD no relatório de
+clientes inativos, registro de erros do front-end e conflitos de
+sincronização offline — ver [ETAPA 0](#etapa-0--correções-de-erros-reais-e-base-de-sub-abas-0064)
+abaixo.
 
 ## Migração pra projeto Supabase exclusivo (Fase 4.1)
 
@@ -715,23 +732,99 @@ construído aqui dentro, sem terceiro — foram implementados.**
   simultâneos, isso pode virar gargalo operacional antes de ser um
   problema de código.
 
-## Estoque negativo — decisão pendente (Fase 2.6)
+## ETAPA 0 — Correções de erros reais e base de sub-abas (0064)
 
-[DECISÃO] — não implementado. Hoje toda baixa de estoque (venda,
-inventário, movimento manual) trava em zero
-(`greatest(0, estoque_atual - quantidade)`): não deixa o número ficar
-negativo mesmo que tenha vendido mais do que o sistema achava que tinha.
-O roteiro original pede pra considerar deixar ficar negativo em vez de
-travar — **mas não decidi isso sozinho porque errar pra qualquer lado tem
-custo real**: travar em zero já causou (ou pode causar) uma venda "comer"
-estoque que não existia sem avisar ninguém; deixar negativo mostra o
-problema na cara (ex: -3 un.) mas pode confundir quem olha o relatório e
-não sabe que number negativo significa "furo a investigar", não "estoque
-de verdade". Pra decidir, preciso saber: quando a baixa automática por
-ficha técnica tenta descontar mais do que existe, você prefere que o
-sistema (a) trave em zero como hoje e avise discretamente, ou (b) deixe
-ficar negativo (sinalizado em vermelho na tela de Estoque) pra forçar
-alguém a investigar a divergência?
+Reúne 0.1 a 0.12 do roteiro de correções, todos implementados e em
+produção. A maioria converge em `confirmar_pagamento` — reescrita uma vez
+só, com cuidado, em vez de 5 migrations tocando a mesma função.
+
+**0.1 — Cobrança a mais no cartão com cupom/pontos.** O modal de
+pagamento calculava "valor cheio − desconto" no navegador, mas o servidor
+sempre calculou a taxa de serviço sobre a base **já descontada** —
+divergência que fazia o cartão cobrar mais do que `confirmar_pagamento`
+de fato fechava. Corrigido extraindo o cálculo pra uma função interna só
+(`calcular_totais_pagamento`), usada tanto por uma RPC nova de preview
+(`calcular_total_pagamento`, que o modal chama a cada mudança — cliente,
+pontos, cupom, modo, itens selecionados, com debounce de ~280ms) quanto
+por `confirmar_pagamento`. Pagar a mais sem nenhuma linha em dinheiro
+(sem pra onde ir o troco) agora é recusado.
+
+**0.2 — Desconto empilhado sem teto.** Desconto manual + pontos + cupom,
+somados, podiam passar longe do `limiteDescontoPct` configurado sem
+ninguém aprovar nada (cada um isolado ficava dentro do limite). Agora
+`confirmar_pagamento` calcula o percentual empilhado e exige PIN de
+supervisor (mesma RPC `verificar_pin_supervisor` de `aplicar_desconto`,
+0043) quando passa do limite — o modal já mostra o aviso antes de
+confirmar.
+
+**0.3 — LGPD no relatório de clientes inativos.** `relatorio_clientes_inativos`
+(Marketing → Clientes inativos) agora só mostra telefone de quem tem
+`consentimento_lgpd = true` — o cliente continua aparecendo na lista (pra
+quem decide reativar saber quem é), só o contato vem vazio sem
+consentimento.
+
+**0.4 — Baixa de estoque no pagamento parcial.** Antes, a baixa por ficha
+técnica só rodava quando a comanda fechava por completo — num pagamento
+parcial (dividir por item), o item pago agora baixa o estoque na hora,
+não só quando o último item da comanda for pago. `comanda_itens.estoque_baixado_em`
+trava contra baixar o mesmo item duas vezes se a função rodar de novo
+pro resto da comanda depois.
+
+**0.5 — Conflito de sincronização offline.** Pagamento em dinheiro feito
+sem internet guarda o `comandas.updated_at` de quando foi enfileirado; se
+a comanda mudou noutro terminal antes de sincronizar de verdade, o
+servidor não aplica o pagamento — grava em `sync_conflitos` pra um
+GERENTE/ADMIN decidir (card em Configurações: "Aplicar mesmo assim" ou
+"Descartar", ambos com auditoria).
+
+**0.6 — QR Code por mesa com token.** `mesas.qr_token` (UUID aleatório)
+entra na URL do QR (`?mesa=N&t=token`) — trocar só o número na URL não
+abre mais pedido em outra mesa. Botão **Gerar novo QR** por mesa (tela QR
+Codes das Mesas) invalida o QR impresso na hora. QR impresso antes desta
+fase (sem token) continua aceito até a data em
+`config.aceitarQrSemTokenAte` (30 dias da migration por padrão,
+editável/removível em Configurações pra desligar mais cedo).
+
+**0.7 — 2FA obrigatório em operação sensível de ADMIN.** Criar
+funcionário, trocar PIN, ativar/desativar funcionário, editar
+Configurações e exportar pro contador agora exigem `aal2` (segundo fator
+confirmado) **quando a conta logada tem MFA cadastrado** — sem MFA, nada
+muda. `restaurante.exige_aal2_se_mfa_ativo()` checa `auth.mfa_factors`
+direto (não só o claim do JWT, que pode estar desatualizado se o MFA foi
+ativado depois do login). Funcionário/Configurações são escritos direto
+pelo client (não RPC) — cobertos por trigger `BEFORE UPDATE` em
+`usuarios`/`empresas` em vez de converter as telas inteiras pra RPC.
+
+**0.8 — [DECISÃO TOMADA] Estoque pode ficar negativo.** `greatest(0, ...)`
+removido de toda baixa de estoque (venda, saída manual). Insumo com
+estoque negativo mostra o número em vermelho e o selo **"Furo —
+investigar"** na tela Estoque, com um alerta próprio no topo — em vez de
+esconder a diferença travando em zero.
+
+**0.9 — [DECISÃO TOMADA] Rendimento entra na baixa.** Ficha técnica
+continua cadastrada em peso limpo; a baixa de estoque agora é
+`ficha_tecnica.quantidade ÷ rendimento mais recente do insumo`
+(`insumo_rendimentos`, sem medição = fator 1, sem mudança de
+comportamento pra quem nunca mediu nada). CMV (Relatórios → Gestão e DRE)
+usa o mesmo custo corrigido.
+
+**0.10 — Registro de erros do front-end.** `window.onerror`,
+`unhandledrejection` e toda falha de RPC (interceptada uma vez só, no
+`sb.rpc` — não precisou tocar nos ~40 call sites espalhados pelo app)
+gravam em `restaurante.erros_cliente` (tela, mensagem, stack resumida,
+versão) via `registrar_erro_cliente`, limitado a 20/min por usuário.
+Nunca grava PIN, token ou dado de pagamento — só o que esses três gatilhos
+já expõem. Sem policy de SELECT pro client (log técnico, não dado de
+produto).
+
+**0.11 — Componente de sub-abas.** `renderSubAbas(tela)` genérico — aba
+sem permissão não aparece, dado busca só ao abrir a aba pela primeira vez
+(nunca em `carregarTudo`), estado também fica na URL (`#relatorios/dre`
+abre direto naquela aba). Relatórios e Marketing migrados pra ele.
+
+**0.12 — `docs/rotas-permissoes.md` reescrito** a partir do catálogo real
+(`papeis_permissoes`) — a versão anterior descrevia uma arquitetura React
+que este app nunca usou.
 
 ## Onboarding de novo restaurante (Fase 4.2)
 
@@ -816,12 +909,6 @@ de rodar `npm test` pela primeira vez.
 - **Testes automatizados existem mas nunca rodaram de verdade**: ver
   [Testes automatizados](#testes-automatizados-fase-44) acima — escritos e
   revisados, faltando só um projeto Supabase de teste pra confirmar.
-- **`docs/rotas-permissoes.md` está desatualizado**: descreve uma
-  arquitetura React (`src/app/guards/...`, rotas `/admin/cardapio` etc.)
-  que este app nunca usou, e nem lista as permissões mais recentes
-  (`admin.clientes.editar`, `admin.marketing.editar`). Mesma situação que
-  o `docs/ER.md` tinha antes de ser reescrito — `papeis_permissoes` nas
-  migrations é a fonte de verdade até alguém reescrever esse documento.
 - **Pedido pelo QR sem aprovação do garçom**: decisão deliberada, não
   limitação — todo pedido feito pelo celular cai pendente em
   `pedidos_qr` até um humano confirmar (produto esgotado, erro de

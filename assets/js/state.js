@@ -24,6 +24,7 @@ function estadoVazio(){
     sidebarCollapsed:false,
     sidebarMobileAberto:false,
     sidebarGruposAbertos:{},
+    subAba:{},
     salaoFiltro:"TODAS",
     cardapioFiltro:"Todos",
     financeiroFiltro:"TODAS",
@@ -43,7 +44,8 @@ function estadoVazio(){
       taxasMaquininha:{DEBITO:{pct:0, prazoDias:1}, CREDITO:{pct:0, prazoDias:30}, VOUCHER:{pct:0, prazoDias:30}},
       produtoCouvertId:"", happyHoraInicio:"", happyHoraFim:"",
       fidelidade:{pontosPorReal:1, valorPontoCentavos:1}, bairrosTaxaEntrega:{},
-      marketing:{bannerAtivo:false, bannerTexto:"", produtoDestaqueId:""}
+      marketing:{bannerAtivo:false, bannerTexto:"", produtoDestaqueId:""},
+      aceitarQrSemTokenAte:""
     },
     kdsSomAtivo:false,
     kdsSomVistos:{},
@@ -55,12 +57,11 @@ function estadoVazio(){
     clientes:[], clienteDetalheId:null, clienteFicha:null, clienteBusca:"",
     pedidosQr:[],
     cupons:[],
-    marketingAba:"cupons",
     clientesInativosDias:60, clientesInativosResultado:null, clientesInativosCarregando:false,
+    syncConflitos:[],
     kdsItensAvulsos:[],
     vendasHoje:[],
     relatorioResultado:null, relatorioCarregando:false, relatorioMes:"",
-    relatorioAba:"vendas",
     relatorioGestaoResultado:null, relatorioGestaoCarregando:false, relatorioTaxasResultado:[],
     relatorioDreResultado:null, relatorioDreCarregando:false, relatorioDreMes:""
   };

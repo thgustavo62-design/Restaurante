@@ -608,13 +608,23 @@ function renderCardapio(){
 // Link do cardápio público por mesa (mesmo formato do rewrite /cardapio/:slug
 // em vercel.json) — gerado e desenhado só no navegador, nunca chamando
 // nenhum serviço externo de QR (sem terceiros, conforme decidido na Fase 3).
+// 0.6 — o token (mesas.qr_token) vai na URL pra impedir trocar o número
+// da mesa e abrir pedido em outra (ver criar_pedido_qr, 0064). Link sem
+// token (QR impresso antes desta fase) ainda é aceito dentro da carência
+// configurada em config.aceitarQrSemTokenAte.
 function urlQrMesa(mesa){
-  return window.location.origin + "/cardapio/" + encodeURIComponent(state.restauranteSlug||"") + "?mesa=" + mesa.numero;
+  return window.location.origin + "/cardapio/" + encodeURIComponent(state.restauranteSlug||"") + "?mesa=" + mesa.numero + "&t=" + mesa.qrToken;
 }
 function renderQrCodes(){
   var mesas = state.mesas.slice().sort(function(a,b){ return a.numero-b.numero; });
+  var podeRotacionar = can(PERM.CARDAPIO);
+  var carenciaAte = state.config.aceitarQrSemTokenAte;
+  var carenciaAtiva = carenciaAte && carenciaAte>=diasA(0);
   return renderPageHeader("qrcode", "QR Codes das Mesas", mesas.length+" mesas — o cliente aponta a câmera e já cai pedindo direto naquela mesa",
       (mesas.length ? '<button class="btn btn-primary" data-action="qrcodes-imprimir-todas">'+icon("qrcode",15)+' Imprimir todas</button>' : ''))+
+    (carenciaAtiva ? '<div class="alert-row" style="margin-bottom:14px;">'+icon("alert",16)+'<div><span class="t">QR CODES ANTIGOS AINDA VALEM</span><span class="d">'+
+      'Links impressos antes da '+new Date(carenciaAte).toLocaleDateString("pt-BR")+' sem o token novo ainda funcionam até lá — depois disso, reimprima todos (botão abaixo gera um QR novo por mesa).'+
+      '</span></div></div>' : '')+
     (mesas.length ? '<div class="qr-grid">'+
       mesas.map(function(m){
         return '<div class="qr-card">'+
@@ -625,6 +635,7 @@ function renderQrCodes(){
           '<div class="qr-card-acts">'+
             '<button class="btn btn-sm" data-action="qrcode-imprimir" data-mesa="'+m.id+'">'+icon("edit",13)+' Imprimir</button>'+
             '<button class="btn btn-sm" data-action="qrcode-baixar" data-mesa="'+m.id+'">'+icon("image",13)+' Baixar PNG</button>'+
+            (podeRotacionar ? '<button class="btn btn-sm" data-action="qrcode-rotacionar" data-mesa="'+m.id+'" title="Invalida o QR impresso hoje e gera um novo">'+icon("alert",13)+' Gerar novo QR</button>' : '')+
           '</div>'+
         '</div>';
       }).join("")+
@@ -707,16 +718,27 @@ function renderMarketingBanner(podeEditar){
     '<button class="btn btn-primary" data-action="marketing-banner-salvar">Salvar</button>'+
   '</div>';
 }
+// 0.11 — migrado pro componente genérico de sub-abas (renderSubAbas,
+// render-shell.js). Nenhuma das três precisa de "carregar": cupons já
+// vem em carregarTudo, inativos é busca manual (botão próprio), banner é
+// config já carregada — "dado só busca ao abrir a aba" fica satisfeito
+// trivialmente aqui.
+SUB_ABAS.marketing = [
+  {id:"cupons", rotulo:"Cupons", permissao:PERM.MARKETING, render:function(){ return renderMarketingCupons(can(PERM.MARKETING)); }},
+  {id:"inativos", rotulo:"Clientes inativos", permissao:PERM.MARKETING, render:renderMarketingInativos},
+  {id:"banner", rotulo:"Banner do cardápio", permissao:PERM.MARKETING, render:function(){ return renderMarketingBanner(can(PERM.MARKETING)); }}
+];
 function renderMarketing(){
-  var aba = state.marketingAba || "cupons";
-  var podeEditar = can(PERM.MARKETING);
-  var abas = [{id:"cupons", label:"Cupons"},{id:"inativos", label:"Clientes inativos"},{id:"banner", label:"Banner do cardápio"}];
   return renderPageHeader("megaphone", "Marketing", "Cupons, reativação de clientes e destaque no cardápio público")+
-    '<div class="tabs">'+abas.map(function(a){ return '<div class="tab '+(aba===a.id?"active":"")+'" data-action="marketing-aba" data-aba="'+a.id+'">'+a.label+'</div>'; }).join("")+'</div>'+
-    (aba==="cupons" ? renderMarketingCupons(podeEditar) : aba==="inativos" ? renderMarketingInativos() : renderMarketingBanner(podeEditar));
+    renderSubAbas("marketing");
 }
 
+// 0.8 — [DECISÃO TOMADA] estoque pode ficar negativo (sem greatest(0,...)
+// nas baixas) em vez de travar em zero — "Furo — investigar" é o selo
+// visual que torna esse número negativo impossível de ignorar na tela,
+// em vez de esconder a diferença como o travamento em zero fazia.
 function estoqueStatus(i){
+  if(i.estoqueAtual < 0) return {lbl:"Furo — investigar", cls:"badge-status-critico"};
   if(i.estoqueAtual < i.estoqueMinimo) return {lbl:"Crítico", cls:"badge-status-critico"};
   if(i.estoqueAtual <= i.estoqueMinimo*1.2) return {lbl:"Repor", cls:"badge-status-atencao"};
   return {lbl:"OK", cls:"badge-status-ok"};
@@ -724,6 +746,7 @@ function estoqueStatus(i){
 function renderEstoque(){
   var podeEditar = can(PERM.ESTOQUE);
   var baixos = state.insumos.filter(function(i){ return i.estoqueAtual<i.estoqueMinimo; });
+  var furos = state.insumos.filter(function(i){ return i.estoqueAtual<0; });
   var valorEstoque = state.insumos.reduce(function(s,i){ return s + Math.round(i.estoqueAtual*i.custoMedioCentavos); },0);
   var hoje = diasA(0);
   var emSeteDias = diasA(7);
@@ -739,6 +762,9 @@ function renderEstoque(){
       '<div class="kpi-card"><div class="kpi-icon">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Valor em estoque</div><div class="kpi-value">'+brl(valorEstoque)+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Movimentos recentes</div><div class="kpi-value">'+state.estoqueMovimentos.length+'</div></div></div>'+
     '</div>'+
+    (furos.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div style="flex:1;"><span class="t">FURO NO ESTOQUE — INVESTIGAR</span><span class="d">'+
+      furos.map(function(i){ return escapeHtml(i.nome)+' ('+i.estoqueAtual+' '+i.unidade+')'; }).join(" · ")+
+      '</span></div></div>' : "")+
     (baixos.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div style="flex:1;"><span class="t">ESTOQUE BAIXO</span><span class="d">'+
       baixos.map(function(i){ return escapeHtml(i.nome)+' ('+i.estoqueAtual+'/'+i.estoqueMinimo+' '+i.unidade+')'; }).join(" · ")+
       '</span></div>'+(podeEditar?'<button class="btn btn-sm" data-action="sugerir-pedido-compra">Sugerir pedido</button>':'')+'</div>' : "")+
@@ -752,7 +778,7 @@ function renderEstoque(){
       var rend = state.insumoRendimentos.find(function(r){ return r.insumoId===i.id; });
       return '<tr><td><div style="font-weight:700;">'+escapeHtml(i.nome)+'</div>'+
           '<div style="font-size:10.5px; color:var(--text-muted);">custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+(rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div></td>'+
-        '<td>'+i.estoqueAtual+'</td><td>'+i.unidade+'</td><td>'+i.estoqueMinimo+'</td>'+
+        '<td'+(i.estoqueAtual<0?' style="color:var(--danger); font-weight:800;"':'')+'>'+i.estoqueAtual+'</td><td>'+i.unidade+'</td><td>'+i.estoqueMinimo+'</td>'+
         '<td>'+(podeEditar ? '<input type="date" style="width:140px;" value="'+(i.validade||"")+'" data-action="insumo-validade" data-insumo="'+i.id+'">' : (i.validade?new Date(i.validade+"T00:00:00").toLocaleDateString("pt-BR"):"—"))+'</td>'+
         '<td><span class="badge '+st.cls+'">'+st.lbl+'</span></td>'+
         (podeEditar ? '<td><div class="acts">'+
@@ -932,21 +958,29 @@ function renderClienteDetalhe(){
     '</div>';
 }
 
+// 0.11 — migrado pro componente genérico de sub-abas. Cada aba busca seu
+// próprio dado só quando é aberta pela primeira vez (carregado() evita
+// rebuscar ao trocar de aba e voltar); trocar o período/mês dentro da
+// aba Vendas/Gestão continua recarregando na hora, igual sempre foi.
+SUB_ABAS.relatorios = [
+  {id:"vendas", rotulo:"Vendas", permissao:PERM.RELATORIOS, render:renderRelatorioVendasConteudo,
+    carregar:function(){ carregarRelatorio(state.relatorioPeriodo||"HOJE"); },
+    carregado:function(){ return !!state.relatorioResultado; }},
+  {id:"gestao", rotulo:"Gestão", permissao:PERM.RELATORIOS, render:renderRelatorioGestao,
+    carregar:function(){ carregarRelatorioGestao(state.relatorioPeriodo||"HOJE"); },
+    carregado:function(){ return !!state.relatorioGestaoResultado; }},
+  {id:"dre", rotulo:"DRE mensal", permissao:PERM.RELATORIOS, render:renderDre,
+    carregar:function(){ carregarRelatorioDre(state.relatorioDreMes||hojeOperacionalStr().slice(0,7)); },
+    carregado:function(){ return !!state.relatorioDreResultado; }}
+];
 function renderRelatorios(){
-  var aba = state.relatorioAba||"vendas";
-  var abaTabsHtml = '<div class="tabs" style="margin-bottom:10px;">'+
-      '<div class="tab '+(aba==="vendas"?"active":"")+'" data-action="relatorio-aba" data-aba="vendas">Vendas</div>'+
-      '<div class="tab '+(aba==="gestao"?"active":"")+'" data-action="relatorio-aba" data-aba="gestao">Gestão</div>'+
-      '<div class="tab '+(aba==="dre"?"active":"")+'" data-action="relatorio-aba" data-aba="dre">DRE mensal</div>'+
-    '</div>';
-  if(aba==="dre") return renderPageHeader("chart", "Relatórios", "Demonstrativo de resultado")+abaTabsHtml+renderDre();
-  if(aba==="gestao") return renderPageHeader("chart", "Relatórios", "CMV, margem, anti-fraude e curva ABC")+abaTabsHtml+renderRelatorioGestao();
-
+  return renderPageHeader("chart", "Relatórios", "Desempenho de vendas, gestão e DRE")+renderSubAbas("relatorios");
+}
+function renderRelatorioVendasConteudo(){
   var periodo = state.relatorioPeriodo || "HOJE";
   var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["MES","Escolher mês"]];
 
-  var cabecalho = renderPageHeader("chart", "Relatórios", "Desempenho de vendas")+abaTabsHtml+
-    '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
+  var cabecalho = '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="relatorio-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
     (periodo==="MES" ? '<div class="field" style="max-width:220px;"><input type="month" id="relatorioMesInput" value="'+escapeHtml(state.relatorioMes||"")+'" data-action="relatorio-mes"></div>' : '');
 
   if(state.relatorioCarregando || !state.relatorioResultado){
@@ -1121,9 +1155,35 @@ function renderEquipe(){
     '</div>';
 }
 
+// 0.5 — conflitos de sincronização offline: pagamento feito sem internet
+// numa comanda que mudou em outro terminal antes de sincronizar de
+// verdade. GERENTE/ADMIN decide aplicar mesmo assim (processa o
+// pagamento agora, do jeito que foi feito) ou descartar (a venda em
+// dinheiro NÃO é registrada — ex: a comanda já foi fechada/paga por
+// outro caminho nesse meio tempo).
+function renderSyncConflitos(){
+  if(!can(PERM.SYNC_CONFLITOS) || !state.syncConflitos.length) return "";
+  return '<div class="card" style="margin-bottom:20px; border-left:4px solid var(--danger);">'+
+    '<div class="card-title">Conflitos de sincronização offline ('+state.syncConflitos.length+')</div>'+
+    state.syncConflitos.map(function(sc){
+      var comanda = state.comandas.find(function(c){ return c.id===sc.comandaId; });
+      var payload = sc.payload||{};
+      var valorTotal = (payload.p_linhas||[]).reduce(function(s,l){ return s+(l.valor_centavos||0); },0);
+      return '<div class="data-row">'+
+        '<div class="main"><div class="nome">'+(comanda?escapeHtml(comanda.codigo):"Comanda")+' · '+brl(valorTotal)+'</div>'+
+        '<div class="sub">'+escapeHtml(sc.motivo||"")+' · '+new Date(sc.createdAt).toLocaleString("pt-BR")+'</div></div>'+
+        '<div class="acts">'+
+          '<button class="btn btn-sm" data-action="syncconflito-descartar" data-conflito="'+sc.id+'">Descartar</button>'+
+          '<button class="btn btn-sm btn-primary" data-action="syncconflito-aplicar" data-conflito="'+sc.id+'">Aplicar mesmo assim</button>'+
+        '</div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+}
 function renderConfiguracoes(){
   var c = state.config;
   return renderPageHeader("settings", "Configurações", "Dados fiscais, limites, impressão e funcionamento")+
+    renderSyncConflitos()+
     '<div class="grid-2">'+
     '<div class="card">'+
       '<div class="card-title">Geral</div>'+
@@ -1217,11 +1277,14 @@ function renderConfiguracoes(){
     '<div class="card">'+
       '<div class="card-title">Cardápio público (QR)</div>'+
       '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Link somente leitura, sem login — nome, preço, categoria e foto dos produtos ativos. Gere um QR code a partir dele em qualquer serviço gratuito e imprima pra colocar nas mesas.</p>'+
-      (c.slug ? '<div class="field" style="margin-bottom:0;"><label>Link do cardápio</label>'+
+      (c.slug ? '<div class="field"><label>Link do cardápio</label>'+
         '<div style="display:flex; gap:8px;">'+
           '<input id="cfgLinkCardapio" readonly value="'+escapeHtml(window.location.origin+"/cardapio/"+c.slug)+'" style="flex:1;">'+
           '<button type="button" class="btn" data-action="cardapio-link-copiar">Copiar</button>'+
         '</div></div>' : '<div class="empty-hint">Cardápio público ainda não configurado (slug ausente).</div>')+
+      '<div class="field" style="margin-bottom:0;"><label>Aceitar QR Code antigo (sem token) até</label>'+
+        '<input id="cfgAceitarQrSemTokenAte" type="date" value="'+escapeHtml(c.aceitarQrSemTokenAte||"")+'">'+
+        '<p style="font-size:11px; color:var(--text-muted); margin:6px 0 0;">Mesas → QR Codes gera link com token novo; isto aqui é só a carência pra link impresso antes (0.6). Apague a data pra desligar agora — QR sem token para de funcionar na hora.</p></div>'+
     '</div>'+
     '</div>'+
     '<button class="btn btn-primary btn-lg" style="margin-top:16px;" data-action="config-salvar">Salvar configurações</button>';

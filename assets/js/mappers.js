@@ -9,7 +9,7 @@ function mapInsumo(row){
   return {id:row.id, nome:row.nome, unidade:row.unidade, estoqueAtual:Number(row.estoque_atual), estoqueMinimo:Number(row.estoque_minimo), custoMedioCentavos:row.custo_medio_centavos, validade:row.validade||null};
 }
 function mapMesa(row){
-  return {id:row.id, numero:row.numero, capacidade:row.capacidade, area:row.area};
+  return {id:row.id, numero:row.numero, capacidade:row.capacidade, area:row.area, qrToken:row.qr_token};
 }
 function mapComanda(row){
   return {id:row.id, codigo:row.codigo, mesaId:row.mesa_id, tipo:row.tipo, status:row.status,
@@ -89,6 +89,10 @@ function mapCupom(row){
   return {id:row.id, codigo:row.codigo, tipo:row.tipo, valor:row.valor,
     validoDe:row.valido_de, validoAte:row.valido_ate,
     usosMax:row.usos_max, usosAtuais:row.usos_atuais||0, ativo:!!row.ativo, createdAt:row.created_at};
+}
+function mapSyncConflito(row){
+  return {id:row.id, comandaId:row.comanda_id, tipo:row.tipo, payload:row.payload, motivo:row.motivo,
+    status:row.status, createdAt:row.created_at};
 }
 function mapAuditoria(row){
   return {id:row.id, entidade:row.entidade, entidadeId:row.entidade_id, acao:row.acao,

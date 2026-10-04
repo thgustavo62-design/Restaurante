@@ -144,7 +144,8 @@ async function salvarConfig(campos){
     happyHoraInicio: campos.happyHoraInicio,
     happyHoraFim: campos.happyHoraFim,
     fidelidade: campos.fidelidade || c.fidelidade,
-    bairrosTaxaEntrega: campos.bairrosTaxaEntrega || c.bairrosTaxaEntrega
+    bairrosTaxaEntrega: campos.bairrosTaxaEntrega || c.bairrosTaxaEntrega,
+    aceitarQrSemTokenAte: campos.aceitarQrSemTokenAte || null
   });
   delete novoConfig.empresaNome; delete novoConfig.empresaCnpj; delete novoConfig.totalFichas; delete novoConfig.slug;
   var res = await sb.from("empresas").update({
@@ -158,6 +159,19 @@ async function salvarConfig(campos){
   state.config = Object.assign({}, novoConfig, {empresaNome: campos.nome.trim()||c.empresaNome, empresaCnpj: campos.cnpj.trim()});
   render();
   toast("ok","CONFIGURAÇÕES SALVAS", "");
+}
+// 0.5 — GERENTE/ADMIN decide um conflito de sincronização offline:
+// aplicar mesmo assim (processa o pagamento guardado) ou descartar (a
+// venda não é registrada). Qualquer um dos dois recarrega tudo, porque o
+// resultado pode mexer em caixa/estoque/comanda de formas que só um
+// refresh completo reflete com segurança.
+async function resolverSyncConflito(conflitoId, aplicar){
+  var res = await sb.rpc("resolver_sync_conflito", {p_conflito_id: conflitoId, p_aplicar: aplicar});
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  state.syncConflitos = state.syncConflitos.filter(function(c){ return c.id!==conflitoId; });
+  render();
+  await carregarTudo();
+  toast("ok", aplicar?"CONFLITO APLICADO":"CONFLITO DESCARTADO", "");
 }
 function estaAberto(){
   var c = state.config;

@@ -134,6 +134,12 @@ async function offlineProcessarItem(item){
         toast("err","PAGAMENTO OFFLINE PRECISA DE ATENÇÃO", item.payload.p_comanda_id+": "+res3.error.message);
         return true;
       }
+      // 0.5 — a comanda mudou entre o pagamento offline e agora: o
+      // servidor não aplicou nada, só registrou o conflito pra um
+      // GERENTE/ADMIN decidir (ver sync_conflitos em Configurações).
+      if(res3.data && res3.data.conflito){
+        toast("err","PAGAMENTO OFFLINE EM CONFLITO", "A comanda foi alterada por outro terminal — um GERENTE/ADMIN precisa revisar em Configurações.");
+      }
       return true;
     }
   }catch(e){ return false; }

@@ -67,13 +67,21 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
 - `caixa.test.js` — conferência cega bate exata quando informado = o que
   o servidor calculou; diferença acima do limite exige justificativa pra
   fechar, e fica registrada na auditoria.
-- `estoque.test.js` — entrada soma, saída subtrai, nunca vai negativo
-  (trava em zero — é o comportamento *atual*, documentado como pendente
-  de decisão no README principal; se isso mudar, este teste precisa
-  mudar junto).
+- `estoque.test.js` — entrada soma, saída subtrai; **ETAPA 0.8**: saída
+  maior que o estoque agora fica **negativa** (não trava mais em zero —
+  decisão tomada, `greatest(0,...)` removido de todas as baixas).
 - `supervisor.test.js` — garçom sem permissão própria consegue cancelar
   item/aplicar desconto com PIN de um supervisor; PIN errado é recusado;
   **supervisor renomeado depois de criado continua autorizando** — esse
   teste existe especificamente pra pegar se a regressão corrigida na
   migration `0060` (e-mail do supervisor reconstruído a partir do nome
   em vez de `email_interno`) voltar a acontecer.
+- `etapa0.test.js` — as mudanças novas da ETAPA 0 em `confirmar_pagamento`
+  e RPCs relacionadas: rendimento do insumo entrando na baixa de estoque
+  (0.9), baixa por pagamento parcial sem duplicar (0.4), o total que
+  `calcular_total_pagamento` mostra batendo exatamente com o que
+  `confirmar_pagamento` cobra (0.1 — é o teste que existe especificamente
+  pra pegar a cobrança a mais no cartão com cupom/pontos se voltar a
+  acontecer), desconto empilhado acima do limite exigindo supervisor
+  (0.2), e telefone escondido pra cliente sem consentimento LGPD no
+  relatório de inativos (0.3).

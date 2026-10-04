@@ -1,41 +1,59 @@
-# Rotas e Matriz de Permissão por Papel
+# Papéis e permissões — Vision Food
+
+Reescrito na ETAPA 0 (0.12) a partir do catálogo real do sistema
+(`papeis_permissoes` nas migrations + `assets/js/config.js`). A versão
+anterior deste documento descrevia um desenho original que este app nunca
+usou (schema `public`, rotas de uma arquitetura React com
+`src/app/guards/...`) — igual o `docs/ER.md` estava antes de ser
+corrigido. Esta versão reflete o que roda de verdade em produção.
 
 ## 1. Papéis
 
 `ADMIN` · `GERENTE` · `CAIXA` · `GARCOM` · `COZINHA`
 
+Cinco papéis fixos (não é possível criar papel novo pela UI — exigiria
+mudar o enum `restaurante.papel_usuario` no banco e todo o catálogo
+abaixo).
+
 ## 2. Catálogo de permissões
 
-Cada permissão é uma string `modulo.recurso.acao` gravada em
-`papeis_permissoes` e verificada via `public.tem_permissao(text)` nas
-policies de RLS (ver `0004_rls_policies.sql`). O mesmo catálogo é usado como
-guard de rota no front-end (`core/auth`).
+Cada permissão é uma string `modulo.recurso.acao`, gravada na tabela
+`restaurante.papeis_permissoes` (semeada nas migrations, nunca dado de
+exemplo) e verificada em toda escrita sensível via
+`restaurante.tem_permissao(text)` — dentro de policies de RLS e dentro de
+RPCs `SECURITY DEFINER`. O mesmo catálogo é espelhado em
+`assets/js/config.js` (`PERM`/`MATRIZ`), usado **só** pra esconder
+botões/telas na UI — nunca é a trava real, e os dois lugares precisam
+ficar manualmente em sincronia (ver nota no README).
 
-| # | Permissão | Descrição |
+| # | Permissão | O que libera |
 |---|---|---|
-| 1 | `atendimento.salao.ver` | Ver mapa de mesas e status |
-| 2 | `atendimento.comanda.abrir` | Abrir comanda (mesa/balcão/delivery/retirada) |
-| 3 | `atendimento.comanda.item.lancar` | Lançar/enviar itens para a cozinha |
-| 4 | `atendimento.comanda.item.cancelar` | Cancelar item já enviado (operação sensível) |
-| 5 | `atendimento.comanda.desconto.aplicar` | Aplicar desconto acima do limite do papel |
-| 6 | `atendimento.comanda.transferir` | Transferir itens entre comandas/mesas |
-| 7 | `atendimento.comanda.reabrir` | Reabrir comanda já paga (operação sensível) |
-| 8 | `atendimento.comanda.fechar` | Fechar conta / iniciar pagamento |
-| 9 | `cozinha.kds.ver` | Ver telas de KDS por setor |
-| 10 | `cozinha.item.atualizar_status` | Marcar item como preparando/pronto |
-| 11 | `caixa.sessao.abrir` | Abrir sessão de caixa em um terminal |
-| 12 | `caixa.sessao.fechar` | Executar fechamento (conferência cega) |
+| 1 | `atendimento.salao.ver` | Ver o mapa de mesas e a lista de comandas abertas |
+| 2 | `atendimento.comanda.abrir` | Abrir comanda (mesa/balcão/ficha/delivery) |
+| 3 | `atendimento.comanda.item.lancar` | Lançar item no pedido e confirmar pedido pelo QR |
+| 4 | `atendimento.comanda.item.cancelar` | Cancelar item já lançado (sempre exige PIN de supervisor, mesmo quem tem a permissão) |
+| 5 | `atendimento.comanda.desconto.aplicar` | Aplicar desconto na comanda; dentro do limite configurado não pede supervisor, acima pede |
+| 6 | `atendimento.comanda.transferir` | Transferir item/comanda entre mesas, juntar mesas |
+| 7 | `atendimento.comanda.reabrir` | Reabrir comanda travada em `FECHANDO` (pagamento interrompido) |
+| 8 | `atendimento.comanda.fechar` | Abrir o modal de fechar conta |
+| 9 | `cozinha.kds.ver` | Ver o KDS (Kanban da cozinha) |
+| 10 | `cozinha.item.atualizar_status` | Avançar status de item no KDS |
+| 11 | `caixa.sessao.abrir` | Abrir sessão de caixa num terminal |
+| 12 | `caixa.sessao.fechar` | Conferir e fechar sessão de caixa |
 | 13 | `caixa.movimento.sangria` | Registrar sangria |
 | 14 | `caixa.movimento.suprimento` | Registrar suprimento |
-| 15 | `caixa.pagamento.registrar` | Registrar pagamento (dinheiro/PIX/cartão/etc.) |
-| 16 | `admin.cardapio.editar` | CRUD de categorias, produtos, variações, adicionais |
-| 17 | `admin.estoque.editar` | CRUD de insumos, fichas técnicas, movimentações |
-| 18 | `admin.equipe.editar` | CRUD de usuários, papéis, PINs |
-| 19 | `admin.financeiro.ver` | Ver contas a pagar/receber, DRE |
-| 20 | `admin.financeiro.editar` | Lançar/editar contas a pagar/receber |
-| 21 | `admin.relatorios.ver` | Ver relatórios e dashboards |
-| 22 | `admin.configuracoes.editar` | Dados fiscais, impressoras, taxas, limites |
-| 23 | `auditoria.ver` | Ver trilha de auditoria |
+| 15 | `caixa.pagamento.registrar` | Confirmar pagamento (`confirmar_pagamento`) e consultar o total (`calcular_total_pagamento`) |
+| 16 | `auditoria.ver` | Ver a trilha de auditoria |
+| 17 | `admin.cardapio.editar` | CRUD de produtos/categorias/opções; gerar novo QR de mesa (0.6) |
+| 18 | `admin.estoque.editar` | Entrada/saída manual de estoque, inventário, rendimento |
+| 19 | `admin.equipe.editar` | Criar funcionário, trocar PIN, ativar/desativar |
+| 20 | `admin.financeiro.ver` | Ver contas a pagar/receber e exportação pro contador |
+| 21 | `admin.financeiro.editar` | Lançar/editar contas a pagar/receber |
+| 22 | `admin.relatorios.ver` | Ver as três abas de Relatórios (Vendas/Gestão/DRE) |
+| 23 | `admin.configuracoes.editar` | Editar Configurações (dados fiscais, limites, impressão, horário) |
+| 24 | `admin.clientes.editar` | CRUD de clientes (CRM) |
+| 25 | `admin.marketing.editar` | CRUD de cupons, busca de clientes inativos, banner do cardápio |
+| 26 | `admin.sync_conflitos.resolver` | Aplicar/descartar um conflito de sincronização offline (0.5) |
 
 ## 3. Matriz papel × permissão
 
@@ -56,6 +74,7 @@ guard de rota no front-end (`core/auth`).
 | caixa.movimento.sangria | ✔ | ✔ | ✔ | – | – |
 | caixa.movimento.suprimento | ✔ | ✔ | ✔ | – | – |
 | caixa.pagamento.registrar | ✔ | ✔ | ✔ | – | – |
+| auditoria.ver | ✔ | ✔ | – | – | – |
 | admin.cardapio.editar | ✔ | ✔ | – | – | – |
 | admin.estoque.editar | ✔ | ✔ | – | – | – |
 | admin.equipe.editar | ✔ | ✔ | – | – | – |
@@ -63,65 +82,70 @@ guard de rota no front-end (`core/auth`).
 | admin.financeiro.editar | ✔ | ✔ | – | – | – |
 | admin.relatorios.ver | ✔ | ✔ | – | – | – |
 | admin.configuracoes.editar | ✔ | – | – | – | – |
-| auditoria.ver | ✔ | ✔ | – | – | – |
+| admin.clientes.editar | ✔ | ✔ | – | – | – |
+| admin.marketing.editar | ✔ | ✔ | – | – | – |
+| admin.sync_conflitos.resolver | ✔ | ✔ | – | – | – |
 
 **Notas de decisão:**
+
 - `GERENTE` tem praticamente as mesmas permissões de `ADMIN`, exceto
-  `admin.configuracoes.editar` (dados fiscais/certificado/impressoras) —
-  reservado ao dono/responsável técnico do estabelecimento.
-- Operações marcadas como "sensíveis" no prompt mestre (cancelar item
-  enviado, desconto acima do limite, transferir, reabrir) exigem PIN de
-  `ADMIN`/`GERENTE` mesmo quando disparadas a partir da tela de um
-  `GARCOM`/`CAIXA` — a UI pede o PIN, e desde `0038_protege_colunas_sensiveis_restaurante.sql`
-  um trigger em `comandas`/`comanda_itens` é quem efetivamente bloqueia a
-  escrita coluna a coluna (`desconto_centavos` exige `desconto.aplicar`,
-  `status=CANCELADO` exige `item.cancelar` + motivo). Antes desse trigger,
-  a policy de RLS só checava se o papel tinha *alguma* permissão sobre a
-  linha (ex.: `abrir` ou `fechar`), não qual coluna estava mudando — um
-  `GARCOM` conseguia gravar desconto direto via API, ignorando o PIN.
+  `admin.configuracoes.editar` — reservado ao dono/responsável técnico do
+  estabelecimento (dados fiscais, limites de alçada, 2FA).
+- Cancelar item e transferir/juntar comanda **sempre** passam por um
+  trigger de coluna no banco (`trg_comandas_protege_colunas` /
+  `trg_comanda_itens_protege_colunas`), não só pela permissão de linha —
+  um `GARCOM` com `UPDATE` liberado na comanda (porque tem
+  `atendimento.comanda.fechar`, por exemplo) ainda não consegue gravar
+  `desconto_centavos` ou `status=CANCELADO` sem a permissão específica
+  daquela coluna.
+- Operações sensíveis demais pra confiar só numa permissão (cancelar
+  item, desconto acima do limite configurado — incluindo o desconto
+  **empilhado**, manual + pontos + cupom, desde a 0.2) exigem PIN de um
+  supervisor verificado no servidor (`verificar_pin_supervisor`), mesmo
+  quando quem está pedindo já tem a permissão.
 - `CAIXA` fecha comanda e registra pagamento, mas não cancela item nem
-  aplica desconto — essas ações passam pela mesma trava de supervisor.
-- `COZINHA` só enxerga o próprio módulo (KDS); não vê salão, caixa ou admin.
+  aplica desconto — essas ações, se precisarem acontecer no fluxo dele,
+  passam pela mesma trava de supervisor que um `GARCOM` usaria.
+- `COZINHA` só enxerga o próprio módulo (KDS); não vê salão, caixa ou
+  admin.
+- Operações de ADMIN especialmente sensíveis (criar funcionário, trocar
+  PIN, editar Configurações, exportar pro contador) exigem adicionalmente
+  verificação em duas etapas (`aal2`) quando a conta logada tiver MFA
+  cadastrado — ver `restaurante.exige_aal2_se_mfa_ativo()` (0.7). Sem MFA
+  cadastrado, nada muda (não existe obrigação de ativar).
 
-## 4. Rotas do front-end
+## 4. Onde cada permissão aparece no app
 
-Prefixo de guarda: cada rota abaixo lista a(s) permissão(ões) mínima(s)
-exigida(s) para renderizar (guard em `app/`, redundante com a RLS no banco).
+Não existem "rotas" no sentido de URLs de uma SPA com router — é um
+app de tela única (`index.html`) que troca `state.view` (e, desde a
+0.11, `state.subAba[tela]` pras telas com sub-abas). A tabela abaixo
+mapeia tela/sub-aba → permissão mínima, equivalente ao que seria um guard
+de rota:
 
-| Rota | Módulo | Permissão mínima |
-|---|---|---|
-| `/login` | auth | pública |
-| `/selecionar-empresa` | auth | autenticado |
-| `/salao` | atendimento | `atendimento.salao.ver` |
-| `/comandas/:id` | atendimento | `atendimento.comanda.abrir` |
-| `/comandas/:id/novo-pedido` | atendimento | `atendimento.comanda.item.lancar` |
-| `/balcao` | atendimento | `atendimento.comanda.abrir` |
-| `/delivery` | atendimento | `atendimento.comanda.abrir` |
-| `/delivery/:id` | atendimento | `atendimento.comanda.abrir` |
-| `/kds` | cozinha | `cozinha.kds.ver` |
-| `/kds/:setor` | cozinha | `cozinha.kds.ver` |
-| `/caixa` | caixa | `caixa.sessao.abrir` |
-| `/caixa/abrir` | caixa | `caixa.sessao.abrir` |
-| `/caixa/fechar` | caixa | `caixa.sessao.fechar` |
-| `/caixa/sangria` | caixa | `caixa.movimento.sangria` |
-| `/caixa/suprimento` | caixa | `caixa.movimento.suprimento` |
-| `/caixa/pagamento/:comandaId` | caixa | `caixa.pagamento.registrar` |
-| `/admin/cardapio` | admin | `admin.cardapio.editar` |
-| `/admin/cardapio/produtos/:id` | admin | `admin.cardapio.editar` |
-| `/admin/estoque` | admin | `admin.estoque.editar` |
-| `/admin/equipe` | admin | `admin.equipe.editar` |
-| `/admin/financeiro` | admin | `admin.financeiro.ver` |
-| `/admin/relatorios` | admin | `admin.relatorios.ver` |
-| `/admin/configuracoes` | admin | `admin.configuracoes.editar` |
-| `/admin/auditoria` | admin | `auditoria.ver` |
+| Tela (e sub-aba) | Permissão mínima |
+|---|---|
+| Dashboard | `atendimento.salao.ver` |
+| Atendimento → Salão | `atendimento.salao.ver` |
+| Atendimento → QR Codes das mesas | `atendimento.salao.ver` (gerar novo QR exige `admin.cardapio.editar`) |
+| Caixa | `caixa.sessao.abrir` |
+| Cozinha (KDS) | `cozinha.kds.ver` |
+| Cardápio | `admin.cardapio.editar` |
+| Estoque → Estoque / Compras | `admin.estoque.editar` |
+| Financeiro → Financeiro / Relatórios | `admin.financeiro.ver` / `admin.relatorios.ver` |
+| Pessoas → Clientes / Equipe | `admin.clientes.editar` / `admin.equipe.editar` |
+| Marketing (Cupons/Inativos/Banner) | `admin.marketing.editar` |
+| Auditoria | `auditoria.ver` |
+| Configurações | `admin.configuracoes.editar` (conflitos de sincronização exige `admin.sync_conflitos.resolver`) |
 
-## 5. Onde isso é aplicado no código (fases seguintes)
+## 5. Onde isso é aplicado no código
 
-- Guard de rota: `src/app/guards/RequirePermission.tsx` lê o papel/claims do
-  usuário autenticado e compara contra este catálogo.
-- RLS: `public.tem_permissao(text)` em `0004_rls_policies.sql` consulta
-  `papeis_permissoes` usando o `papel` presente no JWT (custom claim, ver
-  `0003_funcoes_auth.sql`).
-- Um único catálogo (`docs/rotas-permissoes.md` → seed SQL → front-end)
-  evita divergência entre o que a UI esconde e o que o banco realmente
-  bloqueia.
+- **Trava real**: `restaurante.tem_permissao(text)` (lida no JWT via
+  `restaurante.jwt_empresa_id()`/claim `papel`), usada dentro de policies
+  de RLS e no início de toda RPC `SECURITY DEFINER`.
+- **Conveniência de UI**: `can(permissao)` em `assets/js/data.js`, que
+  consulta `MATRIZ[papel]` em `assets/js/config.js` — determina só o que
+  aparece na tela, nunca o que o banco aceita gravar.
+- **Catálogo único**: este documento → `insert into
+  restaurante.papeis_permissoes` nas migrations → `PERM`/`MATRIZ` no
+  client. Os três precisam ser atualizados juntos sempre que uma
+  permissão nova for criada — não existe sincronização automática.

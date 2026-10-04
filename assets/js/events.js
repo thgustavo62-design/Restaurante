@@ -43,17 +43,17 @@ function bindEvents(){
       state.sidebarGruposAbertos[grupo] = !estavaAberto;
       render(); return;
     }
+    if(action==="subaba-ir"){ subAbaIr(el.dataset.tela, el.dataset.aba); return; }
     if(action==="nav-goto"){
       state.view = el.dataset.view; state.viewParams={}; state.sidebarMobileAberto = false;
       render();
-      if(el.dataset.view==="relatorios" && !state.relatorioResultado && !state.relatorioCarregando){
-        carregarRelatorio(state.relatorioPeriodo||"HOJE");
-      }
+      garantirSubAbaCarregada(el.dataset.view);
       if(el.dataset.view==="configuracoes") carregarMfaFactors();
       return;
     }
     if(action==="qrcode-imprimir"){ imprimirQrCodeMesa(el.dataset.mesa); return; }
     if(action==="qrcode-baixar"){ baixarQrCodeMesa(el.dataset.mesa); return; }
+    if(action==="qrcode-rotacionar"){ rotacionarQrCodeMesa(el.dataset.mesa); return; }
     if(action==="qrcodes-imprimir-todas"){ imprimirTodasQrCodes(); return; }
     if(action==="salao-filtro"){ state.salaoFiltro = el.dataset.f; render(); return; }
 
@@ -166,14 +166,14 @@ function bindEvents(){
     if(action==="pagamento-cancelar"){ fecharModalAtual(); return; }
     if(action==="pagamento-cliente-trocar"){ state.modal.escolhendoCliente = true; state.modal.buscaCliente=""; render(); return; }
     if(action==="pagamento-cliente-voltar"){ state.modal.escolhendoCliente = false; render(); return; }
-    if(action==="pagamento-cliente-escolher"){ state.modal.fiadoClienteId = el.dataset.cliente; state.modal.escolhendoCliente = false; state.modal.pontosResgatados = 0; render(); return; }
-    if(action==="pagamento-modo"){ state.modal.modo = el.dataset.modo; state.modal.linhas = []; state.modal.pontosResgatados = 0; state.modal.cupomCodigo=""; state.modal.erro=""; render(); return; }
+    if(action==="pagamento-cliente-escolher"){ state.modal.fiadoClienteId = el.dataset.cliente; state.modal.escolhendoCliente = false; state.modal.pontosResgatados = 0; render(); atualizarTotaisPagamento(); return; }
+    if(action==="pagamento-modo"){ state.modal.modo = el.dataset.modo; state.modal.linhas = []; state.modal.pontosResgatados = 0; state.modal.cupomCodigo=""; state.modal.erro=""; render(); atualizarTotaisPagamento(); return; }
     if(action==="pagamento-item-toggle"){
       var iid = el.dataset.item;
       if(state.modal.itensSelecionados[iid]) delete state.modal.itensSelecionados[iid];
       else state.modal.itensSelecionados[iid] = true;
       state.modal.linhas = []; state.modal.erro="";
-      render(); return;
+      render(); atualizarTotaisPagamento(); return;
     }
     if(action==="pagamento-metodo"){ pagamentoAddMetodo(el.dataset.forma); return; }
     if(action==="pagamento-remover"){ pagamentoRemoveLinha(parseInt(el.dataset.idx,10)); return; }
@@ -334,7 +334,7 @@ function bindEvents(){
     if(action==="relatorio-periodo"){
       state.relatorioPeriodo = el.dataset.p;
       render();
-      if(state.relatorioAba==="gestao") carregarRelatorioGestao(el.dataset.p);
+      if(state.subAba.relatorios==="gestao") carregarRelatorioGestao(el.dataset.p);
       else carregarRelatorio(el.dataset.p);
       return;
     }
@@ -354,7 +354,6 @@ function bindEvents(){
       );
       return;
     }
-    if(action==="marketing-aba"){ state.marketingAba = el.dataset.aba; render(); return; }
     if(action==="cupom-novo"){ abrirCupomForm(); return; }
     if(action==="cupom-form-cancelar"){ state.modal=null; render(); return; }
     if(action==="cupom-form-salvar"){
@@ -376,13 +375,6 @@ function bindEvents(){
         document.getElementById("mkBannerTexto").value,
         document.getElementById("mkProdutoDestaque").value
       );
-      return;
-    }
-    if(action==="relatorio-aba"){
-      state.relatorioAba = el.dataset.aba;
-      render();
-      if(state.relatorioAba==="gestao" && !state.relatorioGestaoResultado) carregarRelatorioGestao(state.relatorioPeriodo||"HOJE");
-      if(state.relatorioAba==="dre" && !state.relatorioDreResultado) carregarRelatorioDre(state.relatorioDreMes||hojeOperacionalStr().slice(0,7));
       return;
     }
 
@@ -419,6 +411,8 @@ function bindEvents(){
       if(nomeBairro){ state.config.bairrosTaxaEntrega[nomeBairro] = taxaBairro; render(); }
       return;
     }
+    if(action==="syncconflito-aplicar"){ resolverSyncConflito(el.dataset.conflito, true); return; }
+    if(action==="syncconflito-descartar"){ resolverSyncConflito(el.dataset.conflito, false); return; }
     if(action==="mfa-ativar-abrir"){ iniciarConfigMfa(); return; }
     if(action==="mfa-setup-cancelar"){ state.modal=null; render(); return; }
     if(action==="mfa-setup-confirmar"){ confirmarConfigMfa(document.getElementById("mfaCodigoInput").value); return; }
@@ -456,7 +450,8 @@ function bindEvents(){
           pontosPorReal: Math.max(0, parseFloat(document.getElementById("cfgPontosPorReal").value||"0")),
           valorPontoCentavos: Math.max(0, Math.round(parseFloat(document.getElementById("cfgValorPonto").value||"0")*100))
         },
-        bairrosTaxaEntrega: state.config.bairrosTaxaEntrega
+        bairrosTaxaEntrega: state.config.bairrosTaxaEntrega,
+        aceitarQrSemTokenAte: document.getElementById("cfgAceitarQrSemTokenAte").value || null
       });
       return;
     }
@@ -497,7 +492,7 @@ function bindEvents(){
     if(e.target.dataset.action==="cancelaritem-supervisor"){ state.modal.supervisorId = e.target.value; return; }
     if(e.target.dataset.action==="relatorio-mes"){
       state.relatorioMes = e.target.value;
-      if(state.relatorioAba==="gestao") carregarRelatorioGestao("MES");
+      if(state.subAba.relatorios==="gestao") carregarRelatorioGestao("MES");
       else carregarRelatorio("MES");
       return;
     }
@@ -510,8 +505,8 @@ function bindEvents(){
     if(action==="draft-obs"){ draftObs(e.target.dataset.produto, e.target.value); return; }
     if(action==="cancelar-motivo"){ state.modal.motivo = e.target.value; return; }
     if(action==="pagamento-cliente-busca"){ state.modal.buscaCliente = e.target.value; render(); return; }
-    if(action==="pagamento-pontos"){ state.modal.pontosResgatados = parseInt(e.target.value||"0",10); render(); return; }
-    if(action==="pagamento-cupom"){ state.modal.cupomCodigo = e.target.value; render(); return; }
+    if(action==="pagamento-pontos"){ state.modal.pontosResgatados = parseInt(e.target.value||"0",10); render(); atualizarTotaisPagamento(); return; }
+    if(action==="pagamento-cupom"){ state.modal.cupomCodigo = e.target.value; render(); atualizarTotaisPagamento(); return; }
     if(action==="cliente-busca"){ state.clienteBusca = e.target.value; render(); return; }
     if(action==="pagamento-valor"){
       var idx = parseInt(e.target.dataset.idx,10);
