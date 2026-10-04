@@ -745,11 +745,6 @@ de rodar `npm test` pela primeira vez.
 - **Força-bruta de PIN via API do Supabase / slug do restaurante não é
   secreto**: ver
   [Pendências de segurança](#pendências-de-segurança-ver-também-pendências-conhecidas) acima.
-- **`docs/ER.md` está desatualizado**: descreve o desenho original
-  (schema `public`, tabelas que não existem no `restaurante` atual, como
-  `produto_variacoes`/`notas_fiscais`/`formas_pagamento`). Não reflete o
-  schema real — use as migrations como fonte de verdade.
-- **Sem testes automatizados no repositório**: não há arquivo de teste
-  versionado, apesar de versões anteriores deste documento mencionarem
-  testes de integração reais contra o Supabase de produção. Se existiram,
-  nunca foram commitados.
+- **Testes automatizados existem mas nunca rodaram de verdade**: ver
+  [Testes automatizados](#testes-automatizados-fase-44) acima — escritos e
+  revisados, faltando só um projeto Supabase de teste pra confirmar.
