@@ -154,7 +154,10 @@ function renderPedidosQrPendentes(){
       var totalItens = p.itens.reduce(function(s,it){ return s+Number(it.quantidade); },0);
       return '<div class="data-row">'+
         '<div class="main"><div class="nome">Mesa '+(mesa?mesa.numero:"?")+'</div>'+
-        '<div class="sub">'+p.itens.map(function(it){ return it.quantidade+'x '+escapeHtml(it.nome); }).join(", ")+
+        '<div class="sub">'+p.itens.map(function(it){
+          var opcoesTxt = (it.opcoes_selecionadas||[]).map(function(o){ return o.nome; }).join(", ");
+          return it.quantidade+'x '+escapeHtml(it.nome)+(opcoesTxt?' ('+escapeHtml(opcoesTxt)+')':'');
+        }).join(", ")+
         (p.observacao?' · '+escapeHtml(p.observacao):'')+'</div></div>'+
         '<div class="acts">'+
           '<button class="btn btn-sm btn-success" data-action="pedidoqr-confirmar" data-pedido="'+p.id+'">Confirmar</button>'+
