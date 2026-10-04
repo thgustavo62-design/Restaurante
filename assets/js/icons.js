@@ -32,7 +32,11 @@ var ICONS = {
   trendingUp:'<path d="M3 17l6-6 4 4 8-8"></path><path d="M17 7h4v4"></path>',
   target:'<circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"></circle>',
   truck:'<path d="M3 7h11v9H3z"></path><path d="M14 11h4l3 3v2h-7z"></path><circle cx="7.5" cy="18" r="1.6"></circle><circle cx="17.5" cy="18" r="1.6"></circle>',
-  image:'<rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path>'
+  image:'<rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path>',
+  qrcode:'<rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v.01"></path>',
+  megaphone:'<path d="m3 11 18-5v12L3 13z"></path><path d="M11.6 16.3 13 21h-2.5l-2-5"></path><path d="M3 11v2a2 2 0 0 0 2 2h1v-6H5a2 2 0 0 0-2 2z"></path>',
+  tag:'<path d="M20.6 12.7 12.7 20.6a2 2 0 0 1-2.8 0L3.4 14a2 2 0 0 1 0-2.8L11.3 3.3A2 2 0 0 1 12.7 2.6H19a2 2 0 0 1 2 2v6.3a2 2 0 0 1-.4 1.8z"></path><circle cx="16" cy="8" r="1.3" fill="currentColor" stroke="none"></circle>',
+  chevronDown:'<path d="M6 9l6 6 6-6"></path>'
 };
 function icon(name, size, cls){
   size = size||18;

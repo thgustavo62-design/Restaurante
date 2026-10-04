@@ -601,6 +601,45 @@ function renderCardapio(){
     '</div>';
 }
 
+// ---------- QR Codes das mesas ----------
+// Link do cardápio público por mesa (mesmo formato do rewrite /cardapio/:slug
+// em vercel.json) — gerado e desenhado só no navegador, nunca chamando
+// nenhum serviço externo de QR (sem terceiros, conforme decidido na Fase 3).
+function urlQrMesa(mesa){
+  return window.location.origin + "/cardapio/" + encodeURIComponent(state.restauranteSlug||"") + "?mesa=" + mesa.numero;
+}
+function renderQrCodes(){
+  var mesas = state.mesas.slice().sort(function(a,b){ return a.numero-b.numero; });
+  return renderPageHeader("qrcode", "QR Codes das Mesas", mesas.length+" mesas — o cliente aponta a câmera e já cai pedindo direto naquela mesa",
+      (mesas.length ? '<button class="btn btn-primary" data-action="qrcodes-imprimir-todas">'+icon("qrcode",15)+' Imprimir todas</button>' : ''))+
+    (mesas.length ? '<div class="qr-grid">'+
+      mesas.map(function(m){
+        return '<div class="qr-card">'+
+          '<div class="qr-card-titulo">Mesa '+m.numero+'</div>'+
+          '<div class="qr-card-sub">'+escapeHtml(m.area||"")+'</div>'+
+          '<canvas id="qrCanvas-'+m.id+'" width="160" height="160"></canvas>'+
+          '<div class="qr-card-link">'+escapeHtml(urlQrMesa(m))+'</div>'+
+          '<div class="qr-card-acts">'+
+            '<button class="btn btn-sm" data-action="qrcode-imprimir" data-mesa="'+m.id+'">'+icon("edit",13)+' Imprimir</button>'+
+            '<button class="btn btn-sm" data-action="qrcode-baixar" data-mesa="'+m.id+'">'+icon("image",13)+' Baixar PNG</button>'+
+          '</div>'+
+        '</div>';
+      }).join("")+
+    '</div>' : '<div class="empty-hint">Nenhuma mesa cadastrada ainda — cadastre mesas em Configurações.</div>');
+}
+// Desenha os QR Codes nos <canvas> já no DOM — chamado depois de render()
+// trocar o innerHTML (0062), nunca durante a montagem da string de HTML.
+function desenharQrCodes(){
+  if(typeof QRCode==="undefined") return;
+  state.mesas.forEach(function(m){
+    var canvas = document.getElementById("qrCanvas-"+m.id);
+    if(!canvas) return;
+    QRCode.toCanvas(canvas, urlQrMesa(m), {width:160, margin:1, color:{dark:"#0b0f14", light:"#ffffff"}}, function(err){
+      if(err) console.error("Falha ao desenhar QR Code", err);
+    });
+  });
+}
+
 function estoqueStatus(i){
   if(i.estoqueAtual < i.estoqueMinimo) return {lbl:"Crítico", cls:"badge-status-critico"};
   if(i.estoqueAtual <= i.estoqueMinimo*1.2) return {lbl:"Repor", cls:"badge-status-atencao"};

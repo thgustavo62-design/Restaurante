@@ -622,3 +622,49 @@ function aplicarDesconto(comandaId, percentInformado){
   }
 }
 
+// ---------- QR Codes das mesas: impressão e download ----------
+
+function buildQrPrintHtml(itens){
+  return '<div class="qr-print-grid">'+itens.map(function(it){
+    return '<div class="qr-print-card">'+
+      '<div class="qr-print-nome">'+escapeHtml(state.config.empresaNome||"")+'</div>'+
+      '<div class="qr-print-mesa">Mesa '+it.mesa.numero+'</div>'+
+      '<img src="'+it.dataUrl+'" width="200" height="200" alt="QR Code mesa '+it.mesa.numero+'">'+
+      '<div class="qr-print-rodape">Aponte a câmera e peça direto pelo celular</div>'+
+    '</div>';
+  }).join("")+'</div>';
+}
+async function imprimirQrCodeMesa(mesaId){
+  var mesa = state.mesas.find(function(m){ return m.id===mesaId; });
+  if(!mesa) return;
+  try{
+    var dataUrl = await QRCode.toDataURL(urlQrMesa(mesa), {width:260, margin:1, color:{dark:"#0b0f14", light:"#ffffff"}});
+    imprimir(buildQrPrintHtml([{mesa:mesa, dataUrl:dataUrl}]));
+  }catch(e){ toast("err","NÃO FOI POSSÍVEL GERAR O QR CODE", e.message); }
+}
+async function imprimirTodasQrCodes(){
+  var mesas = state.mesas.slice().sort(function(a,b){ return a.numero-b.numero; });
+  if(!mesas.length) return;
+  try{
+    var itens = [];
+    for(var i=0;i<mesas.length;i++){
+      var dataUrl = await QRCode.toDataURL(urlQrMesa(mesas[i]), {width:220, margin:1, color:{dark:"#0b0f14", light:"#ffffff"}});
+      itens.push({mesa:mesas[i], dataUrl:dataUrl});
+    }
+    imprimir(buildQrPrintHtml(itens));
+  }catch(e){ toast("err","NÃO FOI POSSÍVEL GERAR OS QR CODES", e.message); }
+}
+async function baixarQrCodeMesa(mesaId){
+  var mesa = state.mesas.find(function(m){ return m.id===mesaId; });
+  if(!mesa) return;
+  try{
+    var dataUrl = await QRCode.toDataURL(urlQrMesa(mesa), {width:512, margin:1, color:{dark:"#0b0f14", light:"#ffffff"}});
+    var a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = "qr-mesa-"+mesa.numero+".png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }catch(e){ toast("err","NÃO FOI POSSÍVEL GERAR O QR CODE", e.message); }
+}
+

@@ -36,6 +36,13 @@ function bindEvents(){
     }
     if(action==="sidebar-abrir"){ state.sidebarMobileAberto = true; render(); return; }
     if(action==="sidebar-fechar"){ state.sidebarMobileAberto = false; render(); return; }
+    if(action==="nav-grupo-toggle"){
+      var grupo = el.dataset.grupo;
+      var chevron = el.querySelector(".nav-group-chevron");
+      var estavaAberto = chevron && chevron.classList.contains("open");
+      state.sidebarGruposAbertos[grupo] = !estavaAberto;
+      render(); return;
+    }
     if(action==="nav-goto"){
       state.view = el.dataset.view; state.viewParams={}; state.sidebarMobileAberto = false;
       render();
@@ -45,6 +52,9 @@ function bindEvents(){
       if(el.dataset.view==="configuracoes") carregarMfaFactors();
       return;
     }
+    if(action==="qrcode-imprimir"){ imprimirQrCodeMesa(el.dataset.mesa); return; }
+    if(action==="qrcode-baixar"){ baixarQrCodeMesa(el.dataset.mesa); return; }
+    if(action==="qrcodes-imprimir-todas"){ imprimirTodasQrCodes(); return; }
     if(action==="salao-filtro"){ state.salaoFiltro = el.dataset.f; render(); return; }
 
     if(action==="balcao-abrir"){ abrirComandaBalcao(); return; }

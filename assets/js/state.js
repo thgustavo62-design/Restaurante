@@ -23,6 +23,7 @@ function estadoVazio(){
     loginBloqueadoAte:null,
     sidebarCollapsed:false,
     sidebarMobileAberto:false,
+    sidebarGruposAbertos:{},
     salaoFiltro:"TODAS",
     cardapioFiltro:"Todos",
     financeiroFiltro:"TODAS",

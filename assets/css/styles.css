@@ -86,6 +86,14 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .sidebar.collapsed .nav-label,.sidebar.collapsed .nav-badge{display:none;}
 .sidebar-foot{border-top:1px solid var(--border); padding:10px;}
 
+.nav-group-header{position:relative;}
+.nav-group-chevron{margin-left:auto; flex:0 0 auto; transition:transform .15s ease; color:var(--text-muted);}
+.nav-group-chevron.open{transform:rotate(180deg);}
+.nav-subitems{margin:0 0 2px 0;}
+.nav-item-sub{padding-left:28px; font-size:11.5px;}
+.sidebar.collapsed .nav-group-chevron{display:none;}
+.sidebar.collapsed .nav-subitems{display:none;}
+
 /* ---------- topbar ---------- */
 .main-col{flex:1; display:flex; flex-direction:column; min-width:0;}
 .topbar{
@@ -218,6 +226,23 @@ h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:.3px;}
 .card-title .ver-todos{font-size:10.5px; color:var(--primary); font-weight:700; letter-spacing:.3px; cursor:pointer; text-transform:none;}
 .grid-2{display:grid; grid-template-columns:1fr; gap:14px;}
 @media(min-width:900px){ .grid-2{grid-template-columns:1.3fr 1fr;} }
+
+/* ---------- QR Codes das mesas ---------- */
+.qr-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px;}
+.qr-card{
+  background:linear-gradient(160deg, var(--surface-01), var(--surface-02)); border:1px solid var(--border);
+  border-radius:var(--radius-lg); padding:16px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:6px;
+}
+.qr-card-titulo{font-family:var(--font-display); font-weight:800; font-size:15px; letter-spacing:.3px;}
+.qr-card-sub{font-size:10.5px; color:var(--text-muted); margin-bottom:4px;}
+.qr-card canvas{background:#fff; border-radius:var(--radius-sm); padding:8px;}
+.qr-card-link{font-size:9.5px; color:var(--text-muted); word-break:break-all; margin:6px 0;}
+.qr-card-acts{display:flex; gap:6px; flex-wrap:wrap; justify-content:center;}
+.qr-print-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10mm; font-family:Arial,sans-serif;}
+.qr-print-card{border:1px dashed #999; border-radius:6px; padding:8mm; text-align:center; break-inside:avoid;}
+.qr-print-nome{font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:.5px;}
+.qr-print-mesa{font-weight:800; font-size:22px; margin:4mm 0;}
+.qr-print-rodape{font-size:10px; color:#333; margin-top:4mm;}
 
 .chart-bars{display:flex; align-items:flex-end; gap:4px; height:110px;}
 .chart-bar{flex:1; background:var(--surface-03); border-radius:3px 3px 0 0; position:relative; min-height:2px;}
@@ -526,6 +551,8 @@ input[type="checkbox"]:checked::before{left:20px; background:var(--on-accent);}
   .sidebar.collapsed{width:80vw; max-width:300px;}
   .sidebar.collapsed .brand-text{display:block;}
   .sidebar.collapsed .nav-label,.sidebar.collapsed .nav-badge{display:inline;}
+  .sidebar.collapsed .nav-group-chevron{display:block;}
+  .sidebar.collapsed .nav-subitems{display:block;}
   .sidebar-brand .sidebar-close{display:flex;}
   .sidebar-backdrop{
     display:block; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:55;

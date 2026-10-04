@@ -3,23 +3,37 @@
 // ---------- render ----------
 
 var app = document.getElementById("app");
+// Itens soltos navegam direto (view); grupos (group+items) expandem/colapsam
+// ao clicar e só então mostram os filhos — mesmo padrão de "vários assuntos
+// dentro de um só ícone" que o Cardápio já usava com suas abas de categoria.
 var NAV_ITEMS = [
   {view:"dashboard", label:"Dashboard", icon:"grid", perm:PERM.SALAO_VER, built:true},
-  {view:"salao", label:"Atendimento", icon:"utensils", perm:PERM.SALAO_VER, built:true},
+  {group:"atendimento", groupLabel:"Atendimento", groupIcon:"utensils", items:[
+    {view:"salao", label:"Salão", icon:"utensils", perm:PERM.SALAO_VER, built:true},
+    {view:"qrcodes", label:"QR Codes das mesas", icon:"qrcode", perm:PERM.SALAO_VER, built:true}
+  ]},
   {view:"caixa", label:"Caixa", icon:"wallet", perm:PERM.CAIXA_ABRIR, built:true},
   {view:"kds", label:"Cozinha", icon:"chef", perm:PERM.KDS_VER, built:true},
   {view:"cardapio", label:"Cardápio", icon:"book", perm:PERM.CARDAPIO, built:true},
-  {view:"estoque", label:"Estoque", icon:"package", perm:PERM.ESTOQUE, built:true},
-  {view:"compras", label:"Compras", icon:"package", perm:PERM.ESTOQUE, built:true},
-  {view:"financeiro", label:"Financeiro", icon:"landmark", perm:PERM.FINANCEIRO, built:true},
-  {view:"clientes", label:"Clientes", icon:"users", perm:PERM.CLIENTES, built:true},
-  {view:"relatorios", label:"Relatórios", icon:"chart", perm:PERM.RELATORIOS, built:true},
-  {view:"equipe", label:"Equipe", icon:"users", perm:PERM.EQUIPE, built:true},
+  {group:"estoque", groupLabel:"Estoque", groupIcon:"package", items:[
+    {view:"estoque", label:"Estoque", icon:"package", perm:PERM.ESTOQUE, built:true},
+    {view:"compras", label:"Compras", icon:"package", perm:PERM.ESTOQUE, built:true}
+  ]},
+  {group:"financeiro", groupLabel:"Financeiro", groupIcon:"landmark", items:[
+    {view:"financeiro", label:"Financeiro", icon:"landmark", perm:PERM.FINANCEIRO, built:true},
+    {view:"relatorios", label:"Relatórios", icon:"chart", perm:PERM.RELATORIOS, built:true}
+  ]},
+  {group:"pessoas", groupLabel:"Pessoas", groupIcon:"users", items:[
+    {view:"clientes", label:"Clientes", icon:"users", perm:PERM.CLIENTES, built:true},
+    {view:"equipe", label:"Equipe", icon:"users", perm:PERM.EQUIPE, built:true}
+  ]},
+  {view:"marketing", label:"Marketing", icon:"megaphone", perm:PERM.CLIENTES, built:false},
   {view:"auditoria", label:"Auditoria", icon:"alert", perm:PERM.AUDITORIA_VER, built:true},
   {view:"configuracoes", label:"Configurações", icon:"settings", perm:PERM.CONFIGURACOES, built:true}
 ];
 var PAGE_TITLES = {dashboard:"Dashboard", salao:"Atendimento", comanda:"Atendimento", kds:"Cozinha (KDS)", caixa:"Caixa", auditoria:"Auditoria",
-  cardapio:"Cardápio", estoque:"Estoque", compras:"Compras", financeiro:"Financeiro", clientes:"Clientes", relatorios:"Relatórios", equipe:"Equipe", configuracoes:"Configurações"};
+  cardapio:"Cardápio", estoque:"Estoque", compras:"Compras", financeiro:"Financeiro", clientes:"Clientes", relatorios:"Relatórios", equipe:"Equipe",
+  configuracoes:"Configurações", qrcodes:"QR Codes das Mesas", marketing:"Marketing"};
 
 // Cabeçalho padrão de tela (ícone em destaque + título + subtítulo [+ ações
 // à direita]) — uso progressivo: cada tela passa a chamar isso conforme é
@@ -66,6 +80,7 @@ function render(){
   if(state.modal) html += renderModal();
   app.innerHTML = html;
   bindEvents();
+  if(state.view==="qrcodes") desenharQrCodes();
 
   if(activeId){
     var el = document.getElementById(activeId);
@@ -78,8 +93,31 @@ function render(){
   }
 }
 
+function navItemAtivo(n){
+  return state.view===n.view || (n.view==="salao" && state.view==="comanda");
+}
+function renderNavItem(n, indent){
+  return '<div class="nav-item '+(navItemAtivo(n)?"active":"")+' '+(n.built?"":"disabled")+' '+(indent?"nav-item-sub":"")+'" '+
+      (n.built?'data-action="nav-goto" data-view="'+n.view+'"':'')+'>'+
+    icon(n.icon,18)+'<span class="nav-label">'+n.label+'</span>'+
+    (n.built?'':'<span class="nav-badge">EM BREVE</span>')+
+  '</div>';
+}
+function renderNavGroup(g){
+  var filhosVisiveis = g.items.filter(function(n){ return can(n.perm); });
+  if(!filhosVisiveis.length) return "";
+  var temAtivo = filhosVisiveis.some(navItemAtivo);
+  var aberto = state.sidebarGruposAbertos[g.group];
+  if(aberto===undefined) aberto = temAtivo;
+  return '<div class="nav-group">'+
+    '<div class="nav-item nav-group-header '+(temAtivo && !aberto?"active":"")+'" data-action="nav-grupo-toggle" data-grupo="'+g.group+'">'+
+      icon(g.groupIcon,18)+'<span class="nav-label">'+g.groupLabel+'</span>'+
+      icon("chevronDown",15,"nav-group-chevron"+(aberto?" open":""))+
+    '</div>'+
+    (aberto ? '<div class="nav-subitems">'+filhosVisiveis.map(function(n){ return renderNavItem(n,true); }).join("")+'</div>' : '')+
+  '</div>';
+}
 function renderSidebar(){
-  var items = NAV_ITEMS.filter(function(n){ return can(n.perm); });
   return '<div class="sidebar '+(state.sidebarCollapsed?"collapsed":"")+' '+(state.sidebarMobileAberto?"mobile-open":"")+'">'+
     '<div class="sidebar-brand">'+
       '<img class="sidebar-logo" src="assets/logo/vision-food-icon.png" alt="Vision Food">'+
@@ -88,12 +126,10 @@ function renderSidebar(){
       '<button class="icon-btn sidebar-close" data-action="sidebar-fechar">'+icon("x",16)+'</button>'+
     '</div>'+
     '<div class="nav-scroll">'+
-      items.map(function(n){
-        var active = state.view===n.view || (n.view==="salao" && state.view==="comanda");
-        return '<div class="nav-item '+(active?"active":"")+' '+(n.built?"":"disabled")+'" '+(n.built?'data-action="nav-goto" data-view="'+n.view+'"':'')+'>'+
-          icon(n.icon,18)+'<span class="nav-label">'+n.label+'</span>'+
-          (n.built?'':'<span class="nav-badge">EM BREVE</span>')+
-        '</div>';
+      NAV_ITEMS.map(function(n){
+        if(n.group) return renderNavGroup(n);
+        if(!can(n.perm)) return "";
+        return renderNavItem(n,false);
       }).join("")+
     '</div>'+
     '<div class="sidebar-foot">'+
@@ -195,6 +231,7 @@ function renderView(){
   if(state.view==="caixa") return renderCaixa();
   if(state.view==="auditoria") return renderAuditoria();
   if(state.view==="cardapio") return renderCardapio();
+  if(state.view==="qrcodes") return renderQrCodes();
   if(state.view==="estoque") return renderEstoque();
   if(state.view==="compras") return renderCompras();
   if(state.view==="financeiro") return renderFinanceiro();
