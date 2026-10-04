@@ -25,6 +25,7 @@ erDiagram
   EMPRESAS ||--o{ PEDIDOS_QR : recebe
   EMPRESAS ||--o{ VENDA_MOVIMENTACOES : registra
   EMPRESAS ||--o{ INSUMO_RENDIMENTOS : registra
+  EMPRESAS ||--o{ CUPONS : possui
 
   PAPEIS_PERMISSOES }o--|| USUARIOS : "define acesso de"
 
@@ -265,6 +266,18 @@ erDiagram
     text destino
     uuid usuario_id FK
   }
+  CUPONS {
+    uuid id PK "0062 — Marketing"
+    uuid empresa_id FK
+    text codigo UK "único por empresa, case-insensitive"
+    text tipo "PERCENTUAL/VALOR_FIXO"
+    int valor
+    date valido_de
+    date valido_ate
+    int usos_max
+    int usos_atuais
+    bool ativo
+  }
   TENTATIVAS_AUTORIZACAO {
     uuid id PK "0043 — autorização de supervisor por PIN"
     uuid empresa_id FK
@@ -343,3 +356,10 @@ erDiagram
 - **`pedidos_qr` nunca grava direto em `comanda_itens`** — é uma fila de
   aprovação; só a RPC `confirmar_pedido_qr` (que roda a mesma trava de
   preço/opções) cria os itens de verdade.
+- **Cupom, pontos de fidelidade e desconto manual da comanda empilham**
+  (somam) no fechamento — nenhum dos três cancela os outros. Os três só
+  valem fechando a conta inteira, nunca em pagamento parcial por item
+  (mesma trava, pra não ter que decidir "de quem" é o desconto quando a
+  conta é dividida). `cupons.codigo` é único por empresa e comparado
+  sempre via `upper()` no servidor — nunca confie em maiúsculas/minúsculas
+  vindas do client.

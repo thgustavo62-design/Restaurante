@@ -28,6 +28,7 @@ function renderModal(){
   if(m.type==="novoDelivery") return renderNovoDeliveryModal(m);
   if(m.type==="mfaSetup") return renderMfaSetupModal(m);
   if(m.type==="clienteForm") return renderClienteFormModal(m);
+  if(m.type==="cupomForm") return renderCupomFormModal(m);
   return "";
 }
 
@@ -107,6 +108,29 @@ function renderClienteFormModal(m){
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="cliente-form-cancelar">Cancelar</button>'+
       '<button class="btn btn-primary btn-block" data-action="cliente-form-salvar" '+(m.salvando?"disabled":"")+'>Salvar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+// Fase 5 — cupom de desconto. codigo é sempre salvo em maiúsculas (a
+// comparação no servidor já ignora caixa via upper(), mas padronizar aqui
+// evita "promo10" vs "PROMO10" parecerem cupons diferentes na listagem).
+function renderCupomFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Novo cupom</h2>'+
+    '<div class="field"><label>Código</label><input id="cupCodigo" value="'+escapeHtml(m.codigo||"")+'" placeholder="Ex: BEMVINDO10" style="text-transform:uppercase;"></div>'+
+    '<div class="field"><label>Tipo de desconto</label><select id="cupTipo">'+
+      '<option value="PERCENTUAL" '+(m.tipo!=="VALOR_FIXO"?"selected":"")+'>Percentual (%)</option>'+
+      '<option value="VALOR_FIXO" '+(m.tipo==="VALOR_FIXO"?"selected":"")+'>Valor fixo (R$)</option>'+
+    '</select></div>'+
+    '<div class="field"><label>Valor</label><input id="cupValor" type="number" min="1" step="0.01" placeholder="Ex: 10" value="'+(m.valorInput||"")+'"></div>'+
+    '<div class="field"><label>Válido de (opcional)</label><input id="cupValidoDe" type="date" value="'+(m.validoDe||"")+'"></div>'+
+    '<div class="field"><label>Válido até (opcional)</label><input id="cupValidoAte" type="date" value="'+(m.validoAte||"")+'"></div>'+
+    '<div class="field"><label>Limite de usos (opcional)</label><input id="cupUsosMax" type="number" min="1" value="'+(m.usosMax||"")+'"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row">'+
+      '<button class="btn btn-ghost" data-action="cupom-form-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="cupom-form-salvar" '+(m.salvando?"disabled":"")+'>Salvar</button>'+
     '</div>'+
   '</div></div>';
 }

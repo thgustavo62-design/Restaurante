@@ -174,6 +174,9 @@ async function carregarTudo(){
   var cliRes = await sb.from("clientes").select("*").order("nome");
   state.clientes = (checar(cliRes,"clientes")||[]).map(mapCliente);
 
+  var cupRes = await sb.from("cupons").select("*").order("created_at",{ascending:false});
+  state.cupons = (checar(cupRes,"cupons")||[]).map(mapCupom);
+
   var fornRes = await sb.from("fornecedores").select("*").order("nome");
   state.fornecedores = (checar(fornRes,"fornecedores")||[]).map(mapFornecedor);
 

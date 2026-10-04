@@ -354,6 +354,30 @@ function bindEvents(){
       );
       return;
     }
+    if(action==="marketing-aba"){ state.marketingAba = el.dataset.aba; render(); return; }
+    if(action==="cupom-novo"){ abrirCupomForm(); return; }
+    if(action==="cupom-form-cancelar"){ state.modal=null; render(); return; }
+    if(action==="cupom-form-salvar"){
+      salvarCupom(
+        document.getElementById("cupCodigo").value,
+        document.getElementById("cupTipo").value,
+        document.getElementById("cupValor").value,
+        document.getElementById("cupValidoDe").value,
+        document.getElementById("cupValidoAte").value,
+        document.getElementById("cupUsosMax").value
+      );
+      return;
+    }
+    if(action==="cupom-alternar-ativo"){ alternarAtivoCupom(el.dataset.cupom); return; }
+    if(action==="clientes-inativos-buscar"){ buscarClientesInativos(document.getElementById("inativosDias").value); return; }
+    if(action==="marketing-banner-salvar"){
+      salvarMarketingBanner(
+        document.getElementById("mkBannerAtivo").checked,
+        document.getElementById("mkBannerTexto").value,
+        document.getElementById("mkProdutoDestaque").value
+      );
+      return;
+    }
     if(action==="relatorio-aba"){
       state.relatorioAba = el.dataset.aba;
       render();

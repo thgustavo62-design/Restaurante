@@ -85,6 +85,11 @@ function mapCliente(row){
     observacoes:row.observacoes||"", consentimentoLgpd:!!row.consentimento_lgpd, consentimentoEm:row.consentimento_em,
     pontosFidelidade:row.pontos_fidelidade||0, endereco:row.endereco||"", bairro:row.bairro||""};
 }
+function mapCupom(row){
+  return {id:row.id, codigo:row.codigo, tipo:row.tipo, valor:row.valor,
+    validoDe:row.valido_de, validoAte:row.valido_ate,
+    usosMax:row.usos_max, usosAtuais:row.usos_atuais||0, ativo:!!row.ativo, createdAt:row.created_at};
+}
 function mapAuditoria(row){
   return {id:row.id, entidade:row.entidade, entidadeId:row.entidade_id, acao:row.acao,
     usuarioId:row.usuario_id, motivo:row.motivo, createdAt:row.created_at};

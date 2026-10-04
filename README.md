@@ -81,6 +81,10 @@ começa ali, nunca com cor solta espalhada pelo CSS/JS.
 
 Depois do login, a navegação lateral mostra só as telas que o papel do
 usuário logado pode acessar (ver [Papéis e permissões](#papéis-e-permissões)).
+Itens relacionados ficam agrupados num menu que expande ao clicar
+(Atendimento/QR Codes, Estoque/Compras, Financeiro/Relatórios,
+Clientes/Equipe) — Caixa, Cozinha, Cardápio, Marketing, Auditoria e
+Configurações continuam soltos, por não terem um par óbvio.
 
 | Tela | O que faz |
 |---|---|
@@ -97,9 +101,11 @@ usuário logado pode acessar (ver [Papéis e permissões](#papéis-e-permissões
 | **Financeiro** | Contas a pagar e a receber (as de receber de fiado/débito/crédito/voucher são geradas automaticamente ao fechar uma conta, já líquidas da taxa da maquininha configurada), com status pago/pendente/vencido. Botão **Exportar pro contador**: baixa 3 CSVs do mês (vendas por forma, contas, fechamentos de caixa). |
 | **Clientes** | CRM básico: nome, telefone, endereço/bairro (pra delivery), aniversário, observações, consentimento LGPD. Ficha do cliente mostra saldo de fiado em aberto, **pontos de fidelidade** e histórico de visitas. Cliente é opcional em qualquer pagamento (ganha pontos — padrão 1 ponto por R$1, configurável) e obrigatório no fiado (não é mais texto livre); pontos acumulados podem ser resgatados como desconto na hora de fechar a conta. |
 | **Relatórios** | Aba **Vendas**: ranking de produtos e desempenho por garçom (por quem **lançou** o item), por período (hoje / 7 dias / 30 dias / escolher mês). Aba **Gestão**: CMV e margem por produto (alerta quando custo ≥ preço), relatório anti-fraude (cancelamentos e descontos por funcionário), taxa de serviço estimada por garçom, curva ABC, heatmap de vendas por dia×hora e taxas pagas às maquininhas. Aba **DRE mensal**: faturamento − CMV − despesas = resultado, por mês. Tudo agregado no banco — não carrega mais comandas/itens completos no navegador, e o total de cada venda é o valor travado no pagamento, não recalculado com a taxa de serviço atual. |
+| **QR Codes das mesas** | Gera o QR de cada mesa cadastrada direto no navegador (biblioteca client-side, sem nenhum serviço externo), aponta pra `/cardapio/:slug?mesa=N`. Imprimir individual, imprimir todas numa grade, ou baixar PNG. Dentro do grupo **Atendimento** no menu. |
+| **Marketing** | Três abas: **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos — aplicado no fechamento da conta via `confirmar_pagamento`, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (quem não compra há N dias, pra reativação manual); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público). |
 | **Equipe** | Criar funcionário (nome, papel, PIN), ativar/desativar, e **trocar PIN** de um funcionário existente sem precisar recriá-lo. |
 | **Auditoria** | Trilha de ações sensíveis (desconto aprovado, item cancelado, preço alterado, caixa fechado com diferença, PIN alterado, etc.), com quem fez e quando. |
-| **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, e o **link do cardápio público** (pra gerar o QR Code em qualquer gerador gratuito e imprimir nas mesas). |
+| **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, e o **link do cardápio público** (a tela QR Codes das mesas já gera o QR pronto pra imprimir — este link aqui é só pra referência/compartilhar manualmente). |
 
 ### Cardápio público (`cardapio.html`)
 
@@ -151,12 +157,15 @@ de verdade).
 
 ## Papéis e permissões
 
-Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 23
+Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 25
 permissões no formato `modulo.recurso.acao` (ex:
 `atendimento.comanda.item.cancelar`), cada uma concedida por papel numa
 tabela de configuração (`papeis_permissoes`, semeada nas migrations, não é
-dado de exemplo). O catálogo completo e a matriz papel × permissão estão em
-[`docs/rotas-permissoes.md`](docs/rotas-permissoes.md).
+dado de exemplo). `docs/rotas-permissoes.md` descreve o desenho original
+(catálogo incompleto, rotas de uma arquitetura React que não existe neste
+app) — **desatualizado**, mesma situação que o `docs/ER.md` tinha antes de
+ser corrigido; use `papeis_permissoes` nas migrations como fonte de verdade
+até alguém reescrever esse documento também.
 
 Dois lugares guardam esse catálogo e precisam ficar em sincronia manual:
 a tabela `papeis_permissoes` no banco (quem efetivamente bloqueia) e o
@@ -748,3 +757,16 @@ de rodar `npm test` pela primeira vez.
 - **Testes automatizados existem mas nunca rodaram de verdade**: ver
   [Testes automatizados](#testes-automatizados-fase-44) acima — escritos e
   revisados, faltando só um projeto Supabase de teste pra confirmar.
+- **`docs/rotas-permissoes.md` está desatualizado**: descreve uma
+  arquitetura React (`src/app/guards/...`, rotas `/admin/cardapio` etc.)
+  que este app nunca usou, e nem lista as permissões mais recentes
+  (`admin.clientes.editar`, `admin.marketing.editar`). Mesma situação que
+  o `docs/ER.md` tinha antes de ser reescrito — `papeis_permissoes` nas
+  migrations é a fonte de verdade até alguém reescrever esse documento.
+- **Cupom de desconto (Fase 5/Marketing) ainda não tem botão no
+  fechamento de conta**: `confirmar_pagamento` já aceita e valida
+  `p_cupom_codigo` (migration `0062`), e a tela Marketing já cadastra/
+  ativa/desativa cupons — só falta o campo "Aplicar cupom" no modal de
+  pagamento (Caixa). Escopo deixado de fora desta entrega por mexer numa
+  função já complexa e que lida com dinheiro de verdade; cadastrar e usar
+  via RPC direta já funciona, só não tem UI ainda.

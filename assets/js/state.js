@@ -42,7 +42,8 @@ function estadoVazio(){
       atrasoPorSetor:{BAR:10, COZINHA:10, BRASA:10, SOBREMESA:10},
       taxasMaquininha:{DEBITO:{pct:0, prazoDias:1}, CREDITO:{pct:0, prazoDias:30}, VOUCHER:{pct:0, prazoDias:30}},
       produtoCouvertId:"", happyHoraInicio:"", happyHoraFim:"",
-      fidelidade:{pontosPorReal:1, valorPontoCentavos:1}, bairrosTaxaEntrega:{}
+      fidelidade:{pontosPorReal:1, valorPontoCentavos:1}, bairrosTaxaEntrega:{},
+      marketing:{bannerAtivo:false, bannerTexto:"", produtoDestaqueId:""}
     },
     kdsSomAtivo:false,
     kdsSomVistos:{},
@@ -53,6 +54,9 @@ function estadoVazio(){
     comandas:[], caixaSessao:null, caixaMovimentos:[], caixaSessoesHistorico:[], auditoria:[],
     clientes:[], clienteDetalheId:null, clienteFicha:null, clienteBusca:"",
     pedidosQr:[],
+    cupons:[],
+    marketingAba:"cupons",
+    clientesInativosDias:60, clientesInativosResultado:null, clientesInativosCarregando:false,
     kdsItensAvulsos:[],
     vendasHoje:[],
     relatorioResultado:null, relatorioCarregando:false, relatorioMes:"",

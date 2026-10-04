@@ -27,7 +27,7 @@ var NAV_ITEMS = [
     {view:"clientes", label:"Clientes", icon:"users", perm:PERM.CLIENTES, built:true},
     {view:"equipe", label:"Equipe", icon:"users", perm:PERM.EQUIPE, built:true}
   ]},
-  {view:"marketing", label:"Marketing", icon:"megaphone", perm:PERM.CLIENTES, built:false},
+  {view:"marketing", label:"Marketing", icon:"megaphone", perm:PERM.MARKETING, built:true},
   {view:"auditoria", label:"Auditoria", icon:"alert", perm:PERM.AUDITORIA_VER, built:true},
   {view:"configuracoes", label:"Configurações", icon:"settings", perm:PERM.CONFIGURACOES, built:true}
 ];
@@ -232,6 +232,7 @@ function renderView(){
   if(state.view==="auditoria") return renderAuditoria();
   if(state.view==="cardapio") return renderCardapio();
   if(state.view==="qrcodes") return renderQrCodes();
+  if(state.view==="marketing") return renderMarketing();
   if(state.view==="estoque") return renderEstoque();
   if(state.view==="compras") return renderCompras();
   if(state.view==="financeiro") return renderFinanceiro();

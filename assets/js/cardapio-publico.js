@@ -117,7 +117,8 @@ async function cpCarregar(){
     root.innerHTML = '<div class="cp-erro">Link inválido — nenhum cardápio informado.</div>';
     return;
   }
-  var empRes = await cpSb.from("cardapio_publico_empresa").select("id,nome,slug").eq("slug", slug).single();
+  var empRes = await cpSb.from("cardapio_publico_empresa")
+    .select("id,nome,slug,banner_ativo,banner_texto,produto_destaque_id").eq("slug", slug).single();
   if(empRes.error || !empRes.data){
     root.innerHTML = '<div class="cp-erro">Cardápio não encontrado.</div>';
     return;
@@ -152,6 +153,21 @@ async function cpCarregar(){
   });
 
   var html = '<div class="cp-header"><h1>'+cpEscapeHtml(empresa.nome)+'</h1><p>Cardápio</p></div>';
+
+  // Fase 5 (Marketing) — banner opcional, configurado em Marketing > Banner
+  // do cardápio (só texto+produto, nunca o config inteiro — ver 0062).
+  if(empresa.banner_ativo && (empresa.banner_texto||empresa.produto_destaque_id)){
+    var produtoDestaque = empresa.produto_destaque_id ? produtos.find(function(p){ return p.id===empresa.produto_destaque_id; }) : null;
+    html += '<div class="cp-banner">'+
+      (empresa.banner_texto ? '<div class="cp-banner-texto">'+cpEscapeHtml(empresa.banner_texto)+'</div>' : '')+
+      (produtoDestaque ? '<div class="cp-banner-produto">'+
+        (produtoDestaque.foto_url ? '<img src="'+cpEscapeHtml(produtoDestaque.foto_url)+'" alt="">' : '')+
+        '<div><div class="cp-banner-produto-nome">'+cpEscapeHtml(produtoDestaque.nome)+'</div>'+
+        '<div class="cp-banner-produto-preco">'+cpBrl(produtoDestaque.preco_centavos)+'</div></div>'+
+      '</div>' : '')+
+    '</div>';
+  }
+
   var temAlgumProduto = false;
   categorias.forEach(function(c){
     var itens = porCategoria[c.id] || [];

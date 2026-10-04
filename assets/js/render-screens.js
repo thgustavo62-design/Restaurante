@@ -640,6 +640,79 @@ function desenharQrCodes(){
   });
 }
 
+// ---------- Marketing: cupons, clientes inativos, banner do cardápio ----------
+
+function statusCupom(c){
+  var hoje = diasA(0);
+  if(!c.ativo) return {lbl:"Inativo", cls:"badge-inativo"};
+  if(c.validoAte && c.validoAte<hoje) return {lbl:"Expirado", cls:"badge-esgotado"};
+  if(c.validoDe && c.validoDe>hoje) return {lbl:"Agendado", cls:"badge-status-atencao"};
+  if(c.usosMax && c.usosAtuais>=c.usosMax) return {lbl:"Esgotado", cls:"badge-esgotado"};
+  return {lbl:"Ativo", cls:"badge-status-ok"};
+}
+function renderMarketingCupons(podeEditar){
+  return (podeEditar ? '<div class="action-row" style="justify-content:flex-end; margin-bottom:12px;">'+
+      '<button class="btn btn-primary" data-action="cupom-novo">'+icon("plus",15)+' Novo cupom</button></div>' : '')+
+    '<div class="card">'+
+    (state.cupons.length ? state.cupons.map(function(c){
+      var st = statusCupom(c);
+      var valorTxt = c.tipo==="PERCENTUAL" ? c.valor+"%" : brl(c.valor);
+      var usosTxt = c.usosMax ? (c.usosAtuais+"/"+c.usosMax+" usos") : (c.usosAtuais+" usos");
+      return '<div class="data-row">'+
+        '<div class="main"><div class="nome">'+escapeHtml(c.codigo)+' <span class="badge '+st.cls+'">'+st.lbl+'</span></div>'+
+        '<div class="sub">'+valorTxt+' de desconto'+(c.validoAte?' · até '+new Date(c.validoAte+"T00:00:00").toLocaleDateString("pt-BR"):'')+' · '+usosTxt+'</div></div>'+
+        (podeEditar ? '<div class="acts">'+
+          '<button class="btn btn-sm" data-action="cupom-alternar-ativo" data-cupom="'+c.id+'">'+(c.ativo?"Desativar":"Ativar")+'</button>'+
+        '</div>' : '')+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nenhum cupom cadastrado ainda.</div>')+
+    '</div>';
+}
+function renderMarketingInativos(){
+  var r = state.clientesInativosResultado;
+  return '<div class="action-row" style="align-items:flex-end; margin-bottom:12px;">'+
+      '<div class="field" style="margin:0;"><label>Sem comprar há (dias)</label>'+
+        '<input id="inativosDias" type="number" min="1" value="'+state.clientesInativosDias+'" style="width:110px;"></div>'+
+      '<button class="btn btn-primary" data-action="clientes-inativos-buscar">'+icon("search",15)+' Buscar</button>'+
+    '</div>'+
+    (state.clientesInativosCarregando ? '<div class="empty-hint">Buscando...</div>' :
+      !r ? '<div class="empty-hint">Escolha o período e clique em Buscar.</div>' :
+      !r.length ? '<div class="empty-hint">Nenhum cliente inativo nesse período.</div>' :
+      '<div class="card">'+r.map(function(c){
+        return '<div class="data-row">'+
+          '<div class="main"><div class="nome">'+escapeHtml(c.nome)+'</div>'+
+          '<div class="sub">'+(c.telefone?escapeHtml(c.telefone)+' · ':'')+(c.ultima_compra ? (c.dias_sem_comprar+' dias sem comprar') : 'nunca comprou')+'</div></div>'+
+          '<div class="num">'+(c.pontos_fidelidade||0)+' pts</div>'+
+        '</div>';
+      }).join("")+'</div>');
+}
+function renderMarketingBanner(podeEditar){
+  var mk = state.config.marketing || {bannerAtivo:false, bannerTexto:"", produtoDestaqueId:""};
+  if(!podeEditar) return '<div class="empty-hint">Você não tem permissão pra editar o banner do cardápio.</div>';
+  return '<div class="card" style="max-width:520px;">'+
+    '<label style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">'+
+      '<input type="checkbox" id="mkBannerAtivo" '+(mk.bannerAtivo?"checked":"")+'>'+
+      '<span>Mostrar banner no cardápio público</span>'+
+    '</label>'+
+    '<div class="field"><label>Texto do banner</label><textarea id="mkBannerTexto" placeholder="Ex: Happy Hour até 19h — chopp em dobro!">'+escapeHtml(mk.bannerTexto||"")+'</textarea></div>'+
+    '<div class="field"><label>Produto em destaque (opcional)</label>'+
+      '<select id="mkProdutoDestaque"><option value="">Nenhum</option>'+
+      state.produtos.filter(function(p){ return p.ativo; }).map(function(p){
+        return '<option value="'+p.id+'" '+(mk.produtoDestaqueId===p.id?"selected":"")+'>'+escapeHtml(p.nome)+'</option>';
+      }).join("")+
+      '</select></div>'+
+    '<button class="btn btn-primary" data-action="marketing-banner-salvar">Salvar</button>'+
+  '</div>';
+}
+function renderMarketing(){
+  var aba = state.marketingAba || "cupons";
+  var podeEditar = can(PERM.MARKETING);
+  var abas = [{id:"cupons", label:"Cupons"},{id:"inativos", label:"Clientes inativos"},{id:"banner", label:"Banner do cardápio"}];
+  return renderPageHeader("megaphone", "Marketing", "Cupons, reativação de clientes e destaque no cardápio público")+
+    '<div class="tabs">'+abas.map(function(a){ return '<div class="tab '+(aba===a.id?"active":"")+'" data-action="marketing-aba" data-aba="'+a.id+'">'+a.label+'</div>'; }).join("")+'</div>'+
+    (aba==="cupons" ? renderMarketingCupons(podeEditar) : aba==="inativos" ? renderMarketingInativos() : renderMarketingBanner(podeEditar));
+}
+
 function estoqueStatus(i){
   if(i.estoqueAtual < i.estoqueMinimo) return {lbl:"Crítico", cls:"badge-status-critico"};
   if(i.estoqueAtual <= i.estoqueMinimo*1.2) return {lbl:"Repor", cls:"badge-status-atencao"};
