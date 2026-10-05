@@ -58,6 +58,15 @@ state = estadoVazio();
   }catch(e){}
 })();
 
+// PRIORIDADE 10.1 — barra lateral colapsada (só ícones) é preferência de
+// aparelho, mesmo padrão de caixaTerminalNome/notificacoesAtivas — sem
+// isso, o botão de colapsar "esquecia" o estado a cada recarregamento.
+(function resolverSidebarCollapsed(){
+  try{
+    state.sidebarCollapsed = localStorage.getItem("sidebarCollapsed")==="1";
+  }catch(e){}
+})();
+
 render();
 if(state.restauranteSlug) carregarUsuariosLogin();
 iniciarRelogioTopbar();

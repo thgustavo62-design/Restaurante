@@ -1918,13 +1918,20 @@ function renderSyncConflitos(){
     }).join("")+
   '</div>';
 }
-function renderConfiguracoes(){
+// ETAPA pós-10 — Configurações virou sub-abas (mesmo componente genérico
+// de sempre, ETAPA 0.11): uma tela só com 13 cards empilhados exigia
+// rolar demais pra achar qualquer coisa. Um único botão "Salvar
+// configurações", fora das sub-abas (sempre visível, qualquer que seja a
+// aba atual) — cada clique grava o form inteiro de novo, mas o handler
+// (config-salvar, events.js) só lê do DOM os campos da aba ABERTA no
+// momento; os campos das abas fechadas (fora do DOM) caem pro valor que
+// já estava em state.config, então trocar de aba nunca apaga o que não
+// está visível.
+function renderConfigGeral(){
   var c = state.config;
-  return renderPageHeader("settings", "Configurações", "Dados fiscais, limites, impressão e funcionamento")+
-    renderSyncConflitos()+
-    '<div class="grid-2">'+
+  return '<div class="grid-2">'+
     '<div class="card">'+
-      '<div class="card-title">Geral</div>'+
+      '<div class="card-title">Dados da empresa</div>'+
       '<div class="field"><label>Nome da empresa</label><input id="cfgNome" value="'+escapeHtml(c.empresaNome)+'"></div>'+
       '<div class="field"><label>CNPJ</label><input id="cfgCnpj" value="'+escapeHtml(c.empresaCnpj)+'"></div>'+
       '<div class="field" style="margin-bottom:0;"><label>Chave PIX (recebimento)</label><input id="cfgChavePix" value="'+escapeHtml(c.chavePix)+'"></div>'+
@@ -1938,6 +1945,11 @@ function renderConfiguracoes(){
         '</div>'+
       '</div>'+
     '</div>'+
+  '</div>';
+}
+function renderConfigVendas(){
+  var c = state.config;
+  return '<div class="grid-2">'+
     '<div class="card">'+
       '<div class="card-title">Taxas e limites</div>'+
       '<div class="field"><label>Taxa de serviço padrão (%)</label><input id="cfgTaxa" type="number" min="0" max="30" step="1" value="'+c.taxaServicoPctPadrao+'"></div>'+
@@ -1945,6 +1957,28 @@ function renderConfiguracoes(){
       '<div class="field"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
       '<div class="field" style="margin-bottom:0;"><label>Alertar sangria quando dinheiro em gaveta passar de</label><input id="cfgAlertaSangria" type="number" min="0" step="0.01" value="'+(c.limiteAlertaSangriaCentavos/100).toFixed(2)+'"></div>'+
     '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Taxas das maquininhas</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Desconta automaticamente da conta a receber gerada no pagamento, com o prazo configurado aqui.</p>'+
+      ["DEBITO","CREDITO","VOUCHER"].map(function(f, i){
+        var t = (c.taxasMaquininha&&c.taxasMaquininha[f])||{pct:0,prazoDias:0};
+        return '<div class="field" '+(i===2?'style="margin-bottom:0;"':'')+'><label>'+f+'</label>'+
+          '<div style="display:flex; gap:8px;">'+
+            '<input id="cfgTaxaPct'+f+'" type="number" min="0" max="100" step="0.1" value="'+t.pct+'" placeholder="Taxa %" style="flex:1;">'+
+            '<input id="cfgTaxaPrazo'+f+'" type="number" min="0" step="1" value="'+t.prazoDias+'" placeholder="Prazo (dias)" style="flex:1;">'+
+          '</div></div>';
+      }).join("")+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Fidelidade por pontos</div>'+
+      '<div class="field"><label>Pontos ganhos por R$1 pago</label><input id="cfgPontosPorReal" type="number" min="0" step="0.1" value="'+((c.fidelidade&&c.fidelidade.pontosPorReal)||0)+'"></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Valor de 1 ponto no resgate (R$)</label><input id="cfgValorPonto" type="number" min="0" step="0.01" value="'+(((c.fidelidade&&c.fidelidade.valorPontoCentavos)||0)/100).toFixed(2)+'"></div>'+
+    '</div>'+
+  '</div>';
+}
+function renderConfigMetas(){
+  var c = state.config;
+  return '<div class="grid-2">'+
     '<div class="card">'+
       '<div class="card-title">Metas da Central do Dono</div>'+
       '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Definem o verde/amarelo/vermelho dos semáforos na Central do Dono.</p>'+
@@ -1966,6 +2000,23 @@ function renderConfiguracoes(){
           '<input id="cfgAtraso'+s+'" type="number" min="1" step="1" value="'+((c.atrasoPorSetor&&c.atrasoPorSetor[s])||10)+'"></div>';
       }).join("")+
     '</div>'+
+  '</div>';
+}
+function renderConfigAtendimento(){
+  var c = state.config;
+  return '<div class="grid-2">'+
+    '<div class="card">'+
+      '<div class="card-title">Bar — couvert e happy hour</div>'+
+      '<div class="field"><label>Produto usado como couvert</label><select id="cfgProdutoCouvert">'+
+        '<option value="">Nenhum</option>'+
+        state.produtos.map(function(p){ return '<option value="'+p.id+'" '+(c.produtoCouvertId===p.id?"selected":"")+'>'+escapeHtml(p.nome)+'</option>'; }).join("")+
+      '</select></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Janela de happy hour</label>'+
+        '<div style="display:flex; gap:8px;">'+
+          '<input id="cfgHappyInicio" type="time" value="'+(c.happyHoraInicio||"")+'">'+
+          '<input id="cfgHappyFim" type="time" value="'+(c.happyHoraFim||"")+'">'+
+        '</div></div>'+
+    '</div>'+
     '<div class="card">'+
       '<div class="card-title">Delivery — taxa por bairro</div>'+
       '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Cadastro manual (sem cálculo automático de distância).</p>'+
@@ -1980,51 +2031,6 @@ function renderConfiguracoes(){
         '<button class="btn btn-sm" data-action="bairro-taxa-adicionar">'+icon("plus",14)+'</button>'+
       '</div>'+
     '</div>'+
-    (usuarioAtual().papel==="ADMIN" ? '<div class="card">'+
-      '<div class="card-title">Verificação em duas etapas (sua conta)</div>'+
-      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Código de um app autenticador (Google Authenticator, Authy etc.) além do PIN, só pra esta conta ADMIN.</p>'+
-      (state.mfaFactors.length ? state.mfaFactors.map(function(f){
-        return '<div class="data-row"><div class="main"><div class="nome">Ativada</div><div class="sub">desde '+new Date(f.created_at).toLocaleDateString("pt-BR")+'</div></div>'+
-          '<button class="btn btn-sm" data-action="mfa-desativar" data-fator="'+f.id+'" style="color:var(--danger);">Desativar</button></div>';
-      }).join("") : '<button class="btn" data-action="mfa-ativar-abrir">Ativar</button>')+
-    '</div>' : '')+
-    '<div class="card">'+
-      '<div class="card-title">Bar — couvert e happy hour</div>'+
-      '<div class="field"><label>Produto usado como couvert</label><select id="cfgProdutoCouvert">'+
-        '<option value="">Nenhum</option>'+
-        state.produtos.map(function(p){ return '<option value="'+p.id+'" '+(c.produtoCouvertId===p.id?"selected":"")+'>'+escapeHtml(p.nome)+'</option>'; }).join("")+
-      '</select></div>'+
-      '<div class="field" style="margin-bottom:0;"><label>Janela de happy hour</label>'+
-        '<div style="display:flex; gap:8px;">'+
-          '<input id="cfgHappyInicio" type="time" value="'+(c.happyHoraInicio||"")+'">'+
-          '<input id="cfgHappyFim" type="time" value="'+(c.happyHoraFim||"")+'">'+
-        '</div></div>'+
-    '</div>'+
-    '<div class="card">'+
-      '<div class="card-title">Fidelidade por pontos</div>'+
-      '<div class="field"><label>Pontos ganhos por R$1 pago</label><input id="cfgPontosPorReal" type="number" min="0" step="0.1" value="'+((c.fidelidade&&c.fidelidade.pontosPorReal)||0)+'"></div>'+
-      '<div class="field" style="margin-bottom:0;"><label>Valor de 1 ponto no resgate (R$)</label><input id="cfgValorPonto" type="number" min="0" step="0.01" value="'+(((c.fidelidade&&c.fidelidade.valorPontoCentavos)||0)/100).toFixed(2)+'"></div>'+
-    '</div>'+
-    '<div class="card">'+
-      '<div class="card-title">Taxas das maquininhas</div>'+
-      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Desconta automaticamente da conta a receber gerada no pagamento, com o prazo configurado aqui.</p>'+
-      ["DEBITO","CREDITO","VOUCHER"].map(function(f, i){
-        var t = (c.taxasMaquininha&&c.taxasMaquininha[f])||{pct:0,prazoDias:0};
-        return '<div class="field" '+(i===2?'style="margin-bottom:0;"':'')+'><label>'+f+'</label>'+
-          '<div style="display:flex; gap:8px;">'+
-            '<input id="cfgTaxaPct'+f+'" type="number" min="0" max="100" step="0.1" value="'+t.pct+'" placeholder="Taxa %" style="flex:1;">'+
-            '<input id="cfgTaxaPrazo'+f+'" type="number" min="0" step="1" value="'+t.prazoDias+'" placeholder="Prazo (dias)" style="flex:1;">'+
-          '</div></div>';
-      }).join("")+
-    '</div>'+
-    '<div class="card">'+
-      '<div class="card-title">Impressão</div>'+
-      '<div class="field"><label>Largura da impressora</label><select id="cfgImpressora">'+
-        '<option value="80mm" '+(c.impressoraLargura==="80mm"?"selected":"")+'>80mm</option>'+
-        '<option value="58mm" '+(c.impressoraLargura==="58mm"?"selected":"")+'>58mm</option>'+
-      '</select></div>'+
-      '<div class="field" style="margin-bottom:0;"><label>Mensagem de rodapé do recibo</label><input id="cfgRodape" value="'+escapeHtml(c.reciboRodape)+'"></div>'+
-    '</div>'+
     '<div class="card">'+
       '<div class="card-title">Cardápio público (QR)</div>'+
       '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Link somente leitura, sem login — nome, preço, categoria e foto dos produtos ativos. Gere um QR code a partir dele em qualquer serviço gratuito e imprima pra colocar nas mesas.</p>'+
@@ -2037,7 +2043,45 @@ function renderConfiguracoes(){
         '<input id="cfgAceitarQrSemTokenAte" type="date" value="'+escapeHtml(c.aceitarQrSemTokenAte||"")+'">'+
         '<p style="font-size:11px; color:var(--text-muted); margin:6px 0 0;">Mesas → QR Codes gera link com token novo; isto aqui é só a carência pra link impresso antes (0.6). Apague a data pra desligar agora — QR sem token para de funcionar na hora.</p></div>'+
     '</div>'+
+  '</div>';
+}
+function renderConfigImpressao(){
+  var c = state.config;
+  return '<div class="grid-2">'+
+    '<div class="card">'+
+      '<div class="card-title">Impressão</div>'+
+      '<div class="field"><label>Largura da impressora</label><select id="cfgImpressora">'+
+        '<option value="80mm" '+(c.impressoraLargura==="80mm"?"selected":"")+'>80mm</option>'+
+        '<option value="58mm" '+(c.impressoraLargura==="58mm"?"selected":"")+'>58mm</option>'+
+      '</select></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Mensagem de rodapé do recibo</label><input id="cfgRodape" value="'+escapeHtml(c.reciboRodape)+'"></div>'+
     '</div>'+
+  '</div>';
+}
+function renderConfigSeguranca(){
+  return '<div class="grid-2">'+
+    '<div class="card">'+
+      '<div class="card-title">Verificação em duas etapas (sua conta)</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Código de um app autenticador (Google Authenticator, Authy etc.) além do PIN, só pra esta conta ADMIN.</p>'+
+      (state.mfaFactors.length ? state.mfaFactors.map(function(f){
+        return '<div class="data-row"><div class="main"><div class="nome">Ativada</div><div class="sub">desde '+new Date(f.created_at).toLocaleDateString("pt-BR")+'</div></div>'+
+          '<button class="btn btn-sm" data-action="mfa-desativar" data-fator="'+f.id+'" style="color:var(--danger);">Desativar</button></div>';
+      }).join("") : '<button class="btn" data-action="mfa-ativar-abrir">Ativar</button>')+
+    '</div>'+
+  '</div>';
+}
+SUB_ABAS.configuracoes = [
+  {id:"geral", rotulo:"Geral", render:renderConfigGeral},
+  {id:"vendas", rotulo:"Vendas e pagamento", render:renderConfigVendas},
+  {id:"metas", rotulo:"Metas e alertas", render:renderConfigMetas},
+  {id:"atendimento", rotulo:"Atendimento", render:renderConfigAtendimento},
+  {id:"impressao", rotulo:"Impressão", render:renderConfigImpressao},
+  {id:"seguranca", rotulo:"Segurança", render:renderConfigSeguranca}
+];
+function renderConfiguracoes(){
+  return renderPageHeader("settings", "Configurações", "Dados fiscais, limites, impressão e funcionamento")+
+    renderSyncConflitos()+
+    renderSubAbas("configuracoes")+
     '<button class="btn btn-primary btn-lg" style="margin-top:16px;" data-action="config-salvar">Salvar configurações</button>';
 }
 

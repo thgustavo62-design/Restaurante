@@ -118,6 +118,14 @@ function limparFalhasPin(){
 
 // comanda pode ser de mesa, balcão ou ficha numerada (venda por balcão/ficha) —
 // centraliza o rótulo pra não espalhar "mesa?mesa.numero:..." em cada tela.
+// ETAPA pós-10 — Configurações virou sub-abas: só os campos da aba aberta
+// existem no DOM no momento do clique em "Salvar". Pra um campo de outra
+// aba não virar undefined/apagado, lê do elemento quando ele existe, e
+// cai pro valor que já estava salvo quando não existe.
+function campoOuAtual(id, valorAtual){
+  var el = document.getElementById(id);
+  return el ? el.value : valorAtual;
+}
 function rotuloComanda(comanda, mesa){
   if(comanda.tipo==="BALCAO") return "Balcão";
   if(comanda.tipo==="FICHA") return "Ficha "+comanda.fichaNumero;

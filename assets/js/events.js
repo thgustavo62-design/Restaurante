@@ -31,6 +31,7 @@ function bindEvents(){
         state.sidebarMobileAberto = !state.sidebarMobileAberto;
       } else {
         state.sidebarCollapsed = !state.sidebarCollapsed;
+        try{ localStorage.setItem("sidebarCollapsed", state.sidebarCollapsed ? "1" : "0"); }catch(e){}
       }
       render(); return;
     }
@@ -549,47 +550,50 @@ function bindEvents(){
     if(action==="mfa-setup-confirmar"){ confirmarConfigMfa(document.getElementById("mfaCodigoInput").value); return; }
     if(action==="mfa-desativar"){ desativarMfa(el.dataset.fator); return; }
     if(action==="config-salvar"){
+      var cAtual = state.config;
       var atrasoPorSetor = {};
       SETORES_PRODUCAO.forEach(function(s){
-        atrasoPorSetor[s] = Math.max(1, parseInt(document.getElementById("cfgAtraso"+s).value||"10",10));
+        var atual = (cAtual.atrasoPorSetor&&cAtual.atrasoPorSetor[s])||10;
+        atrasoPorSetor[s] = Math.max(1, parseInt(campoOuAtual("cfgAtraso"+s, atual)||"10",10));
       });
       var taxasMaquininha = {};
       ["DEBITO","CREDITO","VOUCHER"].forEach(function(f){
+        var atual = (cAtual.taxasMaquininha&&cAtual.taxasMaquininha[f])||{pct:0,prazoDias:0};
         taxasMaquininha[f] = {
-          pct: Math.max(0, parseFloat(document.getElementById("cfgTaxaPct"+f).value||"0")),
-          prazoDias: Math.max(0, parseInt(document.getElementById("cfgTaxaPrazo"+f).value||"0",10))
+          pct: Math.max(0, parseFloat(campoOuAtual("cfgTaxaPct"+f, atual.pct)||"0")),
+          prazoDias: Math.max(0, parseInt(campoOuAtual("cfgTaxaPrazo"+f, atual.prazoDias)||"0",10))
         };
       });
       salvarConfig({
-        nome: document.getElementById("cfgNome").value,
-        cnpj: document.getElementById("cfgCnpj").value,
-        taxaPct: parseFloat(document.getElementById("cfgTaxa").value||"0"),
-        descontoPct: parseFloat(document.getElementById("cfgDesconto").value||"0"),
-        diferencaCentavos: Math.round(parseFloat(document.getElementById("cfgDiferenca").value||"0")*100),
-        alertaSangriaCentavos: Math.round(parseFloat(document.getElementById("cfgAlertaSangria").value||"0")*100),
-        impressoraLargura: document.getElementById("cfgImpressora").value,
-        reciboRodape: document.getElementById("cfgRodape").value,
-        horarioAbertura: document.getElementById("cfgHorarioAbertura").value,
-        horarioFechamento: document.getElementById("cfgHorarioFechamento").value,
-        chavePix: document.getElementById("cfgChavePix").value,
+        nome: campoOuAtual("cfgNome", cAtual.empresaNome),
+        cnpj: campoOuAtual("cfgCnpj", cAtual.empresaCnpj),
+        taxaPct: parseFloat(campoOuAtual("cfgTaxa", cAtual.taxaServicoPctPadrao)||"0"),
+        descontoPct: parseFloat(campoOuAtual("cfgDesconto", cAtual.limiteDescontoPct)||"0"),
+        diferencaCentavos: Math.round(parseFloat(campoOuAtual("cfgDiferenca", (cAtual.limiteDiferencaCentavos/100).toFixed(2))||"0")*100),
+        alertaSangriaCentavos: Math.round(parseFloat(campoOuAtual("cfgAlertaSangria", (cAtual.limiteAlertaSangriaCentavos/100).toFixed(2))||"0")*100),
+        impressoraLargura: campoOuAtual("cfgImpressora", cAtual.impressoraLargura),
+        reciboRodape: campoOuAtual("cfgRodape", cAtual.reciboRodape),
+        horarioAbertura: campoOuAtual("cfgHorarioAbertura", cAtual.horarioAbertura),
+        horarioFechamento: campoOuAtual("cfgHorarioFechamento", cAtual.horarioFechamento),
+        chavePix: campoOuAtual("cfgChavePix", cAtual.chavePix),
         atrasoPorSetor: atrasoPorSetor,
         taxasMaquininha: taxasMaquininha,
-        produtoCouvertId: document.getElementById("cfgProdutoCouvert").value,
-        happyHoraInicio: document.getElementById("cfgHappyInicio").value,
-        happyHoraFim: document.getElementById("cfgHappyFim").value,
+        produtoCouvertId: campoOuAtual("cfgProdutoCouvert", cAtual.produtoCouvertId),
+        happyHoraInicio: campoOuAtual("cfgHappyInicio", cAtual.happyHoraInicio),
+        happyHoraFim: campoOuAtual("cfgHappyFim", cAtual.happyHoraFim),
         fidelidade: {
-          pontosPorReal: Math.max(0, parseFloat(document.getElementById("cfgPontosPorReal").value||"0")),
-          valorPontoCentavos: Math.max(0, Math.round(parseFloat(document.getElementById("cfgValorPonto").value||"0")*100))
+          pontosPorReal: Math.max(0, parseFloat(campoOuAtual("cfgPontosPorReal", (cAtual.fidelidade&&cAtual.fidelidade.pontosPorReal)||0)||"0")),
+          valorPontoCentavos: Math.max(0, Math.round(parseFloat(campoOuAtual("cfgValorPonto", (((cAtual.fidelidade&&cAtual.fidelidade.valorPontoCentavos)||0)/100).toFixed(2))||"0")*100))
         },
-        bairrosTaxaEntrega: state.config.bairrosTaxaEntrega,
-        aceitarQrSemTokenAte: document.getElementById("cfgAceitarQrSemTokenAte").value || null,
+        bairrosTaxaEntrega: cAtual.bairrosTaxaEntrega,
+        aceitarQrSemTokenAte: campoOuAtual("cfgAceitarQrSemTokenAte", cAtual.aceitarQrSemTokenAte) || null,
         metasCentralDono: {
-          cmvPct: Math.max(0, parseFloat(document.getElementById("cfgMetaCmv").value||"0")),
-          perdasPctFaturamento: Math.max(0, parseFloat(document.getElementById("cfgMetaPerdas").value||"0")),
-          custoEquipePct: Math.max(0, parseFloat(document.getElementById("cfgMetaCustoEquipe").value||"0")),
-          diferencaCaixaCentavosMes: Math.max(0, Math.round(parseFloat(document.getElementById("cfgMetaDiferencaCaixaMes").value||"0")*100))
+          cmvPct: Math.max(0, parseFloat(campoOuAtual("cfgMetaCmv", (cAtual.metasCentralDono&&cAtual.metasCentralDono.cmvPct)||35)||"0")),
+          perdasPctFaturamento: Math.max(0, parseFloat(campoOuAtual("cfgMetaPerdas", (cAtual.metasCentralDono&&cAtual.metasCentralDono.perdasPctFaturamento)||3)||"0")),
+          custoEquipePct: Math.max(0, parseFloat(campoOuAtual("cfgMetaCustoEquipe", (cAtual.metasCentralDono&&cAtual.metasCentralDono.custoEquipePct)||30)||"0")),
+          diferencaCaixaCentavosMes: Math.max(0, Math.round(parseFloat(campoOuAtual("cfgMetaDiferencaCaixaMes", (((cAtual.metasCentralDono&&cAtual.metasCentralDono.diferencaCaixaCentavosMes)||5000)/100).toFixed(2))||"0")*100))
         },
-        alertaAumentoPrecoInsumoPct: Math.max(0, parseFloat(document.getElementById("cfgAlertaPrecoInsumo").value||"0"))
+        alertaAumentoPrecoInsumoPct: Math.max(0, parseFloat(campoOuAtual("cfgAlertaPrecoInsumo", cAtual.alertaAumentoPrecoInsumoPct||10)||"0"))
       });
       return;
     }
