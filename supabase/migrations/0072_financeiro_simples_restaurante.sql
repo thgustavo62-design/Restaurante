@@ -32,9 +32,20 @@ create policy despesas_recorrentes_select on restaurante.despesas_recorrentes fo
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.financeiro.ver'));
 -- sem policy de insert/update — só pela RPC abaixo.
 
+-- date_trunc(text, date) não existe de verdade — o Postgres converte
+-- `date` pra `timestamp` e chama a versão STABLE (não IMMUTABLE) de
+-- date_trunc, que o Postgres recusa em expressão de índice (42P17).
+-- Função própria IMMUTABLE resolve (mesmo truque documentado do Postgres
+-- pra "funcionalmente imutável, só não está marcada assim de fábrica").
+create or replace function restaurante.mes_competencia(p_dia date)
+returns date
+language sql
+immutable
+as $$ select date_trunc('month', p_dia)::date $$;
+
 alter table restaurante.contas add column if not exists despesa_recorrente_id uuid references restaurante.despesas_recorrentes(id) on delete set null;
 create unique index if not exists idx_contas_despesa_recorrente_mes
-  on restaurante.contas (despesa_recorrente_id, date_trunc('month', vencimento))
+  on restaurante.contas (despesa_recorrente_id, restaurante.mes_competencia(vencimento))
   where despesa_recorrente_id is not null;
 
 create or replace function restaurante.salvar_despesa_recorrente(p_id uuid default null, p_descricao text default null, p_categoria text default 'Contas fixas', p_valor_centavos int default null, p_dia_vencimento int default null, p_ativo boolean default true)
@@ -109,7 +120,7 @@ begin
     v_vencimento := v_mes_inicio + (least(v_despesa.dia_vencimento, v_dias_no_mes) - 1);
     insert into restaurante.contas (empresa_id, tipo, descricao, categoria, valor_centavos, vencimento, despesa_recorrente_id)
     values (v_empresa_id, 'PAGAR', v_despesa.descricao, v_despesa.categoria, v_despesa.valor_centavos, v_vencimento, v_despesa.id)
-    on conflict (despesa_recorrente_id, (date_trunc('month', vencimento))) where despesa_recorrente_id is not null do nothing
+    on conflict (despesa_recorrente_id, (restaurante.mes_competencia(vencimento))) where despesa_recorrente_id is not null do nothing
     returning * into v_row;
     if v_row.id is not null then
       v_geradas := v_geradas || to_jsonb(v_row);
