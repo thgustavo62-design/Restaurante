@@ -35,7 +35,7 @@
 -- Central do Dono (0065) parava de aproximar perdas pelas saídas manuais
 -- de estoque — agora soma direto desta tabela, o dado de verdade.
 
-create table restaurante.perdas (
+create table if not exists restaurante.perdas (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   tipo text not null check (tipo in ('INSUMO','PRATO')),
@@ -58,9 +58,10 @@ create table restaurante.perdas (
     or (tipo = 'PRATO' and produto_id is not null and insumo_id is null)
   )
 );
-create index idx_perdas_empresa_dia on restaurante.perdas (empresa_id, dia_operacional);
+create index if not exists idx_perdas_empresa_dia on restaurante.perdas (empresa_id, dia_operacional);
 
 alter table restaurante.perdas enable row level security;
+drop policy if exists perdas_select on restaurante.perdas;
 create policy perdas_select on restaurante.perdas for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.estoque.editar'));
 -- sem policy de insert/update/delete — só pelas RPCs abaixo (valor

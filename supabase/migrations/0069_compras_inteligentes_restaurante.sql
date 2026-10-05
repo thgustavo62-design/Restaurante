@@ -39,7 +39,7 @@ alter table restaurante.insumos add column if not exists fornecedor_padrao_id uu
 alter table restaurante.pedidos_compra_itens add column if not exists quantidade_recebida numeric;
 alter table restaurante.pedidos_compra_itens add column if not exists preco_unit_recebido_centavos int;
 
-create table restaurante.historico_precos_insumo (
+create table if not exists restaurante.historico_precos_insumo (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   insumo_id uuid not null references restaurante.insumos(id) on delete restrict,
@@ -48,9 +48,10 @@ create table restaurante.historico_precos_insumo (
   pedido_compra_id uuid references restaurante.pedidos_compra(id) on delete set null,
   created_at timestamptz not null default now()
 );
-create index idx_historico_precos_insumo on restaurante.historico_precos_insumo (empresa_id, insumo_id, created_at desc);
+create index if not exists idx_historico_precos_insumo on restaurante.historico_precos_insumo (empresa_id, insumo_id, created_at desc);
 
 alter table restaurante.historico_precos_insumo enable row level security;
+drop policy if exists historico_precos_insumo_select on restaurante.historico_precos_insumo;
 create policy historico_precos_insumo_select on restaurante.historico_precos_insumo for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.estoque.editar'));
 -- sem policy de insert/update — só grava via receber_pedido_compra.

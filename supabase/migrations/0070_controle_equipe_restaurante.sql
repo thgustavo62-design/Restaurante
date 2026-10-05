@@ -461,7 +461,7 @@ on conflict (papel, permissao) do nothing;
 -- ========================================================================
 -- Escala semanal (turno/folga)
 -- ========================================================================
-create table restaurante.escalas (
+create table if not exists restaurante.escalas (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   usuario_id uuid not null references restaurante.usuarios(id) on delete cascade,
@@ -471,10 +471,11 @@ create table restaurante.escalas (
   tipo text not null default 'TRABALHO' check (tipo in ('TRABALHO','FOLGA')),
   created_at timestamptz not null default now()
 );
-create index idx_escalas_empresa on restaurante.escalas (empresa_id, usuario_id);
-create index idx_escalas_dia on restaurante.escalas (empresa_id, dia_semana);
+create index if not exists idx_escalas_empresa on restaurante.escalas (empresa_id, usuario_id);
+create index if not exists idx_escalas_dia on restaurante.escalas (empresa_id, dia_semana);
 
 alter table restaurante.escalas enable row level security;
+drop policy if exists escalas_select on restaurante.escalas;
 create policy escalas_select on restaurante.escalas for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.equipe.editar'));
 -- sem policy de insert/update/delete — só pela RPC abaixo.
@@ -562,7 +563,7 @@ grant execute on function restaurante.escala_hoje() to authenticated;
 -- Ponto: entrada/saída/intervalo com PIN no terminal — controle interno,
 -- não substitui o registro de ponto oficial exigido pela legislação.
 -- ========================================================================
-create table restaurante.pontos (
+create table if not exists restaurante.pontos (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   usuario_id uuid not null references restaurante.usuarios(id) on delete cascade,
@@ -573,9 +574,10 @@ create table restaurante.pontos (
   motivo_correcao text,
   created_at timestamptz not null default now()
 );
-create index idx_pontos_empresa_usuario on restaurante.pontos (empresa_id, usuario_id, registrado_em desc);
+create index if not exists idx_pontos_empresa_usuario on restaurante.pontos (empresa_id, usuario_id, registrado_em desc);
 
 alter table restaurante.pontos enable row level security;
+drop policy if exists pontos_select on restaurante.pontos;
 create policy pontos_select on restaurante.pontos for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.equipe.editar'));
 -- sem policy de insert/update — só pelas RPCs abaixo.
@@ -718,7 +720,7 @@ grant execute on function restaurante.corrigir_ponto(uuid, timestamptz, text) to
 -- ========================================================================
 -- Custo: remuneração (sensível, só admin.equipe.custos.ver) e vales
 -- ========================================================================
-create table restaurante.funcionarios_remuneracao (
+create table if not exists restaurante.funcionarios_remuneracao (
   usuario_id uuid primary key references restaurante.usuarios(id) on delete cascade,
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   tipo text not null check (tipo in ('MENSAL','DIARIA')),
@@ -727,6 +729,7 @@ create table restaurante.funcionarios_remuneracao (
 );
 
 alter table restaurante.funcionarios_remuneracao enable row level security;
+drop policy if exists funcionarios_remuneracao_select on restaurante.funcionarios_remuneracao;
 create policy funcionarios_remuneracao_select on restaurante.funcionarios_remuneracao for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.equipe.custos.ver'));
 -- sem policy de insert/update — só pela RPC abaixo.
@@ -766,7 +769,7 @@ $$;
 revoke all on function restaurante.salvar_remuneracao(uuid, text, int) from public;
 grant execute on function restaurante.salvar_remuneracao(uuid, text, int) to authenticated;
 
-create table restaurante.vales_adiantamentos (
+create table if not exists restaurante.vales_adiantamentos (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   usuario_id uuid not null references restaurante.usuarios(id) on delete cascade,
@@ -776,9 +779,10 @@ create table restaurante.vales_adiantamentos (
   usuario_lancou_id uuid references restaurante.usuarios(id) on delete set null,
   created_at timestamptz not null default now()
 );
-create index idx_vales_empresa_usuario on restaurante.vales_adiantamentos (empresa_id, usuario_id, data);
+create index if not exists idx_vales_empresa_usuario on restaurante.vales_adiantamentos (empresa_id, usuario_id, data);
 
 alter table restaurante.vales_adiantamentos enable row level security;
+drop policy if exists vales_adiantamentos_select on restaurante.vales_adiantamentos;
 create policy vales_adiantamentos_select on restaurante.vales_adiantamentos for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.equipe.custos.ver'));
 -- sem policy de insert/update — só pela RPC abaixo.

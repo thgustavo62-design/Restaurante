@@ -15,7 +15,7 @@
 -- único em (despesa_recorrente_id, mês da competência), não um controle
 -- manual de "já gerei esse mês" — rodar de novo no mesmo mês não duplica.
 
-create table restaurante.despesas_recorrentes (
+create table if not exists restaurante.despesas_recorrentes (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   descricao text not null,
@@ -25,9 +25,10 @@ create table restaurante.despesas_recorrentes (
   ativo boolean not null default true,
   created_at timestamptz not null default now()
 );
-create index idx_despesas_recorrentes_empresa on restaurante.despesas_recorrentes (empresa_id, ativo);
+create index if not exists idx_despesas_recorrentes_empresa on restaurante.despesas_recorrentes (empresa_id, ativo);
 
 alter table restaurante.despesas_recorrentes enable row level security;
+drop policy if exists despesas_recorrentes_select on restaurante.despesas_recorrentes;
 create policy despesas_recorrentes_select on restaurante.despesas_recorrentes for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('admin.financeiro.ver'));
 -- sem policy de insert/update — só pela RPC abaixo.
@@ -221,6 +222,12 @@ begin
       and cm.created_at::date between v_mes_ant_inicio and v_mes_ant_fim;
 
   -- fluxo projetado dos próximos 30 dias (a receber - a pagar, acumulado a partir de hoje)
+  --
+  -- o acumulado (sum() over()) precisa ficar numa CTE própria, calculado
+  -- ANTES do jsonb_agg: Postgres recusa função de janela dentro do
+  -- argumento de uma função agregada ("aggregate function calls cannot
+  -- contain window function calls"), mesmo vários níveis dentro de um
+  -- jsonb_build_object.
   with dias as (
     select generate_series(current_date, current_date + 29, interval '1 day')::date as dia
   ),
@@ -229,13 +236,18 @@ begin
       coalesce((select sum(valor_centavos) from restaurante.contas where empresa_id=v_empresa_id and tipo='RECEBER' and pago_em is null and vencimento = dias.dia), 0)::int as a_receber,
       coalesce((select sum(valor_centavos) from restaurante.contas where empresa_id=v_empresa_id and tipo='PAGAR' and pago_em is null and vencimento = dias.dia), 0)::int as a_pagar
     from dias
+  ),
+  movimento_acumulado as (
+    select m.dia, m.a_receber, m.a_pagar, (m.a_receber - m.a_pagar) as saldo_dia,
+      sum(m.a_receber - m.a_pagar) over (order by m.dia) as saldo_acumulado
+    from movimento m
   )
   select coalesce(jsonb_agg(jsonb_build_object(
-      'data', m.dia, 'a_receber_centavos', m.a_receber, 'a_pagar_centavos', m.a_pagar,
-      'saldo_dia_centavos', m.a_receber - m.a_pagar,
-      'saldo_acumulado_centavos', sum(m.a_receber - m.a_pagar) over (order by m.dia)
-    ) order by m.dia), '[]'::jsonb) into v_fluxo
-  from movimento m;
+      'data', ma.dia, 'a_receber_centavos', ma.a_receber, 'a_pagar_centavos', ma.a_pagar,
+      'saldo_dia_centavos', ma.saldo_dia,
+      'saldo_acumulado_centavos', ma.saldo_acumulado
+    ) order by ma.dia), '[]'::jsonb) into v_fluxo
+  from movimento_acumulado ma;
 
   return jsonb_build_object(
     'mes', to_char(v_mes_inicio,'YYYY-MM'),

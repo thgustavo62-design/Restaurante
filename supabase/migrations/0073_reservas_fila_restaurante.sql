@@ -23,7 +23,7 @@
 -- padrão de central_do_dono/abrir_checklist_pre_preparo), não o default
 -- current_date (UTC) da coluna.
 
-create table restaurante.reservas (
+create table if not exists restaurante.reservas (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   nome text not null,
@@ -38,14 +38,15 @@ create table restaurante.reservas (
   usuario_id uuid references restaurante.usuarios(id) on delete set null,
   created_at timestamptz not null default now()
 );
-create index idx_reservas_empresa_data on restaurante.reservas (empresa_id, data_hora);
+create index if not exists idx_reservas_empresa_data on restaurante.reservas (empresa_id, data_hora);
 
 alter table restaurante.reservas enable row level security;
+drop policy if exists reservas_select on restaurante.reservas;
 create policy reservas_select on restaurante.reservas for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('atendimento.salao.ver'));
 -- sem policy de insert/update — só pelas RPCs abaixo.
 
-create table restaurante.fila_espera (
+create table if not exists restaurante.fila_espera (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references restaurante.empresas(id) on delete cascade,
   nome text not null,
@@ -58,9 +59,10 @@ create table restaurante.fila_espera (
   usuario_id uuid references restaurante.usuarios(id) on delete set null,
   created_at timestamptz not null default now()
 );
-create index idx_fila_espera_empresa on restaurante.fila_espera (empresa_id, status, created_at);
+create index if not exists idx_fila_espera_empresa on restaurante.fila_espera (empresa_id, status, created_at);
 
 alter table restaurante.fila_espera enable row level security;
+drop policy if exists fila_espera_select on restaurante.fila_espera;
 create policy fila_espera_select on restaurante.fila_espera for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('atendimento.salao.ver'));
 -- sem policy de insert/update — só pelas RPCs abaixo.

@@ -38,8 +38,10 @@ create table if not exists restaurante.ficha_tecnica_insumo (
 );
 
 alter table restaurante.ficha_tecnica_insumo enable row level security;
+drop policy if exists ficha_tecnica_insumo_select on restaurante.ficha_tecnica_insumo;
 create policy ficha_tecnica_insumo_select on restaurante.ficha_tecnica_insumo for select
   using (exists (select 1 from restaurante.insumos i where i.id = insumo_produzido_id and i.empresa_id = restaurante.jwt_empresa_id()));
+drop policy if exists ficha_tecnica_insumo_insert on restaurante.ficha_tecnica_insumo;
 create policy ficha_tecnica_insumo_insert on restaurante.ficha_tecnica_insumo for insert
   with check (
     restaurante.tem_permissao('admin.estoque.editar')
@@ -49,6 +51,7 @@ create policy ficha_tecnica_insumo_insert on restaurante.ficha_tecnica_insumo fo
     -- baixar estoque cruzando empresas (schema compartilhado).
     and exists (select 1 from restaurante.insumos i2 where i2.id = insumo_ingrediente_id and i2.empresa_id = restaurante.jwt_empresa_id())
   );
+drop policy if exists ficha_tecnica_insumo_delete on restaurante.ficha_tecnica_insumo;
 create policy ficha_tecnica_insumo_delete on restaurante.ficha_tecnica_insumo for delete
   using (
     restaurante.tem_permissao('admin.estoque.editar')
@@ -73,6 +76,7 @@ create table if not exists restaurante.pre_preparo_checklist (
 create index if not exists idx_pre_preparo_checklist_dia on restaurante.pre_preparo_checklist (empresa_id, dia_operacional);
 
 alter table restaurante.pre_preparo_checklist enable row level security;
+drop policy if exists pre_preparo_checklist_select on restaurante.pre_preparo_checklist;
 create policy pre_preparo_checklist_select on restaurante.pre_preparo_checklist for select
   using (empresa_id = restaurante.jwt_empresa_id() and restaurante.tem_permissao('cozinha.kds.ver'));
 -- sem policy de insert/update direta — só pelas RPCs abaixo (SECURITY
