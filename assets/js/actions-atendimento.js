@@ -75,7 +75,7 @@ async function tentarLogin(nomeDigitado, senha){
     // navegador) manda em cima do padrão por papel, só se o papel logado
     // realmente tiver acesso àquela tela.
     if(!aplicarHashInicial()){
-      state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "dashboard";
+      state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "central";
     }
     configurarRealtime();
   } catch(e){
@@ -85,6 +85,7 @@ async function tentarLogin(nomeDigitado, senha){
   }
   state.loginVerificando = false;
   render();
+  if(state.view==="central") carregarCentralDono();
 }
 async function confirmarMfaLogin(codigo){
   var m = state.loginMfaPendente;
@@ -102,11 +103,12 @@ async function confirmarMfaLogin(codigo){
   state.loginMfaPendente = null; state.loginMfaCodigo = "";
   await carregarTudo();
   if(!aplicarHashInicial()){
-    state.view = (m.claims.papel==="COZINHA") ? "kds" : (m.claims.papel==="GARCOM"||m.claims.papel==="CAIXA") ? "salao" : "dashboard";
+    state.view = (m.claims.papel==="COZINHA") ? "kds" : (m.claims.papel==="GARCOM"||m.claims.papel==="CAIXA") ? "salao" : "central";
   }
   configurarRealtime();
   state.loginVerificando = false;
   render();
+  if(state.view==="central") carregarCentralDono();
 }
 function cancelarMfaLogin(){
   state.loginMfaPendente = null; state.loginMfaCodigo = ""; state.loginErro = "";
@@ -182,6 +184,95 @@ async function abrirComandaBalcao(){
   irParaComanda(comanda.id);
   render();
 }
+
+// PRIORIDADE 8 — Reservas / Fila de espera.
+function abrirReservaForm(){
+  var agora = new Date(Date.now()+2*3600000);
+  var local = new Date(agora.getTime()-agora.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  state.modal = {type:"reservaForm", nome:"", telefone:"", pessoas:2, dataHoraInput:local, observacao:"", mesaSugeridaId:"", erro:""};
+  render();
+}
+async function salvarReserva(nome, telefone, pessoas, dataHoraInput, observacao, mesaSugeridaId){
+  var m = state.modal;
+  if(!nome.trim()){ m.erro = "Informe o nome."; render(); return; }
+  if(!(pessoas>0)){ m.erro = "Informe quantas pessoas."; render(); return; }
+  if(!dataHoraInput){ m.erro = "Informe data e hora."; render(); return; }
+  var res = await sb.rpc("criar_reserva", {
+    p_nome: nome.trim(), p_telefone: telefone.trim()||null, p_pessoas: pessoas,
+    p_data_hora: new Date(dataHoraInput).toISOString(), p_observacao: observacao.trim()||null, p_mesa_sugerida_id: mesaSugeridaId||null
+  });
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  state.reservas.push(mapReserva(res.data));
+  state.modal = null;
+  render();
+  toast("ok","RESERVA CRIADA", nome.trim());
+}
+async function confirmarReserva(reservaId){
+  var res = await sb.rpc("atualizar_status_reserva", {p_reserva_id: reservaId, p_status: "CONFIRMADA"});
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  var r = state.reservas.find(function(x){ return x.id===reservaId; });
+  if(r) r.status = "CONFIRMADA";
+  render();
+  toast("ok","RESERVA CONFIRMADA", "");
+}
+async function reservaNaoVeio(reservaId){
+  var res = await sb.rpc("atualizar_status_reserva", {p_reserva_id: reservaId, p_status: "NAO_VEIO"});
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  state.reservas = state.reservas.filter(function(x){ return x.id!==reservaId; });
+  render();
+  toast("ok","RESERVA MARCADA COMO NÃO VEIO", "");
+}
+
+function abrirFilaForm(){
+  state.modal = {type:"filaForm", nome:"", telefone:"", pessoas:2, erro:""};
+  render();
+}
+async function salvarEntrarFila(nome, telefone, pessoas){
+  var m = state.modal;
+  if(!nome.trim()){ m.erro = "Informe o nome."; render(); return; }
+  if(!(pessoas>0)){ m.erro = "Informe quantas pessoas."; render(); return; }
+  var res = await sb.rpc("entrar_fila", {p_nome: nome.trim(), p_telefone: telefone.trim()||null, p_pessoas: pessoas});
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  state.modal = null;
+  render();
+  toast("ok","ENTROU NA FILA", nome.trim());
+  carregarFilaEspera();
+}
+async function filaChamar(filaId){
+  var res = await sb.rpc("atualizar_status_fila", {p_fila_id: filaId, p_status: "CHAMADO"});
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  var f = state.filaEspera.find(function(x){ return x.id===filaId; });
+  if(f) f.status = "CHAMADO";
+  render();
+}
+async function filaDesistiu(filaId){
+  var res = await sb.rpc("atualizar_status_fila", {p_fila_id: filaId, p_status: "DESISTIU"});
+  if(res.error){ toast("err","ERRO", res.error.message); return; }
+  carregarFilaEspera();
+}
+
+// "Sentar" (reserva ou fila) sempre cria a comanda — mesmo form, só o
+// tipo/id mudam qual RPC chamar no confirmar.
+function abrirSentarForm(tipo, id, mesaSugeridaId){
+  state.modal = {type:"sentarForm", tipo:tipo, id:id, mesaId: mesaSugeridaId||"", erro:""};
+  render();
+}
+async function confirmarSentar(mesaId){
+  var m = state.modal;
+  if(!mesaId){ m.erro = "Escolha a mesa."; render(); return; }
+  var rpc = m.tipo==="reserva" ? "sentar_reserva" : "sentar_fila";
+  var params = m.tipo==="reserva" ? {p_reserva_id: m.id, p_mesa_id: mesaId, p_cliente_id: null} : {p_fila_id: m.id, p_mesa_id: mesaId, p_cliente_id: null};
+  var res = await sb.rpc(rpc, params);
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  if(m.tipo==="reserva") state.reservas = state.reservas.filter(function(x){ return x.id!==m.id; });
+  else if(state.filaEspera) state.filaEspera = state.filaEspera.filter(function(x){ return x.id!==m.id; });
+  state.comandas.push(mapComanda(res.data.comanda));
+  state.modal = null;
+  render();
+  toast("ok","SENTOU NA MESA", "");
+  irParaComanda(res.data.comanda.id);
+}
+
 async function abrirComandaFicha(){
   var totalFichas = state.config.totalFichas || 50;
   var emUso = {};
@@ -463,25 +554,29 @@ function pedirSupervisorRpc(permissaoNecessaria, motivo, onConfirm){
   };
   render();
 }
-async function supervisorRpcDigit(d){
+// PIN agora é alfanumérico (letras e números) — entra por um campo de
+// texto normal (igual a senha do login), não mais por um teclado
+// numérico de 0-9. O teclado antigo não deixava digitar letra nenhuma.
+function supervisorRpcPinInput(valor){
+  state.modal.buffer = valor;
+  state.modal.error = "";
+}
+async function confirmarSupervisorRpc(){
   var m = state.modal;
   if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
-  if(m.buffer.length>=PIN_LEN) return;
   if(!m.supervisorId){ m.error = "Nenhum supervisor disponível com essa permissão."; render(); return; }
-  m.buffer += d;
-  if(m.buffer.length===PIN_LEN){
-    m.verificando = true; render();
-    var sucesso = await m.onConfirm(m.supervisorId, m.buffer);
-    if(state.modal!==m) return;
-    if(sucesso){
-      limparFalhasPin();
-      state.modal = null;
-    } else {
-      m.buffer = "";
-      var bloqueado = registrarFalhaPin();
-      if(!m.error) m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
-      m.verificando = false;
-    }
+  if(!m.buffer){ m.error = "Informe o PIN."; render(); return; }
+  m.verificando = true; render();
+  var sucesso = await m.onConfirm(m.supervisorId, m.buffer);
+  if(state.modal!==m) return;
+  if(sucesso){
+    limparFalhasPin();
+    state.modal = null;
+  } else {
+    m.buffer = "";
+    var bloqueado = registrarFalhaPin();
+    if(!m.error) m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : "PIN inválido ou sem permissão.";
+    m.verificando = false;
   }
   render();
 }
@@ -572,39 +667,40 @@ function abrirCancelarItem(comandaId, itemId){
     motivo:"", buffer:"", error:"", supervisorId: candidatos.length?candidatos[0].id:""};
   render();
 }
-async function cancelarItemDigit(d){
+function cancelarItemPinInput(valor){
+  state.modal.buffer = valor;
+  state.modal.error = "";
+}
+async function confirmarCancelarItem(){
   var m = state.modal;
   if(!m.motivo.trim()){ m.error = "Informe o motivo antes do PIN."; render(); return; }
   if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
-  if(m.buffer.length>=PIN_LEN) return;
   if(!m.supervisorId){ m.error = "Nenhum supervisor disponível com essa permissão."; render(); return; }
+  if(!m.buffer){ m.error = "Informe o PIN."; render(); return; }
   m.error = "";
-  m.buffer += d;
-  if(m.buffer.length===PIN_LEN){
-    m.verificando = true; render();
-    var motivo = m.motivo.trim();
-    var res = await sb.rpc("cancelar_item", {p_item_id: m.itemId, p_motivo: motivo, p_supervisor_id: m.supervisorId, p_supervisor_pin: m.buffer});
-    if(state.modal!==m) return;
-    if(!res.error){
-      limparFalhasPin();
-      var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
-      var item = comanda ? comanda.itens.find(function(i){ return i.id===m.itemId; }) : null;
-      if(item){
-        item.status = "CANCELADO";
-        item.canceladoAposPreparo = !!res.data.cancelado_apos_preparo;
-        item.motivoCancelamento = res.data.motivo_cancelamento||motivo;
-      }
-      state.modal = null;
-      render();
-      toast("err","ITEM CANCELADO", item?item.nome:"");
-    } else {
-      m.buffer="";
-      var bloqueado = registrarFalhaPin();
-      m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : res.error.message;
-      m.verificando = false;
-      render();
+  m.verificando = true; render();
+  var motivo = m.motivo.trim();
+  var res = await sb.rpc("cancelar_item", {p_item_id: m.itemId, p_motivo: motivo, p_supervisor_id: m.supervisorId, p_supervisor_pin: m.buffer});
+  if(state.modal!==m) return;
+  if(!res.error){
+    limparFalhasPin();
+    var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
+    var item = comanda ? comanda.itens.find(function(i){ return i.id===m.itemId; }) : null;
+    if(item){
+      item.status = "CANCELADO";
+      item.canceladoAposPreparo = !!res.data.cancelado_apos_preparo;
+      item.motivoCancelamento = res.data.motivo_cancelamento||motivo;
     }
-  } else render();
+    state.modal = null;
+    render();
+    toast("err","ITEM CANCELADO", item?item.nome:"");
+  } else {
+    m.buffer="";
+    var bloqueado = registrarFalhaPin();
+    m.error = bloqueado ? "Muitas tentativas. Aguarde 30s." : res.error.message;
+    m.verificando = false;
+    render();
+  }
 }
 
 async function aplicarDescontoDireto(comandaId, percentInformado){

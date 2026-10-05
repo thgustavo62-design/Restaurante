@@ -39,8 +39,9 @@ estrutura de tabelas real, a fonte de verdade são as migrations em
   [abaixo](#banco-de-dados-schema-restaurante-num-projeto-compartilhado)),
   com RLS em toda tabela e algumas operações sensíveis feitas por função
   `SECURITY DEFINER` (RPC) em vez de escrita direta de tabela.
-- **Autenticação**: PIN de 4 dígitos, mas é a senha real de uma conta do
-  Supabase Auth — não é mock (detalhes [abaixo](#autenticação-e-segurança)).
+- **Autenticação**: PIN de 4 caracteres (letras e números), mas é a senha
+  real de uma conta do Supabase Auth — não é mock (detalhes
+  [abaixo](#autenticação-e-segurança)).
 - **Sincronização**: Realtime do Supabase — qualquer mudança em um
   dispositivo aparece nos outros em menos de 1 segundo, sem precisar
   recarregar a página.
@@ -95,22 +96,23 @@ Configurações continuam soltos, por não terem um par óbvio.
 
 | Tela | O que faz |
 |---|---|
+| **Central do Dono** | PRIORIDADE 1 — primeira tela depois do login pra ADMIN/GERENTE (`admin.central_dono.ver`). Uma RPC só (`central_do_dono`, agregada no banco, nunca baixa comandas/itens pra somar no navegador), atualizada a cada 60s e quando o Realtime avisa de uma venda nova: faturamento/vendas/ticket de hoje comparados com a mesma janela de horário da semana passada, projeção de fechamento do dia pelo ritmo das últimas 4 semanas, "sobrou no mês" (resultado estimado — **só ADMIN vê**, GERENTE recebe `null` decidido no servidor, não só escondido no front), semáforos de CMV/perdas/diferença de caixa contra metas configuráveis (Configurações), até 5 alertas por gravidade ("precisa da sua atenção": estoque negativo, conta vencendo, diferença de caixa, conflito offline, cancelamentos acima do normal) e a foto do salão agora (mesas ocupadas, pedidos atrasados, caixa aberto/fechado). |
 | **Dashboard** | Vendas do dia, ticket médio, mesas ocupadas, gráfico de vendas por hora, situação da cozinha e alertas (mesa atrasada, caixa fechado, sangria recomendada). |
-| **Atendimento (Salão)** | Mapa de mesas com status (livre / ocupada / aguardando pagamento) e tempo de ocupação. Botões **Balcão** e **Nova ficha** abrem uma venda sem mesa (fila por balcão ou ficha numerada — number atribuído automaticamente, até o limite configurado de fichas). Painel lateral lista todas as comandas abertas, seja de mesa, balcão ou ficha. |
+| **Atendimento (Salão)** | Duas sub-abas (ETAPA 0.11). **Mapa de mesas**: status (livre / ocupada / aguardando pagamento) e tempo de ocupação — mesa com reserva nas próximas 2h ganha um aviso "Reservada". Botões **Balcão** e **Nova ficha** abrem uma venda sem mesa (fila por balcão ou ficha numerada — número atribuído automaticamente, até o limite configurado de fichas). Painel lateral lista todas as comandas abertas, seja de mesa, balcão ou ficha. **Reservas e fila** (PRIORIDADE 8): cadastro de reserva (nome, telefone, pessoas, data/hora, observação, mesa sugerida) com status aguardando/confirmada/sentado/não veio e botão WhatsApp (mensagem pronta, só abre o app); fila de espera walk-in com posição e tempo estimado pelo tempo médio de ocupação das mesas; botão **Sentar** (de uma reserva ou da fila) escolhe uma mesa livre e vira comanda de verdade, vinculando o cliente. |
 | **Comanda** | Catálogo de produtos por categoria (com busca e foto, se cadastrada) pra lançar itens — produto com perguntas/adicionais abre um seletor de opções antes de entrar no pedido; revisão do pedido antes de enviar pra cozinha; cancelar item e aplicar desconto (qualquer garçom pode pedir, mas sempre com PIN de um supervisor escolhido num dropdown — verificado no servidor); transferir item pra outra comanda, transferir a comanda pra outra mesa, juntar com outra mesa; fechar conta — inteira, dividida por pessoas ou **por item escolhido** (pagamento parcial: a comanda só fecha quando o último item é pago). No fechamento (modo "dividir por pessoas"): escolher cliente (ganha pontos de fidelidade), resgatar pontos como desconto, e **aplicar cupom de marketing** (código validado na hora, mostra o desconto antes de confirmar) — os três descontos empilham entre si, e o total exibido vem sempre do servidor (`calcular_total_pagamento`, recalculado a cada mudança — nunca mais fórmula própria no navegador, ETAPA 0.1); empilhado passando do limite configurado pede PIN de supervisor (ETAPA 0.2); pagar a mais sem nenhuma linha em dinheiro é recusado (sem pra onde ir o troco). Se o pagamento travar (aba fechou no meio), aparece "Reabrir" depois de 10 minutos em fechamento. |
-| **Cozinha (KDS)** | Kanban (Pendente → Preparando → Pronto → Entregue) dos itens lançados, com abas pra filtrar por setor de produção (Bar / Cozinha / Brasa / Sobremesa) — cada produto tem um setor, gravado no item no momento do lançamento. Botão de som (precisa de 1 clique pra ativar, por causa do autoplay do navegador) toca um bipe quando chega pedido novo em qualquer terminal. Ticket com mais de um item ganha um botão pra avançar todos de uma vez, além do botão por item. Ordenado do pedido mais antigo pro mais novo. Atraso configurável por setor (Configurações). Mostra itens de qualquer comanda do dia operacional, **inclusive já paga** (balcão/ficha paga na hora não some mais da cozinha antes de sair). Alerta separado pra item cancelado depois de já estar em preparo. |
+| **Cozinha (KDS / Produção / Expedição)** | Três sub-abas (componente genérico da ETAPA 0.11). **KDS**: kanban (Pendente → Preparando → Pronto → Entregue) dos itens lançados, com abas pra filtrar por setor de produção (Bar / Cozinha / Brasa / Sobremesa) — cada produto tem um setor, gravado no item no momento do lançamento. Botão de som (precisa de 1 clique pra ativar, por causa do autoplay do navegador) toca um bipe quando chega pedido novo em qualquer terminal. Ticket com mais de um item ganha um botão pra avançar todos de uma vez, além do botão por item. Ordenado do pedido mais antigo pro mais novo. Atraso configurável por setor (Configurações). Mostra itens de qualquer comanda do dia operacional, **inclusive já paga** (balcão/ficha paga na hora não some mais da cozinha antes de sair). Alerta separado pra item cancelado depois de já estar em preparo. **Produção** (PRIORIDADE 2 — Produção/Pré-preparo): checklist diário de pré-preparo, sugerido pelo banco a partir da média de vendas das últimas 4 semanas × ficha técnica; campo de ajuste % pra feriado/evento; marcar item como feito grava quem e quando; insumo marcado como **sub-receita** (produzido internamente, ex: vinagrete) ganha botão **Produzir lote** — baixa os ingredientes da receita própria (Estoque → checkbox "produzida internamente" + botão Receita) e dá entrada já com custo médio recalculado, imprimindo a etiqueta de manipulação. **Expedição** (PRIORIDADE 6): agrupa os itens ativos de cada comanda por "tempo" (entrada/principal/sobremesa — campo da categoria, definido junto com o produto no Cardápio) e só mostra o grupo quando pelo menos um item já está pronto; grupo com tudo pronto ganha o botão **Liberar para o salão** (marca todos como entregue de uma vez — mesmo UPDATE em lote que o "ticket inteiro" do KDS já fazia); grupo com só parte pronta mostra "esperando o resto" com o tempo que cada item pronto já está esperando. |
 | **Atendimento (Salão)** — aviso de pronto | Mesa com item marcado **PRONTO** pela cozinha pisca um destaque amarelo no mapa de mesas, e a tela da comanda mostra um aviso "pronto para servir" — sem precisar recarregar (via Realtime). |
 | **Atendimento (Salão)** — pedido pelo QR e delivery | Botões **Delivery** (escolhe cliente, endereço/bairro com taxa sugerida, agenda horário) e card de **pedidos pelo QR da mesa** aguardando confirmação do garçom (aceitar lança os itens na cozinha; rejeitar descarta) — nunca vai direto pra cozinha sem um humano aprovar. |
 | **Caixa** | Terminal com nome configurável (lembrado neste dispositivo) — dois terminais com caixa aberto ao mesmo tempo fecham cada um só as próprias vendas. Abrir sessão com saldo inicial, registrar sangria/suprimento, ver movimentos da sessão. Fechamento é por **conferência cega calculada no servidor**: o client nunca recebe o esperado antes de mandar o valor contado; diferença acima do limite configurado exige justificativa escrita. |
-| **Cardápio** | CRUD de produtos (nome, categoria, preço, foto por URL, setor de produção) e de categorias (criadas on-the-fly no formulário de produto). Marcar produto como esgotado/reativado sem precisar editar o preço. Botão **Opções** por produto: grupos de perguntas/adicionais (ex: "Ponto da carne" obrigatório, "Adicionais" opcional até N), cada opção com preço próprio opcional — aparecem no lançamento do pedido, no KDS, no recibo e no cardápio público. |
-| **Estoque** | Insumos com estoque atual/mínimo, validade e custo médio — **pode ficar negativo** (selo "Furo — investigar" em vermelho + alerta no topo, ETAPA 0.8) em vez de travar em zero; entrada/saída manual com motivo obrigatório; alerta de estoque baixo e de validade vencendo/vencida; botão **Fazer inventário** (contagem física de todos os insumos de uma vez, gera ajuste só no que divergir do sistema); botão **Sugerir pedido** nos itens abaixo do mínimo, pré-preenchendo um pedido de compra; botão **Rendimento** pra registrar o fator de perda medido de um insumo (ex: 85% depois de limpar/aparar) — entra direto na baixa automática por venda e no CMV dos relatórios (ETAPA 0.9). |
-| **Compras** | Cadastro de fornecedores e pedidos de compra (Rascunho → Pedido realizado → Recebido). Receber um pedido lança entrada de estoque automaticamente e recalcula o custo médio ponderado do insumo. |
-| **Financeiro** | Contas a pagar e a receber (as de receber de fiado/débito/crédito/voucher são geradas automaticamente ao fechar uma conta, já líquidas da taxa da maquininha configurada), com status pago/pendente/vencido. Botão **Exportar pro contador**: baixa 3 CSVs do mês (vendas por forma, contas, fechamentos de caixa). |
+| **Cardápio** | CRUD de produtos (nome, categoria, preço, foto por URL, setor de produção, **tempo** — entrada/principal/sobremesa, usado pela Expedição, PRIORIDADE 6) e de categorias (criadas on-the-fly no formulário de produto — tempo é campo da categoria, então salvar qualquer produto dela atualiza o tempo de todos). Marcar produto como esgotado/reativado sem precisar editar o preço. Botão **Opções** por produto: grupos de perguntas/adicionais (ex: "Ponto da carne" obrigatório, "Adicionais" opcional até N), cada opção com preço próprio opcional — aparecem no lançamento do pedido, no KDS, no recibo e no cardápio público. |
+| **Estoque (Estoque / Perdas)** | Duas sub-abas (ETAPA 0.11). **Estoque**: insumos com estoque atual/mínimo, validade e custo médio — **pode ficar negativo** (selo "Furo — investigar" em vermelho + alerta no topo, ETAPA 0.8) em vez de travar em zero; entrada/saída manual com motivo obrigatório; alerta de estoque baixo e de validade vencendo/vencida; botão **Fazer inventário** (contagem física de todos os insumos de uma vez, gera ajuste só no que divergir do sistema — diferença **negativa** também grava uma perda "não identificada", PRIORIDADE 3); botão **Sugerir pedido** nos itens abaixo do mínimo, pré-preenchendo um pedido de compra; botão **Rendimento** pra registrar o fator de perda medido de um insumo (ex: 85% depois de limpar/aparar) — entra direto na baixa automática por venda e no CMV dos relatórios (ETAPA 0.9); checkbox **produzida internamente (sub-receita)** (PRIORIDADE 2) libera os botões **Receita** (ficha técnica própria, insumo→insumo) e **Produzir lote**. **Perdas** (PRIORIDADE 3): botão **Registrar perda** (insumo ou prato pronto, motivo, quantidade — valor sempre calculado no servidor pelo custo médio/CMV); período (hoje/7d/30d/mês); KPIs de total perdido e % do faturamento; top 5 "onde o dinheiro está sumindo"; por motivo; por semana; lista dos registros recentes (inclusive os automáticos: item cancelado após preparo e diferença de inventário). |
+| **Compras (4 sub-abas)** | PRIORIDADE 4. **Lista de compras**: sugestão automática por insumo (consumo real dos últimos 28 dias ÷ 28 × prazo de entrega do fornecedor padrão do insumo, cobrindo até o mínimo), agrupada por fornecedor — botão "Criar pedido" pré-preenche o pedido de compra de sempre. **Pedidos**: cadastro de fornecedores (nome, contato, telefone, prazo de entrega e dia de entrega) e pedidos de compra (Rascunho → Pedido realizado → Recebido) — receber abre uma **conferência** (quantidade/preço realmente recebidos, pré-preenchidos com o pedido mas editáveis; diferente do pedido vira registro na Auditoria) e é o recebido, não o pedido, que entra no estoque/custo médio. **Cotação**: compara até 3 fornecedores com preço digitado à mão lado a lado, destaca o menor preço por item, "Gerar pedidos" cria um pedido por fornecedor vencedor. **Preços**: histórico por insumo (alimentado em cada recebimento), alerta quando sobe mais que o limite configurado (Configurações), e quais pratos perderam margem com o aumento. |
+| **Financeiro (Resumo / Contas)** | PRIORIDADE 7. **Resumo** (aba padrão): "Entrou · Saiu · Sobrou" do mês em linguagem simples, com as 5 linhas de "pra onde foi o dinheiro" (mercadoria/CMV, equipe, contas fixas, perdas, taxas de maquininha), comparação com o mês anterior, despesas fixas (aluguel, luz...) que lançam a conta do mês sozinhas, e o fluxo projetado dos próximos 30 dias (a receber − a pagar, acumulado) destacando a partir de quando o saldo fica negativo. **Contas**: a tela de sempre — contas a pagar e a receber (as de receber de fiado/débito/crédito/voucher são geradas automaticamente ao fechar uma conta, já líquidas da taxa da maquininha configurada), com status pago/pendente/vencido. Botão **Exportar pro contador**: baixa 3 CSVs do mês (vendas por forma, contas, fechamentos de caixa). |
 | **Clientes** | CRM básico: nome, telefone, endereço/bairro (pra delivery), aniversário, observações, consentimento LGPD. Ficha do cliente mostra saldo de fiado em aberto, **pontos de fidelidade** e histórico de visitas. Cliente é opcional em qualquer pagamento (ganha pontos — padrão 1 ponto por R$1, configurável) e obrigatório no fiado (não é mais texto livre); pontos acumulados podem ser resgatados como desconto na hora de fechar a conta. |
 | **Relatórios** | Três sub-abas (componente genérico de sub-abas, ETAPA 0.11 — dado busca só ao abrir a aba, link direto tipo `#relatorios/dre` abre nela). Aba **Vendas**: ranking de produtos e desempenho por garçom (por quem **lançou** o item), por período (hoje / 7 dias / 30 dias / escolher mês). Aba **Gestão**: CMV e margem por produto (alerta quando custo ≥ preço), relatório anti-fraude (cancelamentos e descontos por funcionário), taxa de serviço estimada por garçom, curva ABC, heatmap de vendas por dia×hora e taxas pagas às maquininhas. Aba **DRE mensal**: faturamento − CMV − despesas = resultado, por mês. Tudo agregado no banco — não carrega mais comandas/itens completos no navegador, e o total de cada venda é o valor travado no pagamento, não recalculado com a taxa de serviço atual. |
 | **QR Codes das mesas** | Gera o QR de cada mesa cadastrada direto no navegador (biblioteca client-side, sem nenhum serviço externo), aponta pra `/cardapio/:slug?mesa=N&t=token` — o token (ETAPA 0.6) impede trocar o número da URL e abrir pedido em outra mesa. Imprimir individual, imprimir todas numa grade, baixar PNG, ou **Gerar novo QR** (invalida o impresso na hora). Dentro do grupo **Atendimento** no menu. |
-| **Marketing** | Três sub-abas (mesmo componente genérico de Relatórios, ETAPA 0.11): **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos; ativar/desativar; contador de usos — aplicado direto na tela de pagamento do Caixa, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (busca por "sem comprar há N dias", com telefone e saldo de pontos, pra reativação manual); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público, visível a qualquer cliente que escaneie o QR). |
-| **Equipe** | Criar funcionário (nome, papel, PIN), ativar/desativar, e **trocar PIN** de um funcionário existente sem precisar recriá-lo. |
+| **Marketing** | Quatro sub-abas (mesmo componente genérico de Relatórios, ETAPA 0.11): **Campanhas** (PRIORIDADE 9 — o banco identifica sozinho quem avisar hoje: aniversariantes e reservas confirmadas, cada um com botão WhatsApp de mensagem pronta); **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos; ativar/desativar; contador de usos — aplicado direto na tela de pagamento do Caixa, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (busca por "sem comprar há N dias", com telefone e saldo de pontos, e botão WhatsApp pra reativação); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público, visível a qualquer cliente que escaneie o QR). |
+| **Equipe (5 sub-abas)** | PRIORIDADE 5. **Funcionários**: criar (nome, papel, PIN), ativar/desativar, trocar PIN, peso de rateio da taxa de serviço. **Escala**: turno/folga por dia da semana, por funcionário; aviso de quem está escalado hoje e ainda não bateu ponto. **Ponto**: entrada/saída/intervalo com PIN (controle interno — não substitui o registro oficial exigido pela legislação); correção só por GERENTE/ADMIN, com motivo e auditoria. **Desempenho**: vendas/ticket/cancelamentos por garçom, itens por hora trabalhada, tempo médio de preparo por setor da cozinha. **Custo** (só ADMIN, `admin.equipe.custos.ver`): salário/diária por funcionário, vales/adiantamentos, e o fechamento do período (horas, rateio da taxa de serviço, vales, líquido a pagar) — GERENTE tem `admin.equipe.editar` mas não acessa esta sub-aba. |
 | **Auditoria** | Trilha de ações sensíveis (desconto aprovado, item cancelado, preço alterado, caixa fechado com diferença, PIN alterado, etc.), com quem fez e quando. |
 | **Configurações** | Dados da empresa, taxa de serviço, limites (desconto sem aprovação, diferença de caixa tolerada, alerta de sangria), impressão de recibo, horário de funcionamento, carência de QR Code sem token (ETAPA 0.6), e o **link do cardápio público** (a tela QR Codes das mesas já gera o QR pronto pra imprimir — este link aqui é só pra referência/compartilhar manualmente). Card **Conflitos de sincronização offline** (ETAPA 0.5, só aparece quando tem pendência) — Aplicar mesmo assim ou Descartar. Editar config, criar funcionário e trocar PIN exigem o segundo fator (2FA) se a conta ADMIN tiver MFA ativo (ETAPA 0.7). |
 
@@ -196,7 +198,7 @@ de verdade).
 
 ## Papéis e permissões
 
-Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 26
+Cinco papéis — `ADMIN`, `GERENTE`, `CAIXA`, `GARCOM`, `COZINHA` — e 28
 permissões no formato `modulo.recurso.acao` (ex:
 `atendimento.comanda.item.cancelar`), cada uma concedida por papel numa
 tabela de configuração (`papeis_permissoes`, semeada nas migrations, não é
@@ -219,8 +221,11 @@ funções `SECURITY DEFINER` chamadas via RPC.
 
 ### PIN = senha real do Supabase Auth
 
-Cada funcionário é uma conta real do Supabase Auth. O PIN de 4 dígitos
-digitado na tela de login **é a senha**. Login agora pede primeiro o
+Cada funcionário é uma conta real do Supabase Auth. O PIN de 4 caracteres
+(letras e números — antes era só numérico; a tela de autorização de
+supervisor trocou o teclado numérico por um campo de texto comum por
+causa disso) digitado na tela de login **é a senha**. Login agora pede
+primeiro o
 **código do restaurante** (slug, igual ao usado no cardápio público — URL
 `?r=slug` ou salvo em `localStorage`), que resolve a lista de usuários via
 `restaurante.usuarios_login_por_empresa(slug)` — antes disso era uma view
@@ -343,7 +348,8 @@ não parecer travada entre o clique e o próximo refresh.
 
 ### Pendências de segurança (ver também [Pendências conhecidas](#pendências-conhecidas))
 
-- PIN de 4 dígitos é curto por natureza (10 mil combinações). O app bloqueia
+- PIN de 4 caracteres é curto por natureza (mesmo agora aceitando letras e
+  números, não só os 10 mil dígitos de antes). O app bloqueia
   por 30s após 5 tentativas erradas na própria UI, e as RPCs de supervisor
   têm seu próprio limite (5 tentativas / 5 min por supervisor, tabela
   `tentativas_autorizacao`) — mas nada disso impede uma chamada direta ao
@@ -391,21 +397,34 @@ Consequências práticas:
   das RPCs de supervisor, sem policy pro client), `erros_cliente` (log
   técnico de erro do front-end — `window.onerror`/falha de RPC/promise
   rejeitada, 20/min por usuário, sem policy de select pro client, `0064`).
-- **Cardápio/estoque**: `categorias`, `produtos` (com `setor_producao`,
-  `foto_url`), `insumos`, `ficha_tecnica`, `estoque_movimentos`
-  (estoque pode ficar negativo desde `0064`), `insumo_rendimentos`
-  (agora entra de verdade na baixa de estoque e no CMV, `0064`).
+- **Cardápio/estoque**: `categorias` (com `tempo`, `0071`), `produtos` (com `setor_producao`,
+  `foto_url`), `insumos` (com `eh_sub_receita`, `0066`, e
+  `fornecedor_padrao_id`, `0069`), `ficha_tecnica`,
+  `ficha_tecnica_insumo` (receita de sub-receita, insumo→insumo, `0066`),
+  `estoque_movimentos` (estoque pode ficar negativo desde `0064`),
+  `insumo_rendimentos` (agora entra de verdade na baixa de estoque e no
+  CMV, `0064`), `pre_preparo_checklist` (checklist diário de pré-preparo,
+  `0066`), `perdas` (insumo ou prato, valor pelo custo médio/CMV, `0067`).
 - **Atendimento**: `mesas` (com `qr_token`, `0064`), `comandas` (tipo
   `MESA`/`BALCAO`/`FICHA`, `ficha_numero`, `dia_operacional`,
   `total_centavos` acumulado a cada pagamento — parcial ou não,
-  `updated_at`), `comanda_itens` (com `setor_producao`,
-  `motivo_cancelamento`, `pago_em` — nulo até o item entrar num
-  pagamento, parcial ou não —, `opcoes_selecionadas` jsonb e
-  `estoque_baixado_em` — trava contra baixar o mesmo item duas vezes,
-  `0064`), `venda_movimentacoes` (log de transferência/junção de mesa,
-  `0027`, gravado só pelas RPCs `transferir_item`/`transferir_comanda`/
+  `taxa_servico_centavos` idem, `0070`, `updated_at`), `comanda_itens`
+  (com `setor_producao`, `motivo_cancelamento`, `pago_em` — nulo até o
+  item entrar num pagamento, parcial ou não —, `opcoes_selecionadas`
+  jsonb, `estoque_baixado_em` — trava contra baixar o mesmo item duas
+  vezes, `0064` —, e `iniciado_em`/`pronto_em`/`entregue_em`, gravados
+  sozinhos por um trigger quando o status muda, `0070`),
+  `venda_movimentacoes` (log de transferência/junção de mesa, `0027`,
+  gravado só pelas RPCs `transferir_item`/`transferir_comanda`/
   `juntar_comandas`, `0048`), `sync_conflitos` (pagamento offline em
   conflito aguardando decisão de GERENTE/ADMIN, `0064`).
+- **Equipe** (`0070`): `usuarios` com `peso_rateio_taxa` (multiplicador
+  do rateio da taxa de serviço — não sensível, qualquer um com
+  `admin.equipe.editar` edita), `escalas` (turno/folga semanal),
+  `pontos` (entrada/saída/intervalo, com `corrigido`/`corrigido_por`/
+  `motivo_correcao`), `funcionarios_remuneracao` (salário/diária — só
+  `admin.equipe.custos.ver`, nunca em `usuarios`, que todo funcionário
+  lê) e `vales_adiantamentos` (idem).
 - **Cardápio — perguntas/adicionais** (`0051`): `grupos_opcoes` (por
   produto, obrigatório ou não, mínimo/máximo de escolhas),
   `opcoes` (dentro de um grupo, com preço adicional opcional),
@@ -414,11 +433,24 @@ Consequências práticas:
 - **Caixa/pagamentos**: `caixa_sessoes` (`terminal` agora realmente usado
   — um terminal só enxerga/fecha a sessão aberta com o nome salvo no
   próprio dispositivo), `caixa_movimentos`, `pagamentos`.
-- **Financeiro**: `contas`.
-- **Compras**: `fornecedores`, `pedidos_compra`, `pedidos_compra_itens`.
+- **Financeiro**: `contas` (com `despesa_recorrente_id`, `0072`),
+  `despesas_recorrentes` (aluguel, luz... — lançam a conta do mês
+  sozinhas, `0072`).
+- **Compras**: `fornecedores` (com `prazo_entrega_dias`/`dia_entrega_semana`,
+  `0069`), `pedidos_compra`, `pedidos_compra_itens` (com
+  `quantidade_recebida`/`preco_unit_recebido_centavos`, `0069`),
+  `historico_precos_insumo` (preço de cada recebimento, só gravável pela
+  RPC de recebimento, `0069`).
 - **Clientes** (`0055`): `clientes` (CRM — nome, telefone, endereço/bairro,
   aniversário, LGPD, `pontos_fidelidade`); `comandas.cliente_id` e
   `contas.cliente_id` vinculam venda e fiado a um cliente de verdade.
+- **Reservas/fila** (`0073`): `reservas` (nome/telefone/pessoas/data_hora/
+  mesa sugerida, status aguardando/confirmada/sentado/não veio) e
+  `fila_espera` (walk-in, status aguardando/chamado/sentado/desistiu) —
+  sem policy de insert/update, só pelas RPCs (`criar_reserva`,
+  `sentar_reserva`, `entrar_fila`, `sentar_fila`...); "sentar" cria a
+  comanda (tipo MESA) e grava `comanda_id`/`cliente_id` na reserva/fila de
+  origem.
 - **Pedido pelo QR da mesa** (`0059`, opções na `0063`): `pedidos_qr`
   (fila de aprovação do garçom — nunca escrito direto em `comanda_itens`).
 - **Marketing** (`0062`): `cupons` (código único por empresa, percentual
@@ -826,6 +858,443 @@ abre direto naquela aba). Relatórios e Marketing migrados pra ele.
 (`papeis_permissoes`) — a versão anterior descrevia uma arquitetura React
 que este app nunca usou.
 
+## PRIORIDADE 1 — Central do Dono (0065)
+
+Tela nova, primeira depois do login pra quem tem `admin.central_dono.ver`
+(ADMIN e GERENTE — GARCOM/CAIXA/COZINHA continuam caindo em Salão/KDS como
+antes). Uma RPC só (`restaurante.central_do_dono()`, sem parâmetro — ela
+mesma calcula "hoje" e "o mês" a partir de `empresas.timezone` +
+`virada_dia_operacional_hora`, nunca do relógio do navegador), agregada
+inteiramente no banco: a tela nunca baixa comandas/itens pra somar no
+JavaScript, só formata o que a RPC já devolve pronto.
+
+- **Hoje até agora**: faturamento, nº de vendas e ticket médio, cada um
+  comparado com a mesma janela de horário do mesmo dia da semana passada
+  (seta verde/vermelha + %), mais a **projeção de fechamento do dia** —
+  pega o "ritmo" das últimas 4 semanas (quanto o dia inteiro costumava
+  faturar frente ao que já tinha faturado até este mesmo ponto) e aplica
+  no que já foi vendido hoje.
+- **Sobrou no mês**: faturamento − CMV (mesmo cálculo corrigido por
+  rendimento da ETAPA 0.9) − perdas − despesas lançadas = resultado
+  estimado, com "quanto falta pra cobrir as contas do mês" (contas a
+  pagar pendentes do mês menos o resultado já acumulado). **Só ADMIN vê
+  este bloco** — pra GERENTE a RPC devolve `resultado_centavos: null` de
+  propósito (decidido no servidor, nunca só escondido no front, pela
+  mesma regra de ouro de permissões do resto do sistema). Custo de equipe
+  entra como 0/indisponível até a Prioridade 5 existir de verdade.
+- **Semáforos** (verde/amarelo/vermelho): CMV %, perdas % do faturamento,
+  diferença de caixa acumulada no mês — contra metas configuráveis em
+  Configurações → "Metas da Central do Dono" (`config.metasCentralDono`).
+  Custo de equipe aparece cinza/indisponível pelo mesmo motivo do bloco
+  anterior.
+- **Precisa da sua atenção** (até 5, por gravidade, cada um levando pra
+  tela certa): estoque negativo, conta a pagar vencendo hoje/atrasada,
+  diferença no último fechamento de caixa acima do limite configurado,
+  conflito de sincronização offline pendente (ETAPA 0.5), cancelamentos
+  de hoje acima da média dos últimos 7 dias.
+- **Agora no salão**: mesas ocupadas, pedidos atrasados na cozinha (mesmo
+  limite por setor de Configurações), caixa aberto/fechado.
+- Atualiza sozinha a cada 60s enquanto a tela estiver aberta, e de
+  imediato quando o Realtime avisa de uma comanda que acabou de virar
+  `PAGA` — sem precisar recarregar a página.
+
+**O que ficou de fora de propósito** (precisa de dado que ainda não
+existe): "validade vencendo" e "insumo que ficou mais caro" não entraram
+nos alertas — não existe hoje controle de validade/lote por insumo nem
+histórico de preço de compra (isso é a Prioridade 4). "Perdas" por ora é
+uma aproximação pelo valor das saídas manuais de estoque (`estoque_movimentos`
+tipo `SAIDA`) a custo médio — ainda não existe registro estruturado de
+perda com motivo (Prioridade 3); quando essa tabela existir, a RPC deve
+trocar pra ela em vez desta aproximação.
+
+## PRIORIDADE 2 — Produção / Pré-preparo (0066)
+
+Cozinha ganhou uma segunda sub-aba, **Produção** (mesmo componente
+genérico da ETAPA 0.11 — `cozinha.kds.ver` dá acesso às duas abas, "Produzir
+lote" exige `admin.estoque.editar` por afetar estoque/custo de verdade).
+
+- **Lista de pré-preparo do dia**: `restaurante.abrir_checklist_pre_preparo(p_ajuste_pct)`
+  calcula, pra cada insumo que aparece em alguma ficha técnica de produto,
+  a média vendida nos últimos 4 mesmos-dias-da-semana (ex: 4 sextas
+  anteriores) × ficha técnica ÷ rendimento do insumo (mesma régua da
+  ETAPA 0.9) — cobre tanto "porcionar 6kg de picanha" (insumo direto)
+  quanto "fazer 3kg de vinagrete" (sub-receita, que também é só um insumo
+  usado em algum produto — não precisou resolver árvore de receita
+  aninhada). Essas linhas **persistem** por dia operacional
+  (`pre_preparo_checklist`) — reabrir a aba no mesmo dia não recalcula do
+  zero, só lê o que já tem. Campo de ajuste % (feriado, evento) recalcula
+  de novo, mas só as linhas **ainda não marcadas feitas**.
+- **Marcar feito**: grava quem e quando (`marcar_pre_preparo_feito`),
+  sobrevive a recarregar a página — dá histórico de "o que foi preparado
+  todo dia".
+- **Sub-receita** [DECISÃO TOMADA NA CONVERSA]: é um **insumo normal**
+  com a flag `insumos.eh_sub_receita` — não uma tabela separada, reusa
+  toda a tela de Estoque (nome, unidade, estoque, custo médio). Ganha uma
+  ficha técnica própria (`ficha_tecnica_insumo`, insumo→insumo — mesmo
+  formato de `ficha_tecnica`, só que ingrediente também é insumo) editável
+  em Estoque → botão **Receita** (troca a lista inteira de uma vez, mesmo
+  padrão simples usado em listas pequenas do app).
+- **Produzir lote** (`restaurante.produzir_lote_sub_receita`): baixa cada
+  ingrediente da receita (÷ rendimento mais recente, 0.9), dá entrada no
+  insumo produzido com **custo médio ponderado** (mesma fórmula já usada
+  no recebimento de pedido de compra, `0040`) e devolve tudo que a
+  **etiqueta de manipulação** precisa (produto, quantidade, data de
+  produção, validade do lote — digitada na hora, não existe validade
+  padrão por insumo — e responsável) pra imprimir na hora, sem outra
+  consulta. Estoque pode ficar negativo (0.8): não trava se faltar
+  ingrediente de verdade.
+- Pronto quando: numa sexta a lista sugere quantidades baseadas nas 4
+  sextas anteriores; produzir 5kg de vinagrete baixa os ingredientes, dá
+  entrada no estoque (com custo médio recalculado) e imprime a etiqueta.
+
+**Nota pra decisão futura**: hoje só ADMIN/GERENTE (`admin.estoque.editar`)
+produzem um lote — COZINHA só marca o checklist como feito, mesma régua
+de permissão que todo o resto do estoque já usa (COZINHA nunca teve
+`admin.estoque.editar`). Se o fluxo real de cozinha precisar que o próprio
+cozinheiro registre a produção sem depender de um gerente, isso é uma
+mudança na matriz de permissões (`papeis_permissoes`/`MATRIZ`), não nesta
+RPC — avise se for esse o caso.
+
+## PRIORIDADE 3 — Perdas e Desperdícios (0067)
+
+Estoque ganhou uma segunda sub-aba, **Perdas** (mesmo componente genérico
+da ETAPA 0.11, mesma permissão `admin.estoque.editar` da aba Estoque — não
+criou permissão nova).
+
+- **Registrar perda** (`restaurante.registrar_perda`): insumo (ex: "2kg de
+  picanha vencida") OU prato pronto (ex: "sobra do dia"), com motivo
+  (venceu, estragou, queimou, caiu, devolvido, erro de pedido, sobra),
+  quantidade e responsável (o usuário logado). **Valor sempre calculado
+  no servidor** — insumo pelo custo médio, prato pelo CMV (ficha técnica
+  ÷ rendimento × custo médio, mesma fórmula de `relatorio_dre`/`relatorio_gestao`/
+  Central do Dono) — nunca mandado pelo client.
+- **Automática ao cancelar item já em preparo** (`cancelar_item`, 0043):
+  motivo `CANCELADO_APOS_PREPARO`. [DECISÃO DE DESIGN — ver comentário no
+  topo da migration `0067`] Esse é o ÚNICO caso em que uma perda de prato
+  também baixa o estoque do ingrediente — o item cancelado nunca vai ser
+  pago, e a baixa deste app só acontece no pagamento, então sem baixar
+  aqui o ingrediente que já saiu de verdade da cozinha ficaria contado
+  como se ainda estivesse no estoque pra sempre. Perda manual de prato
+  **não** baixa estoque (não dá pra saber se aquele prato específico já
+  passou por uma venda paga ou não — baixaria duas vezes ou nenhuma).
+- **Automática no inventário** (`registrar_inventario`, 0054): diferença
+  **negativa** (contado menor que o sistema) grava "perda não
+  identificada" (`AJUSTE_INVENTARIO`). Sobra (contado maior) não é perda.
+- **Relatório** (`restaurante.relatorio_perdas`, agregado no banco): total
+  perdido no período, % do faturamento, por motivo, por semana, e top 5
+  "onde o dinheiro está sumindo" (insumo + prato juntos, por valor).
+- **Central do Dono** (0065) parou de aproximar perdas pelas saídas
+  manuais de estoque — agora soma direto de `perdas`, o dado de verdade.
+- Pronto quando: registro 2kg de picanha vencida e a Central do Dono
+  mostra o valor no bloco de perdas.
+
+## PRIORIDADE 4 — Compras Inteligentes (0069)
+
+Compras ganhou 4 sub-abas (mesmo componente da ETAPA 0.11), todas sob
+`admin.estoque.editar` (não criou permissão nova).
+
+- **Lista de compras** (`restaurante.lista_compras_sugerida`): pra cada
+  insumo, consumo médio diário = (vendas dos últimos 28 dias × ficha
+  técnica ÷ rendimento) ÷ 28; consumo previsto até a próxima entrega =
+  consumo médio × prazo de entrega do fornecedor padrão do insumo (ou 7
+  dias, sem fornecedor padrão); sugestão = estoque mínimo + previsto −
+  estoque atual. Agrupado por fornecedor — insumo sem fornecedor padrão
+  cai num grupo "sem fornecedor definido". [DECISÃO DE DESIGN] Não
+  existia "qual fornecedor fornece qual insumo" em lugar nenhum do
+  schema; adicionei `insumos.fornecedor_padrao_id` (um fornecedor
+  preferencial por insumo, editável direto na tela Estoque) em vez de
+  inventar uma tabela pivot que o roteiro não pediu.
+- **Pedidos**: a tela de sempre (fornecedores + pedidos de compra), com
+  fornecedor agora editável (não só criar) e dois campos novos —
+  **prazo de entrega** e **dia de entrega** (exatamente como o roteiro
+  pediu, "campos novos em fornecedores"). Receber um pedido abre uma
+  **conferência**: quantidade e preço pré-preenchidos com o que foi
+  pedido, mas editáveis pro que chegou de verdade — diferente do pedido
+  vira registro em Auditoria (`DIVERGENCIA_RECEBIMENTO`, sem tabela nova
+  só pra isso), e é o **recebido** (não o pedido) que entra no estoque e
+  no custo médio ponderado.
+- **Cotação**: compara até 3 fornecedores com preço **digitado à mão**
+  lado a lado (botão "Importar da lista de compras" traz os itens
+  sugeridos com a quantidade já preenchida — "mesma lista" do roteiro),
+  destaca o menor preço por linha, e "Gerar pedidos" cria um pedido de
+  compra por fornecedor vencedor (reaproveita `criar_pedido_compra`,
+  0040 — cotação não tem RPC nem tabela própria, é comparação 100% do
+  client, preço final nunca calculado, sempre digitado).
+- **Preços** (`restaurante.relatorio_precos_insumo`): histórico por
+  insumo alimentado em cada recebimento (`historico_precos_insumo`, só
+  gravável pela RPC de recebimento); alerta quando o preço sobe mais que
+  o limite configurado (Configurações → "Compras — alerta de preço",
+  10% por padrão) frente ao recebimento anterior; pra insumo em alerta,
+  lista os pratos que usam ele na ficha técnica com o impacto por
+  unidade vendida (ficha técnica ÷ rendimento × diferença de preço).
+- Pronto quando: a lista sugere quanto comprar de cada insumo até a
+  próxima entrega, e receber picanha 15% mais cara mostra quais pratos
+  perderam margem.
+
+## PRIORIDADE 5 — Controle de Equipe (0070)
+
+Equipe ganhou 5 sub-abas. Permissão nova: `admin.equipe.custos.ver` (só
+ADMIN) — GERENTE continua com `admin.equipe.editar` (funcionário, PIN,
+escala, ponto, desempenho) mas **não** acessa a sub-aba Custo.
+
+- **Funcionários**: a tela de sempre, mais o **peso de rateio** da taxa
+  de serviço por funcionário (não sensível — qualquer um com
+  `admin.equipe.editar` edita).
+- **Escala**: turno/folga por dia da semana, por funcionário
+  (`restaurante.salvar_escala`, troca a semana inteira de uma vez — mesmo
+  padrão simples de lista pequena editada por inteiro). Avisa quem está
+  escalado hoje e ainda não bateu ponto (`restaurante.escala_hoje`).
+- **Ponto**: entrada/saída/intervalo com PIN — texto fixo "controle
+  interno — não substitui o registro de ponto oficial exigido pela
+  legislação". `restaurante.bater_ponto` confere a identidade de quem
+  está batendo com o MESMO mecanismo de `verificar_pin_supervisor`
+  (0043/0060 — login real via GoTrue, logout imediato, sem exigir
+  nenhuma permissão de quem bate: o PIN já é a prova); qualquer um
+  logado pode bater o próprio PIN ou o de um colega. Correção
+  (`restaurante.corrigir_ponto`) só por GERENTE/ADMIN, com motivo e
+  auditoria.
+- **Desempenho**: vendas/ticket/cancelamentos por garçom, itens por hora
+  trabalhada (horas calculadas a partir dos pares de ponto do período) e
+  tempo médio de preparo por setor da cozinha — usa
+  `comanda_itens.iniciado_em`/`pronto_em` (novos, `0070`), gravados
+  sozinhos por um trigger (`trg_comanda_itens_timestamps`) quando o
+  status do item muda, sem precisar tocar nos 3 lugares que hoje
+  escrevem status direto na tabela (KDS online, ticket inteiro, fila
+  offline).
+- **Custo** (só ADMIN): salário/diária por funcionário
+  (`funcionarios_remuneracao`, nunca em `usuarios` — essa tabela é lida
+  por **todo** funcionário da empresa, então salário não podia morar
+  ali) e vales/adiantamentos (`vales_adiantamentos`). O **fechamento do
+  período** (`restaurante.relatorio_fechamento_equipe`) mostra horas,
+  rateio da taxa de serviço e vales pra **todo mundo com
+  admin.equipe.editar** (GERENTE incluído — não é dado de remuneração),
+  mas remuneração base e líquido a pagar só aparecem pra ADMIN (viram
+  `null` no JSON, decidido no servidor — mesma régua de `resultado_centavos`
+  na Central do Dono).
+- **"10% da taxa de serviço rateado"** [DECISÃO DE DESIGN]: não é mais
+  100% receita da casa — `comandas.taxa_servico_centavos` (novo, gravado
+  por `confirmar_pagamento`) guarda o que foi cobrado de taxa em cada
+  comanda, e o fechamento distribui o total do período entre os
+  funcionários ativos, **igualitário** ou **por peso de função**
+  (`empresas.config.rateioTaxaServico`, configurável).
+- **Central do Dono** (0065/0067) parava de deixar custo de equipe em
+  0/indisponível — agora soma remuneração proporcional ao mês (mensal
+  cheio, diária × dias com ponto de entrada) + rateio da taxa do mês.
+  Valor em R$ e % só aparecem pra ADMIN (mesma régua do resultado).
+- Pronto quando: o fechamento da quinzena mostra horas, rateio da taxa e
+  vales de cada um, e a Central do Dono mostra custo de equipe %.
+
+## PRIORIDADE 6 — Expedição da Cozinha (0071)
+
+A mais leve das prioridades até aqui — quase tudo já existia. Cozinha
+ganhou uma terceira sub-aba, **Expedição**, sem permissão nova
+(`cozinha.kds.ver`, mesma do KDS).
+
+- **"Tempo" do item** [DECISÃO DE DESIGN]: entrada/principal/sobremesa é
+  campo de **categoria** (`categorias.tempo`, `0071`), exatamente como o
+  roteiro pediu ("campo na categoria") — não de produto. Como categoria
+  nunca teve tela própria (sempre foi criada/editada on-the-fly no
+  formulário de produto, desde sempre), o campo novo entrou ali: salvar
+  qualquer produto de uma categoria atualiza o tempo dela pra todo mundo
+  que a usa. Migration faz um backfill simples por nome ("Entradas" →
+  `ENTRADA`, "Sobremesas" → `SOBREMESA`) — o resto, inclusive "Bebidas",
+  fica em `PRINCIPAL` por padrão (o roteiro só pediu 3 valores).
+- **Expedição**: agrupa os itens ativos de cada comanda por (comanda,
+  tempo) — só aparece na tela quando pelo menos um item do grupo já está
+  **PRONTO**. Grupo com **todos** prontos ganha o botão **Liberar para o
+  salão**; grupo com só parte pronta mostra "esperando o resto" com
+  quanto tempo cada item pronto já está esperando (usa
+  `comanda_itens.pronto_em`, que a 0070 já passou a gravar sozinha).
+- **Nenhuma RPC nova**: "liberar" é o mesmo UPDATE em lote que o botão
+  "ticket inteiro" do KDS já fazia (`kdsAvancarTicket`, reaproveitado
+  direto) — RLS de `cozinha.item.atualizar_status` já cobre, e o aviso
+  de "mesa com item pronto" (realtime) já existia.
+- Pronto quando: picanha pronta e salada ainda em preparo da mesma mesa
+  não aparecem como "liberar" até a salada ficar pronta.
+
+## PRIORIDADE 7 — Financeiro simples para o dono (0072)
+
+Financeiro ganhou 2 sub-abas — **Resumo** (nova, virou a aba padrão) e
+**Contas** (tela de sempre). Mesma permissão de sempre
+(`admin.financeiro.ver` pra ver, `admin.financeiro.editar` pra despesa
+fixa) — nenhuma permissão nova.
+
+- **Entrou · Saiu · Sobrou**: `restaurante.relatorio_financeiro_resumo`
+  reaproveita a MESMA lógica de `relatorio_dre` (CMV, 0064) e
+  `central_do_dono` (perdas/custo de equipe, 0070) em vez de duplicar
+  cálculo — "entrou" é o faturamento do mês, "saiu" é a soma das 5 linhas
+  de "pra onde foi o dinheiro" (mercadoria/CMV, equipe, contas fixas,
+  perdas, **taxas de maquininha** — essa última reaproveita a mesma
+  consulta de `relatorio_taxas_maquininha`, 0053), "sobrou" é a
+  diferença — sempre bate exatamente, nunca sobra um valor escondido fora
+  das 5 linhas.
+- **Despesas recorrentes** (`despesas_recorrentes`, novo cadastro):
+  aluguel, luz, contador... com dia de vencimento fixo. A conta do mês
+  (`contas`, tipo `PAGAR`) é lançada sozinha por
+  `restaurante.gerar_despesas_recorrentes_do_mes`, chamada ao abrir a aba
+  Resumo — idempotente por um índice único em (despesa recorrente, mês),
+  não por controle manual: rodar de novo no mesmo mês não duplica.
+- **Comparação com o mês anterior**: mesmos 3 números (entrou/saiu/sobrou)
+  do mês passado, só pra comparação — não reabre o detalhe por linha.
+- **Fluxo projetado — próximos 30 dias**: a receber − a pagar de cada dia
+  (contas ainda não pagas, pelo vencimento), acumulado a partir de hoje —
+  destaca a partir de qual dia o saldo projetado fica negativo.
+- Pronto quando: sem saber contabilidade, consigo responder "quanto
+  sobrou este mês e por quê".
+
+## PRIORIDADE 8 — Reservas / Fila de espera (0073)
+
+Salão (Atendimento) ganhou sub-abas (mesmo componente da 0.11): **Mapa de
+mesas** (tela de sempre, agora mostra a mesa reservada nas próximas 2h) e
+**Reservas e fila** (nova). Nenhuma permissão nova — `atendimento.salao.ver`
+pra ver, `atendimento.comanda.abrir` pra criar/confirmar/sentar.
+
+- **[DECISÃO DE DESIGN] Reserva e fila viram tabelas separadas**
+  (`reservas`, `fila_espera`), não uma tabela só com "tipo": os status são
+  de verdade diferentes (reserva tem CONFIRMADA/NAO_VEIO, fila tem
+  CHAMADO/DESISTIU) e reserva tem `data_hora` agendada enquanto fila é só
+  ordem de chegada — forçar as duas num schema só deixaria várias colunas
+  sempre nulas dependendo do tipo.
+- **Reservas carregam direto em `carregarTudo`** (só as em aberto — lista
+  pequena, do tamanho de fornecedores/categorias, não é "comandas/itens
+  completos" que a regra de agregação no banco proíbe baixar) porque o
+  Mapa de mesas precisa saber quem está reservado pras próximas 2h mesmo
+  sem a sub-aba Reservas e fila nunca ter sido aberta. A fila de espera é
+  lazy (`listar_fila_espera`, só quando a sub-aba abre).
+- **"Sentar"** (de uma reserva ou da fila) sempre cria a comanda pela mesma
+  régua de `abrirComanda` (tipo MESA, status ABERTA, taxa de serviço
+  ativa) — só que aqui é a RPC, no servidor, que calcula o
+  `dia_operacional` com o timezone da empresa (mesmo padrão de
+  `central_do_dono`/`abrir_checklist_pre_preparo`), não o default UTC da
+  coluna. `sentar_reserva`/`sentar_fila` vinculam o `cliente_id` (quando
+  informado) tanto na comanda nova quanto na reserva/fila de origem.
+- **Fila de espera com tempo estimado**: `listar_fila_espera` calcula a
+  posição (ordem de chegada) e o tempo estimado pela média de ocupação das
+  últimas 50 mesas fechadas — tudo agregado no banco, nada somado no
+  navegador.
+- **Botão WhatsApp**: `wa.me/<telefone>?text=<mensagem pronta>` — só abre
+  o WhatsApp do aparelho, nunca manda nada por conta própria (não existe
+  provedor de envio aqui).
+- Pronto quando: reserva das 20h aparece na mesa a partir das 18h e vira
+  comanda com o cliente ao sentar.
+
+## PRIORIDADE 9 — Marketing automático (0074)
+
+`[PROPOR antes de implementar]` — proposta apresentada com 2 escopos
+possíveis (banco identifica e um humano clica, sem custo nem provedor
+externo × envio de verdade sem clique nenhum, via WhatsApp Business
+API/Twilio ou SendGrid, com custo recorrente e escopo de engenharia bem
+maior) e **aprovado o primeiro**: nenhum envio sai sozinho da Vision
+Food — mesma régua de segurança usada em todo o app (ex: wa.me da
+PRIORIDADE 8, que só abre o WhatsApp do aparelho).
+
+Marketing ganhou uma 4ª sub-aba, **Campanhas** (antes de Cupons), mesma
+permissão de sempre (`admin.marketing.editar`) — nenhuma permissão nova.
+
+- **`restaurante.campanhas_hoje()`**: agrega, num call só, quem faz
+  aniversário hoje e quem tem reserva **CONFIRMADA** pra hoje — "hoje" é
+  data de calendário no timezone da empresa (`empresas.timezone`), não
+  `dia_operacional` (aniversário é data de calendário, não "dia de
+  venda"). Só entra na lista quem dá pra contatar de verdade: sem
+  telefone ou sem consentimento LGPD não aparece — diferente de
+  `relatorio_clientes_inativos` (que mantém a linha sem telefone só pro
+  dono saber "quem" parou de vir).
+- Cada linha tem um botão **WhatsApp** (`wa.me` com mensagem pronta —
+  aniversário ou lembrete de reserva) — e **Clientes inativos** (sub-aba
+  já existente) ganhou o mesmo botão, sem nenhuma RPC nova lá.
+- Pronto quando: abro Marketing → Campanhas de manhã e já vejo, prontos
+  pra clicar, quem fazer aniversário e quem tem reserva confirmada hoje.
+
+## PRIORIDADE 10 — Painel pelo celular (manifest.json, sw.js)
+
+App já era responsivo pra celular desde sempre (é o mesmo `index.html`
+usado no QR da mesa, e tem `renderBottomNav` pra Salão/Cozinha/Caixa em
+tela pequena) — o que faltava era dar pra **instalar** de verdade. Dois
+sub-itens do roteiro, dois tratamentos diferentes:
+
+- **PWA instalável** — implementado direto (não tinha `[PROPOR]`).
+  **Achado no caminho**: `main.js` já tinha o registro de
+  `navigator.serviceWorker.register("/sw.js")` desde a "Fase 3.5" (e
+  `sw.js` existia num commit antigo, com a mesma estratégia), mas o
+  arquivo tinha sumido do diretório de trabalho — o registro vinha
+  falhando em silêncio (só um `console.error`) até alguém notar.
+  Recriado `sw.js` (estratégia
+  **sempre network-first**, nunca cache-first: o app está em
+  desenvolvimento ativo, schema muda toda semana — servir JS velho do
+  cache por padrão podia rodar lógica desatualizada contra um banco novo
+  sem ninguém perceber; o cache só entra como fallback quando a rede
+  falha de verdade, e só pra arquivo estático do próprio site, nunca pra
+  chamada da Supabase) e `manifest.json` (reaproveita
+  `vision-food-icon.png`/`vision-food-favicon.png`, já usados no
+  sidebar/favicon) — "Adicionar à tela inicial" no celular do dono agora
+  funciona de verdade.
+- **Notificações** `[PROPOR]` — proposta com 3 níveis (nenhuma novidade
+  além da instalação × notificação só com o app aberto, reaproveitando o
+  Realtime que o app já usa em tudo × push de verdade com app
+  fechado/bloqueado, que exigiria a primeira Edge Function do projeto —
+  infra nova, chave VAPID, tabela de inscrição, novo passo de deploy) e
+  **aprovado o nível do meio**. Botão de sino no topbar (`icon-btn` ao
+  lado do sino de alertas — qualquer papel vê, é preferência por
+  **aparelho**, salva em `localStorage`, mesmo padrão de
+  `caixaTerminalNome`, não por conta de quem logou nele) pede permissão
+  do navegador e liga `notificarSeAtivo()`. Dois gatilhos, escolhidos por
+  serem raros e exigirem decisão humana que pode passar batido com a tela
+  de Salão fechada: **pedido pelo QR** aguardando aprovação e
+  **pagamento offline em conflito** (`sync_conflitos`, que ganhou
+  assinatura Realtime nova — antes só carregava uma vez em
+  `carregarTudo`, sem Realtime nenhum). Dispara na hora, direto do
+  payload do Realtime (não espera o `agendarRefresh`, que é
+  *debounced* e pausado com a aba em segundo plano — exatamente quando a
+  notificação mais importa). **Limite assumido**: só funciona com a aba
+  aberta (mesmo em segundo plano); app fechado ou celular bloqueado não
+  recebe nada — push de verdade fica pra quando/se fizer sentido o custo
+  de manter uma Edge Function.
+- Nenhuma RPC nova — PRIORIDADE 10 é 100% front-end, por isso não tem
+  arquivo em `tests/` (a suíte cobre RPC/RLS, não Notification API/Service
+  Worker do navegador).
+- Pronto quando: o dono instala o app no celular pela tela de login, e um
+  pedido novo pelo QR aparece como notificação do sistema mesmo com o
+  app em segundo plano.
+
+## Backlog (registrado, fora do escopo das 10 prioridades)
+
+Itens citados no roteiro original como backlog — só registro aqui, sem
+implementação, até alguém pedir explicitamente cada um:
+
+- **Combos**: produto composto por vários itens com preço próprio
+  (diferente de opções/adicionais, que são variação de UM produto).
+- **Engenharia de cardápio**: cruzar margem × popularidade de cada
+  produto (ex: matriz "estrela/dúvida/abacaxi/vaca leiteira") pra sugerir
+  o que promover, reprecificar ou tirar do cardápio.
+- **Disponibilidade por horário**: produto só aparecer no cardápio (e no
+  QR) em certas janelas (ex: café da manhã até 11h) — hoje só existe
+  esgotado/reativado manual.
+- **Chamar garçom / pedir a conta pelo QR**: hoje o QR só lança pedido
+  pendente de aprovação (PRIORIDADE 8 trouxe reserva/fila pro salão
+  presencial, não pro QR) — um botão "chamar garçom"/"fechar a conta"
+  direto do celular do cliente ainda não existe.
+- **Pré-conta / cortesia**: imprimir/mostrar a conta sem fechar de
+  verdade (cliente conferir antes de pagar), e marcar item/conta como
+  cortesia (sem cobrar, sem contar como desconto).
+- **Delivery kanban**: hoje delivery é só mais um tipo de comanda; um
+  quadro por etapa (preparando → saiu pra entrega → entregue), com tempo
+  por etapa, não existe.
+- **Conciliação de maquininha**: hoje a taxa é configurada manualmente
+  (Configurações → Taxas das maquininhas) e aplicada na hora do
+  pagamento; bater automaticamente contra o extrato real da operadora
+  (importar arquivo/API) não existe.
+- **Relatório por canal**: separar faturamento por canal (salão × QR ×
+  delivery × balcão/ficha) — hoje os relatórios somam tudo junto.
+- **Anomalias na Auditoria**: hoje a Auditoria só lista o que aconteceu;
+  destacar sozinho padrão fora do normal (ex: mesmo usuário cancelando
+  muito mais que a média) não existe.
+- **Avaliações / NPS**: pedir nota/comentário do cliente depois da visita
+  (ex: por WhatsApp, reaproveitando o `wa.me` da PRIORIDADE 8/9) — não
+  implementado.
+- **Impressão por setor** (impressoras térmicas, sem diálogo do
+  navegador): proposta já escrita, aguardando aprovação — ver
+  [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
+
 ## Onboarding de novo restaurante (Fase 4.2)
 
 `restaurante.onboarding_criar_empresa(...)` (migration `0061`) cria
@@ -837,7 +1306,7 @@ select restaurante.onboarding_criar_empresa(
   'Nome do Restaurante',       -- p_nome_empresa
   'slug-do-restaurante',       -- p_slug (só minúscula/número/hífen)
   'Nome do Primeiro Admin',    -- p_nome_admin
-  '1234',                      -- p_pin_admin (4 dígitos)
+  '1A2B',                      -- p_pin_admin (4 caracteres, letras e números)
   10,                          -- p_qtd_mesas (opcional, padrão 10)
   array['Entradas','Pratos Principais','Bebidas','Sobremesas'] -- p_categorias (opcional)
 );
@@ -915,6 +1384,13 @@ de rodar `npm test` pela primeira vez.
   digitação, mesa errada). Tirar essa aprovação (autoatendimento 100%
   automático) é uma mudança de risco real, não implementada até alguém
   pedir explicitamente.
+- **Push de verdade (app fechado/celular bloqueado)**: PRIORIDADE 10
+  implementou só notificação com o app aberto (mesmo em segundo plano,
+  via Realtime) — decisão explícita do dono, não limitação técnica. Push
+  de verdade exigiria a primeira Edge Function do projeto (infra nova,
+  chave VAPID, tabela de inscrição por usuário, novo passo de deploy via
+  Supabase CLI além do SQL Editor) — ver
+  [PRIORIDADE 10](#prioridade-10--painel-pelo-celular-manifestjson-swjs).
 - **Preview de desconto no modal de pagamento não recalcula a taxa de
   serviço sobre a base já descontada**: ao resgatar pontos de fidelidade
   ou aplicar cupom, o Caixa mostra o total como "valor cheio menos o

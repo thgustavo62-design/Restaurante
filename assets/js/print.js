@@ -49,6 +49,24 @@ function buildReciboHtml(comanda){
   '</div>';
 }
 
+// PRIORIDADE 2 — etiqueta de manipulação de um lote produzido internamente
+// (sub-receita): produto, data de produção, validade, responsável.
+function buildEtiquetaProducaoHtml(etiqueta){
+  var largura = state.config.impressoraLargura==="58mm" ? "58mm" : "80mm";
+  return '<div class="receipt-preview" style="width:'+largura+'; max-width:'+largura+';">'+
+    '<div class="center bold receipt-brand">ETIQUETA DE MANIPULAÇÃO</div>'+
+    '<hr>'+
+    '<div class="center bold" style="font-size:14px;">'+escapeHtml(etiqueta.nome)+'</div>'+
+    '<div class="center">'+etiqueta.quantidade+' '+escapeHtml(etiqueta.unidade)+'</div>'+
+    '<hr>'+
+    '<div class="line"><span>Produção</span><span>'+new Date(etiqueta.data_producao).toLocaleString("pt-BR")+'</span></div>'+
+    '<div class="line"><span>Validade</span><span>'+(etiqueta.validade?new Date(etiqueta.validade+"T00:00:00").toLocaleDateString("pt-BR"):"—")+'</span></div>'+
+    '<div class="line"><span>Responsável</span><span>'+escapeHtml(etiqueta.responsavel||"—")+'</span></div>'+
+    '<hr>'+
+    '<div class="center marca-rodape">Vision Food</div>'+
+  '</div>';
+}
+
 function buildFechamentoHtml(sessao){
   var abertura = state.usuarios.find(function(u){ return u.id===sessao.usuarioAbertura; });
   var fechador = state.usuarios.find(function(u){ return u.id===sessao.usuarioFechamento; });

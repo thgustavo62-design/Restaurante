@@ -65,6 +65,19 @@ async function buscarClientesInativos(diasInput){
 // Fase 5 — banner do cardápio público: grava dentro de empresas.config.marketing,
 // mesmo mecanismo de salvarConfig (0045+) — só que mexendo numa chave só,
 // pra não arriscar sobrescrever outras configurações sensíveis sem querer.
+// PRIORIDADE 9 — Campanhas: o banco identifica sozinho quem avisar hoje
+// (aniversariantes, reservas confirmadas) — carregada só quando a sub-aba
+// abre (mesmo padrão lazy da fila de espera, 0073).
+async function carregarCampanhasHoje(){
+  state.campanhasCarregando = true;
+  render();
+  var res = await sb.rpc("campanhas_hoje");
+  state.campanhasCarregando = false;
+  if(res.error){ toast("err","ERRO AO CARREGAR CAMPANHAS", res.error.message); state.campanhasHoje = {aniversariantes:[], reservas_confirmadas:[]}; render(); return; }
+  state.campanhasHoje = res.data;
+  render();
+}
+
 async function salvarMarketingBanner(bannerAtivo, bannerTexto, produtoDestaqueId){
   var novoConfig = Object.assign({}, state.config, {
     marketing: {bannerAtivo: !!bannerAtivo, bannerTexto: bannerTexto.trim(), produtoDestaqueId: produtoDestaqueId||""}

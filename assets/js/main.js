@@ -62,10 +62,53 @@ render();
 if(state.restauranteSlug) carregarUsuariosLogin();
 iniciarRelogioTopbar();
 
+// PRIORIDADE 1 — Central do Dono "atualizada a cada 60s": só refaz a RPC
+// enquanto a tela estiver mesmo aberta (o Realtime em vendas, em data.js,
+// cobre o resto do tempo).
+setInterval(function(){
+  if(state.view==="central" && state.usuarioAtualId) carregarCentralDono();
+}, 60000);
+
 // Fase 3.5 — service worker só cuida do "app shell" (app abrir offline);
 // dado sempre vem do Supabase ou da fila local, nunca de cache de API.
 if("serviceWorker" in navigator){
   window.addEventListener("load", function(){
     navigator.serviceWorker.register("/sw.js").catch(function(e){ console.error("Service worker falhou:", e.message); });
+  });
+}
+
+// PRIORIDADE 10 — notificação do navegador só com o app aberto (reaproveita
+// o Realtime que o app já usa em tudo, nunca um push de verdade — isso
+// exigiria uma Edge Function e infra nova, fora do escopo aprovado agora).
+// Preferência é por dispositivo (localStorage), não por usuário — é o
+// aparelho na mesa/balcão que fica de olho, não a conta de quem logou nele,
+// mesmo padrão de caixaTerminalNome (Fase 1.6).
+(function resolverNotificacoes(){
+  try{
+    var salvo = localStorage.getItem("notificacoesAtivas")==="1";
+    state.notificacoesAtivas = salvo && typeof Notification!=="undefined" && Notification.permission==="granted";
+  }catch(e){}
+})();
+function alternarNotificacoes(){
+  if(state.notificacoesAtivas){
+    state.notificacoesAtivas = false;
+    try{ localStorage.setItem("notificacoesAtivas","0"); }catch(e){}
+    render();
+    return;
+  }
+  if(typeof Notification==="undefined"){ toast("err","NÃO DISPONÍVEL","Este navegador não suporta notificações."); return; }
+  if(Notification.permission==="denied"){
+    toast("err","BLOQUEADO","Notificações foram bloqueadas pra este site nas configurações do navegador.");
+    return;
+  }
+  Notification.requestPermission().then(function(permissao){
+    if(permissao==="granted"){
+      state.notificacoesAtivas = true;
+      try{ localStorage.setItem("notificacoesAtivas","1"); }catch(e){}
+      notificarSeAtivo("Notificações ativadas", "Você vai ser avisado aqui neste aparelho sobre pedido pelo QR aguardando aprovação e pagamento offline pra revisar.", "notificacoes-teste");
+    } else {
+      toast("err","NÃO AUTORIZADO","Permissão de notificação não foi concedida.");
+    }
+    render();
   });
 }

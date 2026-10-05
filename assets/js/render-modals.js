@@ -29,6 +29,17 @@ function renderModal(){
   if(m.type==="mfaSetup") return renderMfaSetupModal(m);
   if(m.type==="clienteForm") return renderClienteFormModal(m);
   if(m.type==="cupomForm") return renderCupomFormModal(m);
+  if(m.type==="receitaSubReceita") return renderReceitaSubReceitaModal(m);
+  if(m.type==="produzirLote") return renderProduzirLoteModal(m);
+  if(m.type==="perdaForm") return renderPerdaFormModal(m);
+  if(m.type==="receberPedidoForm") return renderReceberPedidoFormModal(m);
+  if(m.type==="corrigirPonto") return renderCorrigirPontoModal(m);
+  if(m.type==="remuneracaoForm") return renderRemuneracaoFormModal(m);
+  if(m.type==="valeForm") return renderValeFormModal(m);
+  if(m.type==="despesaRecorrenteForm") return renderDespesaRecorrenteFormModal(m);
+  if(m.type==="reservaForm") return renderReservaFormModal(m);
+  if(m.type==="filaForm") return renderFilaFormModal(m);
+  if(m.type==="sentarForm") return renderSentarFormModal(m);
   return "";
 }
 
@@ -409,6 +420,9 @@ function renderProdutoFormModal(m){
       state.categorias.map(function(c){ return '<option value="'+escapeHtml(c)+'" '+(c===m.categoria?"selected":"")+'>'+escapeHtml(c)+'</option>'; }).join("")+
     '</select></div>'+
     '<div class="field"><label>Ou nova categoria</label><input id="pfNovaCategoria" placeholder="Deixe em branco para usar a de cima"></div>'+
+    '<div class="field"><label>Tempo (Expedição — o que sai junto)</label><select id="pfTempo">'+
+      TEMPOS_SERVICO.map(function(t){ return '<option value="'+t+'" '+(t===m.tempo?"selected":"")+'>'+t+'</option>'; }).join("")+
+    '</select></div>'+
     '<div class="field"><label>Preço (R$)</label><input id="pfPreco" type="number" min="0" step="0.01" value="'+(m.precoCentavos/100).toFixed(2)+'"></div>'+
     '<div class="field"><label>Preço happy hour (R$, opcional)</label><input id="pfPrecoHappyHour" type="number" min="0" step="0.01" value="'+(m.precoHappyHourCentavos!=null?(m.precoHappyHourCentavos/100).toFixed(2):"")+'" placeholder="Deixe em branco pra não ter preço especial"></div>'+
     '<div class="field"><label>Setor de produção (KDS)</label><select id="pfSetorProducao">'+
@@ -440,12 +454,20 @@ function renderInsumoMovModal(m){
   '</div></div>';
 }
 
+var DIAS_SEMANA_CURTO = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
 function renderFornecedorFormModal(m){
   return '<div class="modal-overlay"><div class="modal-box">'+
-    '<h2>Novo fornecedor</h2>'+
-    '<div class="field"><label>Nome</label><input id="fnNome" placeholder="Ex: Distribuidora Boi Bom"></div>'+
-    '<div class="field"><label>Contato</label><input id="fnContato" placeholder="Nome do representante"></div>'+
-    '<div class="field" style="margin-bottom:0;"><label>Telefone</label><input id="fnTelefone" placeholder="(00) 00000-0000"></div>'+
+    '<h2>'+(m.fornecedorId?"Editar fornecedor":"Novo fornecedor")+'</h2>'+
+    '<div class="field"><label>Nome</label><input id="fnNome" value="'+escapeHtml(m.nome||"")+'" placeholder="Ex: Distribuidora Boi Bom"></div>'+
+    '<div class="field"><label>Contato</label><input id="fnContato" value="'+escapeHtml(m.contato||"")+'" placeholder="Nome do representante"></div>'+
+    '<div class="field"><label>Telefone</label><input id="fnTelefone" value="'+escapeHtml(m.telefone||"")+'" placeholder="(00) 00000-0000"></div>'+
+    '<div style="display:flex; gap:10px;">'+
+      '<div class="field" style="flex:1;"><label>Prazo de entrega (dias)</label><input id="fnPrazoEntrega" type="number" min="1" step="1" value="'+(m.prazoEntregaDias||"")+'" placeholder="Ex: 3"></div>'+
+      '<div class="field" style="flex:1; margin-bottom:0;"><label>Dia de entrega</label><select id="fnDiaEntrega">'+
+        '<option value="">Sem dia fixo</option>'+
+        DIAS_SEMANA_CURTO.map(function(d,idx){ return '<option value="'+idx+'" '+(m.diaEntregaSemana===idx?"selected":"")+'>'+d+'</option>'; }).join("")+
+      '</select></div>'+
+    '</div>'+
     (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row" style="margin-top:14px;">'+
       '<button class="btn btn-ghost" data-action="fornecedor-form-cancelar">Cancelar</button>'+
@@ -487,6 +509,148 @@ function renderPedidoCompraFormModal(m){
   '</div></div>';
 }
 
+// PRIORIDADE 4 — conferência no recebimento: pedido vs recebido lado a
+// lado, editável, antes de confirmar (a baixa de estoque usa o recebido).
+function renderReceberPedidoFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box" style="max-width:560px;">'+
+    '<h2>Receber pedido — conferência</h2>'+
+    '<div class="modal-sub">Confira a quantidade e o preço que chegaram de verdade. Diferente do pedido entra registrado na auditoria.</div>'+
+    m.itens.map(function(it, idx){
+      return '<div class="card" style="padding:10px 12px; margin-bottom:8px;">'+
+        '<div style="font-weight:700; font-size:12.5px; margin-bottom:6px;">'+escapeHtml(it.nome)+'</div>'+
+        '<div style="display:flex; gap:10px;">'+
+          '<div class="field" style="flex:1; margin-bottom:0;"><label>Pedido: '+it.quantidadePedida+' '+escapeHtml(it.unidade)+'</label>'+
+            '<input type="number" min="0" step="0.01" value="'+it.quantidadeRecebida+'" data-action="receberpedido-qtd" data-idx="'+idx+'" placeholder="Qtd. recebida"></div>'+
+          '<div class="field" style="flex:1; margin-bottom:0;"><label>Preço pedido: '+(it.precoUnitPedidoCentavos!=null?brl(it.precoUnitPedidoCentavos):"—")+'</label>'+
+            '<input type="number" min="0" step="0.01" value="'+(it.precoUnitRecebidoCentavos!=null?(it.precoUnitRecebidoCentavos/100).toFixed(2):"")+'" data-action="receberpedido-preco" data-idx="'+idx+'" placeholder="Preço recebido"></div>'+
+        '</div>'+
+      '</div>';
+    }).join("")+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:10px;">'+
+      '<button class="btn btn-ghost" data-action="receberpedido-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="receberpedido-confirmar" '+(m.salvando?"disabled":"")+'>Confirmar recebimento</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+// PRIORIDADE 5 — Controle de Equipe.
+function renderCorrigirPontoModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Corrigir ponto</h2>'+
+    '<div class="field"><label>Data/hora corrigida</label><input type="datetime-local" value="'+escapeHtml(m.novoRegistradoEmInput||"")+'" data-action="corrigirponto-data"></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Motivo</label><textarea data-action="corrigirponto-motivo" placeholder="Ex: esqueceu de bater, terminal travou">'+escapeHtml(m.motivo||"")+'</textarea></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="corrigirponto-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="corrigirponto-confirmar">Salvar correção</button>'+
+    '</div>'+
+  '</div></div>';
+}
+function renderRemuneracaoFormModal(m){
+  var u = state.usuarios.find(function(x){ return x.id===m.usuarioId; });
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Remuneração — '+escapeHtml(u?u.nome:"")+'</h2>'+
+    '<div class="modal-sub">Visível só pra ADMIN.</div>'+
+    '<div class="field"><label>Tipo</label><select id="remTipo">'+
+      '<option value="MENSAL" '+(m.tipo==="MENSAL"?"selected":"")+'>Mensal</option>'+
+      '<option value="DIARIA" '+(m.tipo==="DIARIA"?"selected":"")+'>Diária</option>'+
+    '</select></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Valor (R$)</label><input id="remValor" type="number" min="0" step="0.01" value="'+escapeHtml(m.valor||"")+'" placeholder="0,00"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="remuneracao-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="remuneracao-salvar">Salvar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+// PRIORIDADE 7 — Financeiro simples.
+function renderDespesaRecorrenteFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>'+(m.despesaId?"Editar despesa fixa":"Nova despesa fixa")+'</h2>'+
+    '<div class="field"><label>Descrição</label><input id="drDescricao" value="'+escapeHtml(m.descricao||"")+'" placeholder="Ex: Aluguel"></div>'+
+    '<div class="field"><label>Categoria</label><input id="drCategoria" value="'+escapeHtml(m.categoria||"")+'" placeholder="Contas fixas"></div>'+
+    '<div style="display:flex; gap:10px;">'+
+      '<div class="field" style="flex:1;"><label>Valor (R$)</label><input id="drValor" type="number" min="0" step="0.01" value="'+escapeHtml(m.valor||"")+'" placeholder="0,00"></div>'+
+      '<div class="field" style="flex:1;"><label>Dia do vencimento</label><input id="drDiaVencimento" type="number" min="1" max="28" step="1" value="'+m.diaVencimento+'"></div>'+
+    '</div>'+
+    (m.despesaId ? '<label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; cursor:pointer;"><input type="checkbox" id="drAtivo" '+(m.ativo?"checked":"")+'> Ativa (gera conta todo mês)</label>' : '')+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="despesa-recorrente-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="despesa-recorrente-salvar">Salvar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+function renderValeFormModal(m){
+  var u = state.usuarios.find(function(x){ return x.id===m.usuarioId; });
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Vale/adiantamento — '+escapeHtml(u?u.nome:"")+'</h2>'+
+    '<div class="field"><label>Valor (R$)</label><input id="valeValor" type="number" min="0" step="0.01" value="'+escapeHtml(m.valor||"")+'" placeholder="0,00"></div>'+
+    '<div class="field"><label>Motivo</label><input id="valeMotivo" value="'+escapeHtml(m.motivo||"")+'" placeholder="Ex: adiantamento quinzena"></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Data</label><input id="valeData" type="date" value="'+escapeHtml(m.data||"")+'"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="vale-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="vale-confirmar">Registrar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+// PRIORIDADE 8 — Reservas / Fila de espera.
+function renderReservaFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Nova reserva</h2>'+
+    '<div class="field"><label>Nome</label><input id="rsNome" value="'+escapeHtml(m.nome)+'" placeholder="Nome do cliente"></div>'+
+    '<div class="field"><label>Telefone</label><input id="rsTelefone" value="'+escapeHtml(m.telefone)+'" placeholder="(00) 00000-0000"></div>'+
+    '<div style="display:flex; gap:10px;">'+
+      '<div class="field" style="flex:1;"><label>Pessoas</label><input id="rsPessoas" type="number" min="1" step="1" value="'+m.pessoas+'"></div>'+
+      '<div class="field" style="flex:2;"><label>Data e hora</label><input id="rsDataHora" type="datetime-local" value="'+(m.dataHoraInput||"")+'"></div>'+
+    '</div>'+
+    '<div class="field"><label>Mesa sugerida (opcional)</label><select id="rsMesaSugerida">'+
+      '<option value="">Nenhuma</option>'+
+      state.mesas.map(function(mesa){ return '<option value="'+mesa.id+'" '+(m.mesaSugeridaId===mesa.id?"selected":"")+'>Mesa '+mesa.numero+'</option>'; }).join("")+
+    '</select></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Observação</label><input id="rsObservacao" value="'+escapeHtml(m.observacao||"")+'" placeholder="Opcional"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="reserva-form-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="reserva-form-salvar">Salvar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+function renderFilaFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Entrar na fila de espera</h2>'+
+    '<div class="field"><label>Nome</label><input id="flNome" value="'+escapeHtml(m.nome)+'" placeholder="Nome do cliente"></div>'+
+    '<div class="field"><label>Telefone</label><input id="flTelefone" value="'+escapeHtml(m.telefone)+'" placeholder="(00) 00000-0000"></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Pessoas</label><input id="flPessoas" type="number" min="1" step="1" value="'+m.pessoas+'"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="fila-form-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="fila-form-salvar">Entrar na fila</button>'+
+    '</div>'+
+  '</div></div>';
+}
+function renderSentarFormModal(m){
+  var livres = state.mesas.filter(function(mesa){ return mesaStatus(mesa.id)==="livre"; });
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Sentar — escolher mesa</h2>'+
+    '<div style="max-height:40vh; overflow-y:auto; margin:10px 0;">'+
+    (livres.length ? livres.map(function(mesa){
+      return '<div class="item" data-action="sentar-mesa-escolher" data-mesa="'+mesa.id+'" style="cursor:pointer;'+(m.mesaId===mesa.id?" background:var(--bg-hover);":"")+'">'+
+        '<div>Mesa '+mesa.numero+'</div><div>'+mesa.capacidade+' lugares</div>'+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nenhuma mesa livre agora.</div>')+
+    '</div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row">'+
+      '<button class="btn btn-ghost" data-action="sentar-form-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="sentar-form-confirmar" '+(m.mesaId?"":"disabled")+'>Sentar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
 function renderRendimentoModal(m){
   var insumo = state.insumos.find(function(i){ return i.id===m.insumoId; });
   return '<div class="modal-overlay"><div class="modal-box">'+
@@ -498,6 +662,81 @@ function renderRendimentoModal(m){
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="rendimento-cancelar">Cancelar</button>'+
       '<button class="btn btn-primary btn-block" data-action="rendimento-confirmar" data-insumo="'+m.insumoId+'">Salvar medição</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+// PRIORIDADE 2 — receita de uma sub-receita (insumo → insumo): sempre
+// troca a lista inteira (apaga tudo da sub-receita e grava de novo), mesmo
+// padrão simples que o resto do app usa pra listas pequenas editadas por
+// inteiro em vez de diff linha a linha.
+function renderReceitaSubReceitaModal(m){
+  var insumo = state.insumos.find(function(i){ return i.id===m.insumoId; });
+  var opcoesInsumo = state.insumos.filter(function(i){ return i.id!==m.insumoId; });
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Receita — '+escapeHtml(insumo?insumo.nome:"")+'</h2>'+
+    '<div class="modal-sub">Quanto de cada ingrediente entra pra produzir 1 '+(insumo?insumo.unidade:"")+' — em peso/medida limpa, igual a ficha técnica dos produtos (o rendimento do ingrediente é aplicado automaticamente na hora de produzir).</div>'+
+    m.linhas.map(function(l, idx){
+      return '<div class="pagamento-linha">'+
+        '<select data-action="receita-linha-insumo" data-idx="'+idx+'" style="flex:2;">'+
+          opcoesInsumo.map(function(i){ return '<option value="'+i.id+'" '+(l.insumoIngredienteId===i.id?"selected":"")+'>'+escapeHtml(i.nome)+' ('+i.unidade+')</option>'; }).join("")+
+        '</select>'+
+        '<input type="number" min="0" step="0.01" value="'+(l.quantidade||"")+'" placeholder="Qtd" style="flex:1;" data-action="receita-linha-qtd" data-idx="'+idx+'">'+
+        '<button class="icon-btn" data-action="receita-linha-remover" data-idx="'+idx+'" style="color:var(--danger);">'+icon("x",14)+'</button>'+
+      '</div>';
+    }).join("")+
+    '<button class="btn btn-sm" style="margin-top:8px;" data-action="receita-linha-adicionar">'+icon("plus",14)+' Adicionar ingrediente</button>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="receita-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="receita-salvar">Salvar receita</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+// PRIORIDADE 3 — registrar perda manual (insumo OU prato); o valor em R$
+// nunca é calculado aqui — o servidor calcula pelo custo médio/CMV e
+// devolve só pra exibir depois de salvar.
+var MOTIVOS_PERDA_MANUAL = [["VENCEU","Venceu"],["ESTRAGOU","Estragou"],["QUEIMOU","Queimou"],["CAIU","Caiu"],
+  ["DEVOLVIDO","Devolvido"],["ERRO_PEDIDO","Erro de pedido"],["SOBRA","Sobra"]];
+function renderPerdaFormModal(m){
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Registrar perda</h2>'+
+    '<div class="field"><label>O que foi perdido</label><select data-action="perda-tipo">'+
+      '<option value="INSUMO" '+(m.tipo==="INSUMO"?"selected":"")+'>Insumo (ex: picanha vencida)</option>'+
+      '<option value="PRATO" '+(m.tipo==="PRATO"?"selected":"")+'>Prato pronto (ex: sobra do dia)</option>'+
+    '</select></div>'+
+    (m.tipo==="INSUMO" ?
+      '<div class="field"><label>Insumo</label><select data-action="perda-insumo">'+
+        state.insumos.map(function(i){ return '<option value="'+i.id+'" '+(m.insumoId===i.id?"selected":"")+'>'+escapeHtml(i.nome)+' ('+i.unidade+')</option>'; }).join("")+
+      '</select></div>'
+      :
+      '<div class="field"><label>Produto</label><select data-action="perda-produto">'+
+        state.produtos.map(function(p){ return '<option value="'+p.id+'" '+(m.produtoId===p.id?"selected":"")+'>'+escapeHtml(p.nome)+'</option>'; }).join("")+
+      '</select></div>')+
+    '<div class="field"><label>Quantidade</label><input id="perdaQuantidade" type="number" min="0" step="0.01" value="'+(m.quantidade||"")+'" placeholder="0"></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Motivo</label><select data-action="perda-motivo">'+
+      MOTIVOS_PERDA_MANUAL.map(function(mt){ return '<option value="'+mt[0]+'" '+(m.motivo===mt[0]?"selected":"")+'>'+mt[1]+'</option>'; }).join("")+
+    '</select></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="perda-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="perda-confirmar">Registrar</button>'+
+    '</div>'+
+  '</div></div>';
+}
+
+function renderProduzirLoteModal(m){
+  var insumo = state.insumos.find(function(i){ return i.id===m.insumoId; });
+  return '<div class="modal-overlay"><div class="modal-box">'+
+    '<h2>Produzir lote — '+escapeHtml(insumo?insumo.nome:"")+'</h2>'+
+    '<div class="modal-sub">Baixa os ingredientes da receita e dá entrada em '+(insumo?insumo.unidade:"")+' de '+escapeHtml(insumo?insumo.nome:"")+', já com o custo médio recalculado.</div>'+
+    '<div class="field"><label>Quantidade produzida</label><input id="plQuantidade" type="number" min="0" step="0.01" value="'+(m.quantidade||"")+'" placeholder="Ex: 5"></div>'+
+    '<div class="field" style="margin-bottom:0;"><label>Validade do lote (opcional, pra etiqueta)</label><input id="plValidade" type="date" value="'+(m.validade||"")+'"></div>'+
+    (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
+    '<div class="action-row" style="margin-top:14px;">'+
+      '<button class="btn btn-ghost" data-action="produzir-lote-cancelar">Cancelar</button>'+
+      '<button class="btn btn-primary btn-block" data-action="produzir-lote-confirmar" data-insumo="'+m.insumoId+'">Produzir e imprimir etiqueta</button>'+
     '</div>'+
   '</div></div>';
 }
@@ -523,7 +762,7 @@ function renderUsuarioFormModal(m){
     '<h2>Novo usuário</h2>'+
     '<div class="field"><label>Nome</label><input id="ufNome" placeholder="Nome do funcionário"></div>'+
     '<div class="field"><label>Papel</label><select id="ufPapel">'+papeis.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join("")+'</select></div>'+
-    '<div class="field"><label>PIN (4 dígitos)</label><input id="ufPin" maxlength="4" placeholder="Ex: 1234"></div>'+
+    '<div class="field"><label>PIN ('+PIN_LEN+' caracteres — letras e números)</label><input id="ufPin" maxlength="'+PIN_LEN+'" placeholder="Ex: 1A2B"></div>'+
     (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="usuario-form-cancelar">Cancelar</button>'+
@@ -535,9 +774,9 @@ function renderUsuarioFormModal(m){
 function renderTrocarPinModal(m){
   return '<div class="modal-overlay"><div class="modal-box">'+
     '<h2>Trocar PIN — '+escapeHtml(m.nome)+'</h2>'+
-    '<div class="modal-sub">O funcionário passa a entrar com o novo PIN imediatamente.</div>'+
-    '<div class="field"><label>Novo PIN (4 dígitos)</label><input id="tpNovoPin" maxlength="4" inputmode="numeric" placeholder="Ex: 1234"></div>'+
-    '<div class="field"><label>Confirmar novo PIN</label><input id="tpConfirmarPin" maxlength="4" inputmode="numeric" placeholder="Repita o PIN"></div>'+
+    '<div class="modal-sub">O funcionário passa a entrar com o novo PIN imediatamente. PIN agora aceita letras e números.</div>'+
+    '<div class="field"><label>Novo PIN ('+PIN_LEN+' caracteres)</label><input id="tpNovoPin" type="password" maxlength="'+PIN_LEN+'" placeholder="Ex: 1A2B"></div>'+
+    '<div class="field"><label>Confirmar novo PIN</label><input id="tpConfirmarPin" type="password" maxlength="'+PIN_LEN+'" placeholder="Repita o PIN"></div>'+
     (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="trocarpin-cancelar">Cancelar</button>'+
@@ -546,16 +785,11 @@ function renderTrocarPinModal(m){
   '</div></div>';
 }
 
-function pinPadHtml(buffer, actionDigit, actionBack){
-  var dots = "";
-  for(var i=0;i<PIN_LEN;i++) dots += '<div class="pin-dot '+(i<buffer.length?"filled":"")+'"></div>';
-  var keys = ["1","2","3","4","5","6","7","8","9","","0","back"];
-  return '<div class="pin-dots">'+dots+'</div>'+
-    '<div class="pinpad">'+keys.map(function(k){
-      if(k==="") return '<span></span>';
-      if(k==="back") return '<button data-action="'+actionBack+'">'+icon("arrowLeft",16)+'</button>';
-      return '<button data-action="'+actionDigit+'" data-d="'+k+'">'+k+'</button>';
-    }).join("")+'</div>';
+// PIN agora é alfanumérico — campo de texto comum (igual senha do login),
+// não mais o teclado numérico de 0-9 (pinPadHtml, removido) que não
+// deixava digitar letra.
+function pinInputHtml(buffer, actionInput){
+  return '<input type="password" style="text-align:center; font-size:18px; letter-spacing:4px;" maxlength="'+PIN_LEN+'" value="'+escapeHtml(buffer||"")+'" data-action="'+actionInput+'" placeholder="PIN" autocomplete="off">';
 }
 
 function selectSupervisorHtml(permissao, supervisorId, dataAction){
@@ -572,9 +806,12 @@ function renderSupervisorRpcModal(m){
   return '<div class="modal-overlay"><div class="modal-box" style="text-align:center;">'+
     '<h2>Autorização de supervisor</h2><div class="modal-sub">'+escapeHtml(m.motivo)+'</div>'+
     selectSupervisorHtml(m.permissao, m.supervisorId, "supervisor-rpc-select")+
-    pinPadHtml(m.buffer, "supervisor-rpc-digit", "supervisor-rpc-back")+
+    '<div class="field"><label>PIN do supervisor</label>'+pinInputHtml(m.buffer, "supervisor-rpc-pin-input")+'</div>'+
     '<div class="pin-error">'+escapeHtml(m.error||"")+'</div>'+
-    '<div style="margin-top:12px;"><button class="btn btn-ghost" data-action="supervisor-rpc-cancel">Cancelar</button></div>'+
+    '<div class="action-row">'+
+      '<button class="btn btn-ghost" data-action="supervisor-rpc-cancel">Cancelar</button>'+
+      '<button class="btn btn-primary" data-action="supervisor-rpc-confirmar" '+(m.verificando?"disabled":"")+'>Confirmar</button>'+
+    '</div>'+
   '</div></div>';
 }
 
@@ -585,10 +822,12 @@ function renderCancelarItemModal(m){
     '<div class="modal-sub" style="margin-bottom:6px;">Esta ação será registrada na auditoria.</div>'+
     '<div class="field"><label>Motivo</label><textarea id="cancelarMotivoInput" data-action="cancelar-motivo" placeholder="Ex: pedido em duplicidade">'+escapeHtml(m.motivo)+'</textarea></div>'+
     selectSupervisorHtml(PERM.ITEM_CANCELAR, m.supervisorId, "cancelaritem-supervisor")+
-    '<div class="field" style="margin-bottom:6px;"><label>PIN do supervisor</label></div>'+
-    pinPadHtml(m.buffer, "cancelaritem-digit", "cancelaritem-back")+
+    '<div class="field"><label>PIN do supervisor</label>'+pinInputHtml(m.buffer, "cancelaritem-pin-input")+'</div>'+
     '<div class="pin-error">'+escapeHtml(m.error||"")+'</div>'+
-    '<div class="action-row"><button class="btn btn-ghost btn-block" data-action="cancelaritem-voltar">Voltar</button></div>'+
+    '<div class="action-row">'+
+      '<button class="btn btn-ghost" data-action="cancelaritem-voltar">Voltar</button>'+
+      '<button class="btn btn-danger" data-action="cancelaritem-confirmar" '+(m.verificando?"disabled":"")+'>Cancelar item</button>'+
+    '</div>'+
   '</div></div>';
 }
 

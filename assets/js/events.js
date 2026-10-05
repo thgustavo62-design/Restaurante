@@ -49,6 +49,7 @@ function bindEvents(){
       render();
       garantirSubAbaCarregada(el.dataset.view);
       if(el.dataset.view==="configuracoes") carregarMfaFactors();
+      if(el.dataset.view==="central") carregarCentralDono();
       return;
     }
     if(action==="qrcode-imprimir"){ imprimirQrCodeMesa(el.dataset.mesa); return; }
@@ -144,8 +145,7 @@ function bindEvents(){
     if(action==="comanda-juntar-abrir"){ abrirJuntarMesas(el.dataset.comanda); return; }
     if(action==="juntarmesas-cancelar"){ state.modal=null; render(); return; }
     if(action==="juntarmesas-confirmar"){ confirmarJuntarMesas(); return; }
-    if(action==="cancelaritem-digit"){ cancelarItemDigit(el.dataset.d); return; }
-    if(action==="cancelaritem-back"){ state.modal.buffer = state.modal.buffer.slice(0,-1); render(); return; }
+    if(action==="cancelaritem-confirmar"){ confirmarCancelarItem(); return; }
     if(action==="cancelaritem-voltar"){ state.modal = null; render(); return; }
 
     if(action==="desconto-abrir"){ state.modal={type:"desconto", comandaId:state.viewParams.comandaId}; render(); return; }
@@ -156,8 +156,7 @@ function bindEvents(){
       return;
     }
 
-    if(action==="supervisor-rpc-digit"){ supervisorRpcDigit(el.dataset.d); return; }
-    if(action==="supervisor-rpc-back"){ state.modal.buffer = state.modal.buffer.slice(0,-1); render(); return; }
+    if(action==="supervisor-rpc-confirmar"){ confirmarSupervisorRpc(); return; }
     if(action==="supervisor-rpc-cancel"){ state.modal=null; render(); return; }
 
     if(action==="fechar-conta-abrir"){ abrirFecharConta(state.viewParams.comandaId); return; }
@@ -188,12 +187,14 @@ function bindEvents(){
 
     if(action==="kds-set"){ kdsSetStatus(el.dataset.comanda, el.dataset.item, el.dataset.status); return; }
     if(action==="kds-avancar-ticket"){ kdsAvancarTicket(el.dataset.comanda, el.dataset.itens.split(","), el.dataset.status); return; }
+    if(action==="expedicao-liberar"){ kdsAvancarTicket(el.dataset.comanda, el.dataset.itens.split(","), "ENTREGUE"); return; }
     if(action==="kds-filtro"){ state.kdsSetorFiltro = el.dataset.f; render(); return; }
     if(action==="kds-som-toggle"){
       state.kdsSomAtivo = !state.kdsSomAtivo;
       if(state.kdsSomAtivo) tocarBipKds();
       render(); return;
     }
+    if(action==="notificacoes-toggle"){ alternarNotificacoes(); return; }
 
     if(action==="caixa-abrir-confirmar"){
       var v = document.getElementById("saldoInicialInput").value;
@@ -265,7 +266,8 @@ function bindEvents(){
       var fotoUrl = document.getElementById("pfFotoUrl").value;
       var happyVal = document.getElementById("pfPrecoHappyHour").value;
       var precoHappyHour = happyVal.trim()==="" ? null : Math.round(parseFloat(happyVal)*100);
-      salvarProduto(el.dataset.produto||null, nome, categoria, preco, setorProducao, fotoUrl, precoHappyHour);
+      var tempo = document.getElementById("pfTempo").value;
+      salvarProduto(el.dataset.produto||null, nome, categoria, preco, setorProducao, fotoUrl, precoHappyHour, tempo);
       return;
     }
 
@@ -282,13 +284,16 @@ function bindEvents(){
       confirmarInsumoMov(el.dataset.tipo, insumoId, qtd, motivo);
       return;
     }
-    if(action==="fornecedor-novo"){ state.modal={type:"fornecedorForm", erro:""}; render(); return; }
+    if(action==="fornecedor-novo"){ abrirFornecedorForm(null); return; }
+    if(action==="fornecedor-editar"){ abrirFornecedorForm(el.dataset.fornecedor); return; }
     if(action==="fornecedor-form-cancelar"){ state.modal=null; render(); return; }
     if(action==="fornecedor-form-salvar"){
       var fnNome = document.getElementById("fnNome").value;
       var fnContato = document.getElementById("fnContato").value;
       var fnTelefone = document.getElementById("fnTelefone").value;
-      salvarFornecedor(fnNome, fnContato, fnTelefone);
+      var fnPrazo = parseFloat(document.getElementById("fnPrazoEntrega").value||"0");
+      var fnDia = document.getElementById("fnDiaEntrega").value;
+      salvarFornecedor(fnNome, fnContato, fnTelefone, fnPrazo, fnDia);
       return;
     }
     if(action==="fornecedor-toggle-ativo"){ toggleFornecedorAtivo(el.dataset.fornecedor); return; }
@@ -305,7 +310,20 @@ function bindEvents(){
     if(action==="pedido-compra-item-remover"){ pedidoCompraRemoverItem(parseInt(el.dataset.idx,10)); return; }
     if(action==="pedido-compra-criar"){ criarPedidoCompra(); return; }
     if(action==="pedido-compra-marcar-realizado"){ marcarPedidoCompraRealizado(el.dataset.pedido); return; }
-    if(action==="pedido-compra-receber"){ receberPedidoCompra(el.dataset.pedido); return; }
+    if(action==="pedido-compra-receber"){ abrirReceberPedido(el.dataset.pedido); return; }
+    if(action==="receberpedido-cancelar"){ state.modal=null; render(); return; }
+    if(action==="receberpedido-confirmar"){ confirmarReceberPedido(); return; }
+
+    if(action==="lista-compras-gerar-pedido"){
+      var grupo = state.listaComprasSugerida[parseInt(el.dataset.grupoIdx,10)];
+      abrirPedidoCompraDaSugestao(grupo.fornecedor_id||null, grupo.itens);
+      return;
+    }
+    if(action==="cotacao-toggle-fornecedor"){ cotacaoToggleFornecedor(el.dataset.fornecedor); return; }
+    if(action==="cotacao-linha-adicionar"){ cotacaoLinhaAdicionar(); return; }
+    if(action==="cotacao-linha-remover"){ cotacaoLinhaRemover(parseInt(el.dataset.idx,10)); return; }
+    if(action==="cotacao-importar-lista"){ cotacaoImportarListaCompras(); return; }
+    if(action==="cotacao-gerar-pedidos"){ gerarPedidosDaCotacao(); return; }
 
     if(action==="rendimento-abrir"){ abrirRendimento(el.dataset.insumo); return; }
     if(action==="rendimento-cancelar"){ state.modal=null; render(); return; }
@@ -313,6 +331,47 @@ function bindEvents(){
       var rdFator = parseFloat(document.getElementById("rdFator").value||"0");
       var rdObs = document.getElementById("rdObservacao").value;
       salvarRendimento(el.dataset.insumo, rdFator, rdObs);
+      return;
+    }
+
+    // PRIORIDADE 2 — sub-receita (ficha própria) e produção de lote.
+    if(action==="receita-abrir"){ abrirReceitaSubReceita(el.dataset.insumo); return; }
+    if(action==="receita-cancelar"){ state.modal=null; render(); return; }
+    if(action==="receita-linha-adicionar"){ receitaLinhaAdicionar(); return; }
+    if(action==="receita-linha-remover"){ receitaLinhaRemover(parseInt(el.dataset.idx,10)); return; }
+    if(action==="receita-salvar"){ salvarReceitaSubReceita(); return; }
+
+    if(action==="produzir-lote-abrir"){
+      abrirProduzirLote(el.dataset.insumo, el.dataset.sugerido ? parseFloat(el.dataset.sugerido) : null);
+      return;
+    }
+    if(action==="produzir-lote-cancelar"){ state.modal=null; render(); return; }
+    if(action==="produzir-lote-confirmar"){
+      var plQuantidade = parseFloat(document.getElementById("plQuantidade").value||"0");
+      var plValidade = document.getElementById("plValidade").value;
+      confirmarProduzirLote(el.dataset.insumo, plQuantidade, plValidade);
+      return;
+    }
+
+    if(action==="pre-preparo-marcar"){ marcarPrePreparoFeito(el.dataset.checklist, el.dataset.feito==="true"); return; }
+    if(action==="producao-recalcular"){
+      var ajuste = parseFloat(document.getElementById("producaoAjustePct").value||"0");
+      recalcularChecklistPreProducao(ajuste);
+      return;
+    }
+
+    // PRIORIDADE 3 — Perdas e Desperdícios.
+    if(action==="perdas-periodo"){
+      state.perdasPeriodo = el.dataset.p;
+      render();
+      carregarPerdas(el.dataset.p);
+      return;
+    }
+    if(action==="perda-abrir"){ abrirPerdaForm(); return; }
+    if(action==="perda-cancelar"){ state.modal=null; render(); return; }
+    if(action==="perda-confirmar"){
+      var perdaQuantidade = parseFloat(document.getElementById("perdaQuantidade").value||"0");
+      confirmarPerda(perdaQuantidade);
       return;
     }
 
@@ -397,6 +456,78 @@ function bindEvents(){
       return;
     }
 
+    // PRIORIDADE 5 — Controle de Equipe.
+    if(action==="escala-salvar"){ salvarEscalaUsuario(el.dataset.usuario); return; }
+    if(action==="ponto-bater"){ baterPonto(el.dataset.tipo); return; }
+    if(action==="ponto-corrigir-abrir"){ abrirCorrigirPonto(el.dataset.ponto); return; }
+    if(action==="corrigirponto-cancelar"){ state.modal=null; render(); return; }
+    if(action==="corrigirponto-confirmar"){ confirmarCorrigirPonto(); return; }
+    if(action==="desempenho-periodo"){ state.desempenhoPeriodo = el.dataset.p; render(); carregarDesempenhoEquipe(el.dataset.p); return; }
+    if(action==="remuneracao-abrir"){ abrirRemuneracaoForm(el.dataset.usuario); return; }
+    if(action==="remuneracao-cancelar"){ state.modal=null; render(); return; }
+    if(action==="remuneracao-salvar"){
+      var remTipo = document.getElementById("remTipo").value;
+      var remValor = document.getElementById("remValor").value;
+      salvarRemuneracao(state.modal.usuarioId, remTipo, remValor);
+      return;
+    }
+    if(action==="vale-abrir"){ abrirValeForm(el.dataset.usuario); return; }
+    if(action==="vale-cancelar"){ state.modal=null; render(); return; }
+    if(action==="vale-confirmar"){
+      var valeValor = document.getElementById("valeValor").value;
+      var valeMotivo = document.getElementById("valeMotivo").value;
+      var valeData = document.getElementById("valeData").value;
+      confirmarVale(state.modal.usuarioId, valeValor, valeMotivo, valeData);
+      return;
+    }
+    if(action==="fechamento-recalcular"){ carregarFechamentoEquipe(); return; }
+
+    // PRIORIDADE 7 — Financeiro simples.
+    if(action==="despesa-recorrente-nova"){ abrirDespesaRecorrenteForm(null); return; }
+    if(action==="despesa-recorrente-editar"){ abrirDespesaRecorrenteForm(el.dataset.despesa); return; }
+    if(action==="despesa-recorrente-cancelar"){ state.modal=null; render(); return; }
+    if(action==="despesa-recorrente-salvar"){
+      var drDescricao = document.getElementById("drDescricao").value;
+      var drCategoria = document.getElementById("drCategoria").value;
+      var drValor = document.getElementById("drValor").value;
+      var drDia = document.getElementById("drDiaVencimento").value;
+      var drAtivoEl = document.getElementById("drAtivo");
+      var drAtivo = drAtivoEl ? drAtivoEl.checked : true;
+      salvarDespesaRecorrente(state.modal.despesaId, drDescricao, drCategoria, drValor, drDia, drAtivo);
+      return;
+    }
+
+    // PRIORIDADE 8 — Reservas / Fila de espera.
+    if(action==="reserva-nova"){ abrirReservaForm(); return; }
+    if(action==="reserva-confirmar"){ confirmarReserva(el.dataset.reserva); return; }
+    if(action==="reserva-nao-veio"){ reservaNaoVeio(el.dataset.reserva); return; }
+    if(action==="reserva-form-cancelar"){ state.modal=null; render(); return; }
+    if(action==="reserva-form-salvar"){
+      var rsNome = document.getElementById("rsNome").value;
+      var rsTelefone = document.getElementById("rsTelefone").value;
+      var rsPessoas = parseInt(document.getElementById("rsPessoas").value, 10);
+      var rsDataHora = document.getElementById("rsDataHora").value;
+      var rsMesaSugerida = document.getElementById("rsMesaSugerida").value;
+      var rsObservacao = document.getElementById("rsObservacao").value;
+      salvarReserva(rsNome, rsTelefone, rsPessoas, rsDataHora, rsObservacao, rsMesaSugerida);
+      return;
+    }
+    if(action==="fila-nova"){ abrirFilaForm(); return; }
+    if(action==="fila-chamar"){ filaChamar(el.dataset.fila); return; }
+    if(action==="fila-desistiu"){ filaDesistiu(el.dataset.fila); return; }
+    if(action==="fila-form-cancelar"){ state.modal=null; render(); return; }
+    if(action==="fila-form-salvar"){
+      var flNome = document.getElementById("flNome").value;
+      var flTelefone = document.getElementById("flTelefone").value;
+      var flPessoas = parseInt(document.getElementById("flPessoas").value, 10);
+      salvarEntrarFila(flNome, flTelefone, flPessoas);
+      return;
+    }
+    if(action==="sentar-abrir"){ abrirSentarForm(el.dataset.tipo, el.dataset.id, el.dataset.mesaSugerida); return; }
+    if(action==="sentar-mesa-escolher"){ state.modal.mesaId = el.dataset.mesa; state.modal.erro=""; render(); return; }
+    if(action==="sentar-form-cancelar"){ state.modal=null; render(); return; }
+    if(action==="sentar-form-confirmar"){ confirmarSentar(state.modal.mesaId); return; }
+
     if(action==="cardapio-link-copiar"){
       var linkInput = document.getElementById("cfgLinkCardapio");
       if(linkInput && navigator.clipboard){
@@ -451,7 +582,14 @@ function bindEvents(){
           valorPontoCentavos: Math.max(0, Math.round(parseFloat(document.getElementById("cfgValorPonto").value||"0")*100))
         },
         bairrosTaxaEntrega: state.config.bairrosTaxaEntrega,
-        aceitarQrSemTokenAte: document.getElementById("cfgAceitarQrSemTokenAte").value || null
+        aceitarQrSemTokenAte: document.getElementById("cfgAceitarQrSemTokenAte").value || null,
+        metasCentralDono: {
+          cmvPct: Math.max(0, parseFloat(document.getElementById("cfgMetaCmv").value||"0")),
+          perdasPctFaturamento: Math.max(0, parseFloat(document.getElementById("cfgMetaPerdas").value||"0")),
+          custoEquipePct: Math.max(0, parseFloat(document.getElementById("cfgMetaCustoEquipe").value||"0")),
+          diferencaCaixaCentavosMes: Math.max(0, Math.round(parseFloat(document.getElementById("cfgMetaDiferencaCaixaMes").value||"0")*100))
+        },
+        alertaAumentoPrecoInsumoPct: Math.max(0, parseFloat(document.getElementById("cfgAlertaPrecoInsumo").value||"0"))
       });
       return;
     }
@@ -486,6 +624,34 @@ function bindEvents(){
     }
     if(e.target.dataset.action==="bairro-taxa-editar"){ state.config.bairrosTaxaEntrega[e.target.dataset.bairro] = Math.round(parseFloat(e.target.value||"0")*100); return; }
     if(e.target.dataset.action==="insumo-validade"){ salvarValidadeInsumo(e.target.dataset.insumo, e.target.value); return; }
+    if(e.target.dataset.action==="insumo-sub-receita-toggle"){ toggleSubReceita(e.target.dataset.insumo, e.target.checked); return; }
+    if(e.target.dataset.action==="insumo-fornecedor-padrao"){ salvarFornecedorPadraoInsumo(e.target.dataset.insumo, e.target.value); return; }
+    if(e.target.dataset.action==="receberpedido-qtd"){ state.modal.itens[parseInt(e.target.dataset.idx,10)].quantidadeRecebida = parseFloat(e.target.value||"0"); return; }
+    if(e.target.dataset.action==="receberpedido-preco"){ state.modal.itens[parseInt(e.target.dataset.idx,10)].precoUnitRecebidoCentavos = e.target.value===""?null:Math.round(parseFloat(e.target.value)*100); return; }
+    if(e.target.dataset.action==="cotacao-linha-insumo"){ state.cotacao.linhas[parseInt(e.target.dataset.idx,10)].insumoId = e.target.value; return; }
+    if(e.target.dataset.action==="cotacao-linha-qtd"){ state.cotacao.linhas[parseInt(e.target.dataset.idx,10)].quantidade = parseFloat(e.target.value||"0"); return; }
+    if(e.target.dataset.action==="cotacao-linha-preco"){
+      var cl = state.cotacao.linhas[parseInt(e.target.dataset.idx,10)];
+      cl.precos[e.target.dataset.fornecedor] = e.target.value===""?null:Math.round(parseFloat(e.target.value)*100);
+      render();
+      return;
+    }
+    if(e.target.dataset.action==="usuario-peso-rateio"){ salvarPesoRateioUsuario(e.target.dataset.usuario, parseFloat(e.target.value||"1")); return; }
+    if(e.target.dataset.action==="escala-tipo"){ escalaSetTipo(e.target.dataset.usuario, parseInt(e.target.dataset.dia,10), e.target.value); return; }
+    if(e.target.dataset.action==="escala-turno-inicio"){ escalaSetTurnoInicio(e.target.dataset.usuario, parseInt(e.target.dataset.dia,10), e.target.value); return; }
+    if(e.target.dataset.action==="escala-turno-fim"){ escalaSetTurnoFim(e.target.dataset.usuario, parseInt(e.target.dataset.dia,10), e.target.value); return; }
+    if(e.target.dataset.action==="ponto-usuario"){ state.pontoUsuarioId = e.target.value; return; }
+    if(e.target.dataset.action==="corrigirponto-data"){ state.modal.novoRegistradoEmInput = e.target.value; return; }
+    if(e.target.dataset.action==="corrigirponto-motivo"){ state.modal.motivo = e.target.value; return; }
+    if(e.target.dataset.action==="desempenho-mes"){
+      state.desempenhoMes = e.target.value;
+      carregarDesempenhoEquipe("MES");
+      return;
+    }
+    if(e.target.dataset.action==="fechamento-desde"){ state.fechamentoDesde = e.target.value; return; }
+    if(e.target.dataset.action==="fechamento-ate"){ state.fechamentoAte = e.target.value; return; }
+    if(e.target.dataset.action==="receita-linha-insumo"){ state.modal.linhas[parseInt(e.target.dataset.idx,10)].insumoIngredienteId = e.target.value; return; }
+    if(e.target.dataset.action==="receita-linha-qtd"){ state.modal.linhas[parseInt(e.target.dataset.idx,10)].quantidade = parseFloat(e.target.value||"0"); return; }
     if(e.target.dataset.action==="auditoria-filtro-usuario"){ state.auditoriaFiltroUsuario = e.target.value; render(); return; }
     if(e.target.dataset.action==="auditoria-filtro-acao"){ state.auditoriaFiltroAcao = e.target.value; render(); return; }
     if(e.target.dataset.action==="supervisor-rpc-select"){ state.modal.supervisorId = e.target.value; return; }
@@ -496,6 +662,11 @@ function bindEvents(){
       else carregarRelatorio("MES");
       return;
     }
+    if(e.target.dataset.action==="perdas-mes"){ state.perdasMes = e.target.value; carregarPerdas("MES"); return; }
+    if(e.target.dataset.action==="perda-tipo"){ state.modal.tipo = e.target.value; render(); return; }
+    if(e.target.dataset.action==="perda-insumo"){ state.modal.insumoId = e.target.value; return; }
+    if(e.target.dataset.action==="perda-produto"){ state.modal.produtoId = e.target.value; return; }
+    if(e.target.dataset.action==="perda-motivo"){ state.modal.motivo = e.target.value; return; }
     if(e.target.dataset.action==="dre-mes"){ carregarRelatorioDre(e.target.value); return; }
   };
 
@@ -520,6 +691,9 @@ function bindEvents(){
     if(action==="login-usuario-input"){ state.loginUsuarioInput = e.target.value; return; }
     if(action==="login-senha-input"){ state.loginSenhaInput = e.target.value; return; }
     if(action==="login-mfa-codigo"){ state.loginMfaCodigo = e.target.value.replace(/\D/g,"").slice(0,6); return; }
+    if(action==="supervisor-rpc-pin-input"){ supervisorRpcPinInput(e.target.value); return; }
+    if(action==="cancelaritem-pin-input"){ cancelarItemPinInput(e.target.value); return; }
+    if(action==="ponto-pin-input"){ state.pontoPin = e.target.value; state.pontoErro = ""; return; }
   };
 
   app.onkeydown = function(e){
@@ -532,6 +706,8 @@ function bindEvents(){
       e.preventDefault();
       confirmarMfaLogin(document.getElementById("loginMfaCodigoInput").value);
     }
+    if(e.target.dataset.action==="supervisor-rpc-pin-input"){ e.preventDefault(); confirmarSupervisorRpc(); }
+    if(e.target.dataset.action==="cancelaritem-pin-input"){ e.preventDefault(); confirmarCancelarItem(); }
   };
 
   app.ondragstart = function(e){

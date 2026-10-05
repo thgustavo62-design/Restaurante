@@ -19,6 +19,99 @@ function criticidadeDe(acao){
 }
 var CRITICIDADE_CLS = {Alta:"badge-status-critico", Média:"badge-status-atencao", Baixa:"badge-status-ok"};
 
+// PRIORIDADE 1 — Central do Dono: tela nova, primeira depois do login pra
+// ADMIN/GERENTE. Tudo vem pronto de state.centralDono (RPC central_do_dono,
+// carregada em data.js) — nenhuma soma feita aqui, só formatação.
+var ATENCAO_INFO = {
+  ESTOQUE_NEGATIVO: {titulo:"Estoque negativo", detalhe:function(a){ return a.qtd+" insumo(s) com estoque abaixo de zero — possível furo."; }},
+  CONTAS_VENCENDO: {titulo:"Contas a pagar vencendo", detalhe:function(a){ return a.qtd+" conta(s) · "+brl(a.valorCentavos||0)+" no total."; }},
+  DIFERENCA_CAIXA: {titulo:"Diferença no caixa de hoje", detalhe:function(a){ return brl(a.valorCentavos||0)+" de diferença no último fechamento."; }},
+  CONFLITOS_OFFLINE: {titulo:"Conflitos de sincronização", detalhe:function(a){ return a.qtd+" pagamento(s) offline esperando decisão."; }},
+  CANCELAMENTOS_ACIMA_DO_NORMAL: {titulo:"Cancelamentos acima do normal", detalhe:function(a){ return a.qtd+" hoje (média dos últimos 7 dias: "+a.media+")."; }}
+};
+function corSemaforo(valor, meta){
+  if(valor===null || valor===undefined) return "var(--text-muted)";
+  if(valor<=meta) return "var(--success)";
+  if(valor<=meta*1.2) return "var(--warning)";
+  return "var(--danger)";
+}
+function variacaoHtml(pct){
+  if(pct===null || pct===undefined) return '<div class="kpi-caption">sem comparação</div>';
+  var cor = pct>=0 ? "var(--success)" : "var(--danger)";
+  var seta = pct>=0 ? "▲" : "▼";
+  return '<div class="kpi-caption" style="color:'+cor+'; font-weight:700;">'+seta+' '+Math.abs(pct)+'% vs semana passada</div>';
+}
+function renderCentralDono(){
+  var d = state.centralDono;
+  if(!d){
+    return renderPageHeader("target", "Central do Dono", "Entenda o restaurante em 30 segundos")+
+      '<div class="empty-hint">Carregando...</div>';
+  }
+  var h = d.hoje, m = d.mes, s = d.semaforos, sal = d.salao;
+
+  var blocoHoje = '<div class="section-label">Hoje até agora</div>'+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("trendingUp",20)+'</div><div class="kpi-body">'+
+        '<div class="kpi-label">Faturamento</div><div class="kpi-value">'+brl(h.faturamentoCentavos)+'</div>'+variacaoHtml(h.variacaoFaturamentoPct)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("utensils",20)+'</div><div class="kpi-body">'+
+        '<div class="kpi-label">Vendas</div><div class="kpi-value">'+h.vendas+'</div>'+variacaoHtml(h.variacaoVendasPct)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("target",20)+'</div><div class="kpi-body">'+
+        '<div class="kpi-label">Ticket médio</div><div class="kpi-value">'+brl(h.ticketMedioCentavos)+'</div>'+variacaoHtml(h.variacaoTicketPct)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("chart",20)+'</div><div class="kpi-body">'+
+        '<div class="kpi-label">Projeção de fechamento</div><div class="kpi-value">'+brl(h.projecaoFechamentoCentavos)+'</div>'+
+        '<div class="kpi-caption">pelo ritmo das últimas 4 semanas</div></div></div>'+
+    '</div>';
+
+  var blocoMes = '<div class="section-label">Sobrou no mês</div>'+
+    (m.podeVerResultado ?
+      '<div class="card">'+
+        '<div class="metric-grid">'+
+          '<div class="metric-card"><div class="metric-label">Faturamento</div><div class="metric-value small">'+brl(m.faturamentoCentavos)+'</div></div>'+
+          '<div class="metric-card"><div class="metric-label">CMV</div><div class="metric-value small">'+brl(m.cmvCentavos)+'</div></div>'+
+          '<div class="metric-card"><div class="metric-label">Perdas</div><div class="metric-value small">'+brl(m.perdasCentavos)+'</div></div>'+
+          '<div class="metric-card"><div class="metric-label">Despesas</div><div class="metric-value small">'+brl(m.despesasCentavos)+'</div></div>'+
+        '</div>'+
+        '<div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">'+
+          '<div><div class="kpi-label">Resultado estimado do mês</div><div class="kpi-value" style="color:'+(m.resultadoCentavos>=0?"var(--success)":"var(--danger)")+';">'+brl(m.resultadoCentavos)+'</div></div>'+
+          (m.faltaParaCobrirContasCentavos>0 ?
+            '<div style="text-align:right;"><div class="kpi-label">Falta pra cobrir as contas do mês</div><div class="kpi-value" style="color:var(--warning);">'+brl(m.faltaParaCobrirContasCentavos)+'</div></div>'
+            : '<div class="chip" style="background:rgba(34,197,94,.15); color:var(--success); cursor:default;">'+icon("check",14)+' contas do mês cobertas</div>')+
+        '</div>'+
+        (!m.custoEquipeDisponivel ? '<p style="font-size:11px; color:var(--text-muted); margin:10px 0 0;">Custo de equipe ainda não entra nesta conta (chega na Prioridade 5).</p>' : '')+
+      '</div>'
+      : '<div class="empty-hint">Disponível só para ADMIN.</div>')+
+    '<div class="section-label">Semáforos</div>'+
+    '<div class="metric-grid">'+
+      '<div class="metric-card"><div class="metric-label"><span class="status-dot" style="background:'+corSemaforo(s.cmvPct, s.metas.cmvPct)+';"></span> CMV</div>'+
+        '<div class="metric-value small">'+(s.cmvPct!==null?s.cmvPct+"%":"—")+'</div><div style="font-size:11px; color:var(--text-muted);">meta '+s.metas.cmvPct+'%</div></div>'+
+      '<div class="metric-card"><div class="metric-label"><span class="status-dot" style="background:'+corSemaforo(s.perdasPctFaturamento, s.metas.perdasPctFaturamento)+';"></span> Perdas</div>'+
+        '<div class="metric-value small">'+(s.perdasPctFaturamento!==null?s.perdasPctFaturamento+"%":"—")+'</div><div style="font-size:11px; color:var(--text-muted);">meta '+s.metas.perdasPctFaturamento+'%</div></div>'+
+      '<div class="metric-card"><div class="metric-label"><span class="status-dot" style="background:var(--text-muted);"></span> Custo de equipe</div>'+
+        '<div class="metric-value small">—</div><div style="font-size:11px; color:var(--text-muted);">chega na Prioridade 5</div></div>'+
+      '<div class="metric-card"><div class="metric-label"><span class="status-dot" style="background:'+corSemaforo(s.diferencaCaixaCentavosMes, s.metas.diferencaCaixaCentavosMes)+';"></span> Diferença de caixa (mês)</div>'+
+        '<div class="metric-value small">'+brl(s.diferencaCaixaCentavosMes)+'</div><div style="font-size:11px; color:var(--text-muted);">meta '+brl(s.metas.diferencaCaixaCentavosMes)+'</div></div>'+
+    '</div>';
+
+  var blocoAtencao = '<div class="section-label">Precisa da sua atenção</div>'+
+    (d.atencao.length ? d.atencao.map(function(a){
+      var info = ATENCAO_INFO[a.tipo] || {titulo:a.tipo, detalhe:function(){ return ""; }};
+      return '<div class="alert-row danger" data-action="nav-goto" data-view="'+a.view+'" style="cursor:pointer;">'+icon("alert",16)+
+        '<div style="flex:1;"><span class="t">'+escapeHtml(info.titulo)+'</span><span class="d">'+escapeHtml(info.detalhe(a))+'</span></div>'+
+        icon("chevronRight",16)+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nada precisando de atenção agora.</div>');
+
+  var blocoSalao = '<div class="section-label">Agora no salão</div>'+
+    '<div class="metric-grid">'+
+      '<div class="metric-card"><div class="metric-label">Mesas ocupadas</div><div class="metric-value small">'+sal.mesasOcupadas+' / '+sal.mesasTotal+'</div></div>'+
+      '<div class="metric-card"><div class="metric-label">Pedidos atrasados na cozinha</div><div class="metric-value small" style="color:'+(sal.pedidosAtrasadosCozinha>0?"var(--danger)":"var(--success)")+';">'+sal.pedidosAtrasadosCozinha+'</div></div>'+
+      '<div class="metric-card"><div class="metric-label">Caixa</div><div class="metric-value small" style="color:'+(sal.caixasAbertos>0?"var(--success)":"var(--danger)")+';">'+(sal.caixasAbertos>0?"ABERTO":"FECHADO")+'</div></div>'+
+    '</div>';
+
+  return renderPageHeader("target", "Central do Dono", "Entenda o restaurante em 30 segundos · dia operacional "+(d.diaOperacional?new Date(d.diaOperacional+"T00:00:00").toLocaleDateString("pt-BR"):""))+
+    blocoHoje + blocoMes + blocoAtencao + blocoSalao;
+}
+
 function renderDashboard(){
   var u = usuarioAtual();
   var pagas = comandasPagasHoje();
@@ -89,7 +182,29 @@ function renderDashboard(){
     }).join("") : '<div class="empty-hint">Nenhum alerta no momento.</div>');
 }
 
+// PRIORIDADE 8 — Salão ganhou sub-abas (mesmo componente da 0.11): Mapa
+// de mesas (tela de sempre) e Reservas e fila. Reservas (só as de hoje
+// em diante, status ainda aberto) carregam direto em carregarTudo —
+// lista pequena, do tamanho de fornecedores/categorias, não é "comandas/
+// itens completos" — porque o Mapa precisa saber quem está reservado pra
+// já sem depender da sub-aba Reservas ter sido aberta.
 function renderSalao(){
+  return renderPageHeader("utensils", "Atendimento", "Mapa de salão em tempo real",
+      (can(PERM.COMANDA_ABRIR) ? '<div class="action-row" style="flex:0 0 auto;">'+
+        '<button class="btn btn-primary" data-action="balcao-abrir">'+icon("plus",15)+' Balcão</button>'+
+        '<button class="btn btn-primary" data-action="ficha-abrir">'+icon("plus",15)+' Ficha</button>'+
+        '<button class="btn btn-primary" data-action="delivery-abrir">'+icon("truck",15)+' Delivery</button>'+
+      '</div>' : ''))+
+    renderSubAbas("salao");
+}
+function reservaProximaDaMesa(mesaId){
+  var agora = Date.now(), em2h = agora + 2*3600000, tolerancia = agora - 15*60000;
+  return state.reservas.find(function(r){
+    var t = new Date(r.dataHora).getTime();
+    return r.mesaSugeridaId===mesaId && (r.status==="AGUARDANDO"||r.status==="CONFIRMADA") && t>=tolerancia && t<=em2h;
+  });
+}
+function renderMapaConteudo(){
   var filtro = state.salaoFiltro;
   var tabs = [["TODAS","Todas"],["LIVRES","Livres"],["OCUPADAS","Ocupadas"],["CONTA","Conta"]];
   var mesasFiltradas = state.mesas.filter(function(m){
@@ -106,10 +221,12 @@ function renderSalao(){
     var timeCls = min>=60?"danger":(min>=30?"warn":"");
     var soma = abertas.reduce(function(s,c){ return s + totaisComanda(c).total; },0);
     var pronto = st!=="livre" && mesaTemItemPronto(m.id);
+    var reserva = reservaProximaDaMesa(m.id);
     return '<div class="mesa-block '+st+(pronto?" pronto":"")+'" data-action="mesa-open" data-mesa="'+m.id+'">'+
       '<div class="mesa-top"><div class="num">'+String(m.numero).padStart(2,"0")+'</div><div class="label">Mesa</div></div>'+
       (st==="livre" ?
-        '<div><div class="mesa-mid">'+m.capacidade+' lugares</div><div class="mesa-status-txt" style="margin-top:8px;">Livre</div></div>'
+        '<div><div class="mesa-mid">'+m.capacidade+' lugares</div><div class="mesa-status-txt" style="margin-top:8px;">Livre</div>'+
+        (reserva ? '<div class="mesa-status-txt" style="color:var(--info); font-weight:700;">'+icon("clock",12)+' Reservada '+formatarHoraMin(new Date(reserva.dataHora))+'</div>' : '')+'</div>'
         :
         '<div><div class="mesa-mid">'+m.capacidade+' lugares</div>'+
         (pronto ? '<div class="mesa-status-txt" style="color:var(--warning); font-weight:700;">'+icon("check",12)+' PRONTO</div>' : '')+
@@ -120,13 +237,7 @@ function renderSalao(){
   }).join("");
   var comandasAbertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
 
-  return renderPageHeader("utensils", "Atendimento", "Mapa de salão em tempo real",
-      (can(PERM.COMANDA_ABRIR) ? '<div class="action-row" style="flex:0 0 auto;">'+
-        '<button class="btn btn-primary" data-action="balcao-abrir">'+icon("plus",15)+' Balcão</button>'+
-        '<button class="btn btn-primary" data-action="ficha-abrir">'+icon("plus",15)+' Ficha</button>'+
-        '<button class="btn btn-primary" data-action="delivery-abrir">'+icon("truck",15)+' Delivery</button>'+
-      '</div>' : ''))+
-    (state.pedidosQr.length && can(PERM.ITEM_LANCAR) ? renderPedidosQrPendentes() : '')+
+  return (state.pedidosQr.length && can(PERM.ITEM_LANCAR) ? renderPedidosQrPendentes() : '')+
     '<div class="tabs">'+tabs.map(function(t){ return '<div class="tab '+(filtro===t[0]?"active":"")+'" data-action="salao-filtro" data-f="'+t[0]+'">'+t[1]+'</div>'; }).join("")+'</div>'+
     '<div class="grid-2">'+
       '<div class="mesas-grid">'+(cards||'<div class="empty-hint">Nenhuma mesa neste filtro.</div>')+'</div>'+
@@ -143,6 +254,65 @@ function renderSalao(){
       '</div>'+
     '</div>';
 }
+// wa.me só abre o WhatsApp do aparelho com a mensagem pronta — nunca
+// manda nada por conta própria (não existe provedor de envio aqui).
+function linkWhatsapp(telefone, mensagem){
+  var limpo = (telefone||"").replace(/\D/g,"");
+  if(limpo && limpo.slice(0,2)!=="55") limpo = "55"+limpo;
+  return "https://wa.me/"+limpo+"?text="+encodeURIComponent(mensagem);
+}
+var RESERVA_STATUS_LBL = {AGUARDANDO:"Aguardando", CONFIRMADA:"Confirmada", SENTADO:"Sentado", NAO_VEIO:"Não veio"};
+var FILA_STATUS_LBL = {AGUARDANDO:"Aguardando", CHAMADO:"Chamado", SENTADO:"Sentado", DESISTIU:"Desistiu"};
+function renderReservasFilaConteudo(){
+  var podeEditar = can(PERM.COMANDA_ABRIR);
+  var reservasAbertas = state.reservas.filter(function(r){ return r.status==="AGUARDANDO"||r.status==="CONFIRMADA"; })
+    .sort(function(a,b){ return new Date(a.dataHora)-new Date(b.dataHora); });
+  var fila = state.filaEspera;
+
+  var blocoReservas = '<div class="section-label">Reservas</div>'+
+    (podeEditar ? '<div class="action-row" style="margin-bottom:10px;"><button class="btn btn-sm btn-primary" data-action="reserva-nova">'+icon("plus",14)+' Nova reserva</button></div>' : '')+
+    '<div class="card" style="margin-bottom:14px;">'+
+    (reservasAbertas.length ? reservasAbertas.map(function(r){
+      var mesa = state.mesas.find(function(m){ return m.id===r.mesaSugeridaId; });
+      var msg = "Olá "+r.nome+"! Confirmando sua reserva pra "+r.pessoas+" pessoa(s) hoje às "+formatarHoraMin(new Date(r.dataHora))+".";
+      return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(r.nome)+' · '+r.pessoas+' pessoa(s)</div>'+
+        '<div class="sub">'+new Date(r.dataHora).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+
+          (mesa?' · mesa '+mesa.numero:'')+(r.observacao?' · '+escapeHtml(r.observacao):'')+' · <span class="badge badge-status-info">'+RESERVA_STATUS_LBL[r.status]+'</span></div></div>'+
+        (podeEditar ? '<div class="acts">'+
+          (r.telefone ? '<a class="btn btn-sm" href="'+linkWhatsapp(r.telefone,msg)+'" target="_blank" rel="noopener">'+icon("check",14)+' WhatsApp</a>' : '')+
+          (r.status==="AGUARDANDO" ? '<button class="btn btn-sm" data-action="reserva-confirmar" data-reserva="'+r.id+'">Confirmar</button>' : '')+
+          '<button class="btn btn-sm btn-success" data-action="sentar-abrir" data-tipo="reserva" data-id="'+r.id+'" data-mesa-sugerida="'+(r.mesaSugeridaId||"")+'">Sentar</button>'+
+          '<button class="btn btn-sm" data-action="reserva-nao-veio" data-reserva="'+r.id+'" style="color:var(--danger);">Não veio</button>'+
+        '</div>' : '')+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nenhuma reserva em aberto.</div>')+
+    '</div>';
+
+  var blocoFila = '<div class="section-label">Fila de espera</div>'+
+    (podeEditar ? '<div class="action-row" style="margin-bottom:10px;"><button class="btn btn-sm btn-primary" data-action="fila-nova">'+icon("plus",14)+' Entrar na fila</button></div>' : '')+
+    '<div class="card">'+
+    (!fila ? '<div class="empty-hint">Carregando...</div>' : !fila.length ? '<div class="empty-hint">Ninguém na fila agora.</div>' : fila.map(function(f){
+      var msg = "Olá "+f.nome+"! Sua mesa já está pronta, pode vir até o restaurante.";
+      return '<div class="data-row"><div class="main"><div class="nome">#'+f.posicao+' · '+escapeHtml(f.nome)+' · '+f.pessoas+' pessoa(s)</div>'+
+        '<div class="sub">espera estimada ~'+f.tempo_estimado_min+' min · <span class="badge badge-status-info">'+FILA_STATUS_LBL[f.status]+'</span></div></div>'+
+        (podeEditar ? '<div class="acts">'+
+          (f.telefone ? '<a class="btn btn-sm" href="'+linkWhatsapp(f.telefone,msg)+'" target="_blank" rel="noopener">'+icon("check",14)+' WhatsApp</a>' : '')+
+          (f.status==="AGUARDANDO" ? '<button class="btn btn-sm" data-action="fila-chamar" data-fila="'+f.id+'">Chamar</button>' : '')+
+          '<button class="btn btn-sm btn-success" data-action="sentar-abrir" data-tipo="fila" data-id="'+f.id+'">Sentar</button>'+
+          '<button class="btn btn-sm" data-action="fila-desistiu" data-fila="'+f.id+'" style="color:var(--danger);">Desistiu</button>'+
+        '</div>' : '')+
+      '</div>';
+    }).join(""))+
+    '</div>';
+
+  return blocoReservas + blocoFila;
+}
+SUB_ABAS.salao = [
+  {id:"mapa", rotulo:"Mapa de mesas", permissao:PERM.SALAO_VER, render:renderMapaConteudo},
+  {id:"reservas", rotulo:"Reservas e fila", permissao:PERM.SALAO_VER, render:renderReservasFilaConteudo,
+    carregar:function(){ carregarFilaEspera(); },
+    carregado:function(){ return !!state.filaEspera; }}
+];
 
 // Fase 3.3 — pedidos vindos do QR da mesa, aguardando confirmação do
 // garçom (nunca vão direto pra cozinha).
@@ -328,7 +498,15 @@ function renderComanda(){
     (podeLancar ? '<button class="fab" data-action="toggle-mobile-catalog">'+icon(state.draft.mobileCatalog?"check":"plus",24)+'</button>' : '');
 }
 
+// PRIORIDADE 2 — Cozinha ganhou sub-abas (mesmo componente da 0.11):
+// KDS (o kanban de sempre) e Produção (checklist de pré-preparo). O
+// botão de som fica no cabeçalho de fora porque vale pras duas abas.
 function renderKds(){
+  return renderPageHeader("chef", "Cozinha", "Kanban da cozinha e pré-preparo do dia",
+      '<button class="btn '+(state.kdsSomAtivo?"btn-primary":"")+'" data-action="kds-som-toggle">'+icon("bell",15)+' '+(state.kdsSomAtivo?"Som ativado":"Ativar som")+'</button>')+
+    renderSubAbas("kds");
+}
+function renderKdsConteudo(){
   var cols = [["PENDENTE","Pendente","INICIAR PREPARO"],["PREPARANDO","Preparando","MARCAR PRONTO"],["PRONTO","Pronto","ENTREGUE"]];
   var nextStatus = {PENDENTE:"PREPARANDO", PREPARANDO:"PRONTO", PRONTO:"ENTREGUE"};
   var setorFiltro = state.kdsSetorFiltro || "TODOS";
@@ -446,8 +624,7 @@ function renderKds(){
   '</div>';
 
   return '<div class="kds-grande">'+
-    renderPageHeader("chef", "Cozinha", total+" pedidos ativos",
-      '<button class="btn '+(state.kdsSomAtivo?"btn-primary":"")+'" data-action="kds-som-toggle">'+icon("bell",15)+' '+(state.kdsSomAtivo?"Som ativado":"Ativar som")+'</button>')+
+    '<div class="section-label">'+total+' pedidos ativos</div>'+
     kpisHtml+
     '<div class="tabs">'+setorTabs.map(function(s){ return '<div class="chip '+(setorFiltro===s?"chip-active":"")+'" data-action="kds-filtro" data-f="'+s+'">'+(s==="TODOS"?"Todos":s)+'</div>'; }).join("")+'</div>'+
     (cancelados.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">CANCELADO DEPOIS DE PRONTO/EM PREPARO — PARE</span><span class="d">'+
@@ -457,6 +634,99 @@ function renderKds(){
     kanbanHtml+
   '</div>';
 }
+
+// PRIORIDADE 2 — checklist de pré-preparo do dia: sugestão calculada no
+// banco (média das últimas 4 semanas × ficha técnica, abrir_checklist_pre_preparo),
+// "feito" grava quem e quando, e sub-receita (vinagrete, molho...) ganha
+// botão "Produzir lote" — baixa os ingredientes e dá entrada de verdade.
+function renderProducaoConteudo(){
+  var c = state.preProducaoChecklist;
+  var podeProduzir = can(PERM.ESTOQUE);
+  var ajusteAtual = state.preProducaoAjustePct || 0;
+  var cabecalho = '<div class="card" style="margin-bottom:14px;">'+
+    '<div class="field" style="display:flex; align-items:flex-end; gap:10px; margin-bottom:0;">'+
+      '<div style="flex:1;"><label>Ajuste pra hoje (feriado, evento...)</label>'+
+        '<input id="producaoAjustePct" type="number" step="5" value="'+ajusteAtual+'" placeholder="0"> %</div>'+
+      '<button class="btn btn-primary" data-action="producao-recalcular">Recalcular lista</button>'+
+    '</div>'+
+    '<p style="font-size:11px; color:var(--text-muted); margin:8px 0 0;">Só recalcula o que ainda não foi marcado feito — o que já foi feito hoje fica como está.</p>'+
+  '</div>';
+
+  if(!c) return cabecalho+'<div class="empty-hint">Carregando...</div>';
+  if(!c.itens.length) return cabecalho+'<div class="empty-hint">Nenhum insumo com venda nas últimas 4 semanas pra sugerir pré-preparo hoje.</div>';
+
+  return cabecalho+'<div class="card">'+
+    c.itens.map(function(it){
+      var feito = !!it.feitoEm;
+      return '<div class="data-row">'+
+        '<div class="main">'+
+          '<div class="nome">'+escapeHtml(it.nome)+(it.ehSubReceita?' <span class="badge badge-status-info">Sub-receita</span>':'')+'</div>'+
+          '<div class="sub">Sugestão: '+it.quantidadeSugerida+' '+escapeHtml(it.unidade)+(feito?' · feito por '+escapeHtml(it.feitoPorNome||"—"):'')+'</div>'+
+        '</div>'+
+        '<div class="acts">'+
+          (it.ehSubReceita && podeProduzir ? '<button class="btn btn-sm" data-action="produzir-lote-abrir" data-insumo="'+it.insumoId+'" data-sugerido="'+it.quantidadeSugerida+'">Produzir lote</button>' : '')+
+          '<button class="btn btn-sm '+(feito?"btn-success":"")+'" data-action="pre-preparo-marcar" data-checklist="'+it.id+'" data-feito="'+(!feito)+'">'+(feito?icon("check",14)+" Feito":"Marcar feito")+'</button>'+
+        '</div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+}
+// PRIORIDADE 6 — Expedição: agrupa os itens ativos de cada comanda por
+// "tempo" (entrada/principal/sobremesa, campo da categoria) e só mostra
+// o grupo quando pelo menos um item já está PRONTO — ou pra liberar
+// (todos prontos) ou pra avisar que tem prato esfriando esperando o
+// resto do mesmo tempo. "Liberar" é só um UPDATE em lote (mesmo padrão
+// do "ticket inteiro" do KDS) — vira ENTREGUE e o aviso de mesa pronta
+// (realtime) já existe, não precisou de nada novo pra isso.
+function tempoDoItem(item){
+  var p = state.produtos.find(function(x){ return x.id===item.produtoId; });
+  return (p && p.tempo) || "PRINCIPAL";
+}
+function renderExpedicaoConteudo(){
+  var abertas = state.comandas.filter(function(c){ return c.status==="ABERTA" || c.status==="FECHANDO"; });
+  var grupos = {};
+  abertas.forEach(function(c){
+    var mesa = state.mesas.find(function(m){ return m.id===c.mesaId; });
+    c.itens.forEach(function(it){
+      if(it.status==="CANCELADO" || it.status==="ENTREGUE") return;
+      var tempo = tempoDoItem(it);
+      var chave = c.id+"|"+tempo;
+      if(!grupos[chave]) grupos[chave] = {comandaId:c.id, rotulo:rotuloComanda(c,mesa), tempo:tempo, itens:[]};
+      grupos[chave].itens.push(it);
+    });
+  });
+  var lista = Object.keys(grupos).map(function(k){ return grupos[k]; }).filter(function(g){
+    return g.itens.some(function(it){ return it.status==="PRONTO"; });
+  });
+  lista.sort(function(a,b){ return a.rotulo.localeCompare(b.rotulo); });
+
+  if(!lista.length) return '<div class="empty-hint">Nenhum pedido pronto esperando expedição agora.</div>';
+
+  return lista.map(function(g){
+    var tudoPronto = g.itens.every(function(it){ return it.status==="PRONTO"; });
+    var idsTodos = g.itens.map(function(it){ return it.id; }).join(",");
+    return '<div class="card" style="margin-bottom:12px; '+(tudoPronto?'border-color:var(--success);':'')+'">'+
+      '<div class="card-title"><span>'+escapeHtml(g.rotulo.toUpperCase())+' · '+g.tempo+'</span>'+
+        (tudoPronto && can(PERM.ITEM_STATUS) ? '<button class="btn btn-sm btn-success" data-action="expedicao-liberar" data-comanda="'+g.comandaId+'" data-itens="'+idsTodos+'">'+icon("check",14)+' Liberar para o salão</button>' : '')+
+      '</div>'+
+      g.itens.map(function(it){
+        var pronto = it.status==="PRONTO";
+        var esperando = pronto ? fmtMin(minutosDesde(it.prontoEm||it.enviadoEm)) : null;
+        return '<div class="data-row"><div class="main"><div class="nome">'+it.quantidade+'x '+escapeHtml(it.nome)+'</div>'+
+          '<div class="sub">'+(pronto ? '<span style="color:var(--warning); font-weight:700;">Pronto há '+esperando+' — esperando o resto</span>' : 'Em preparo ('+it.status+')')+'</div></div>'+
+          '<span class="badge '+(pronto?"badge-status-atencao":"badge-status-info")+'">'+it.status+'</span>'+
+        '</div>';
+      }).join("")+
+    '</div>';
+  }).join("");
+}
+SUB_ABAS.kds = [
+  {id:"kds", rotulo:"KDS", permissao:PERM.KDS_VER, render:renderKdsConteudo},
+  {id:"producao", rotulo:"Produção", permissao:PERM.KDS_VER, render:renderProducaoConteudo,
+    carregar:function(){ carregarChecklistPreProducao(state.preProducaoAjustePct); },
+    carregado:function(){ return !!state.preProducaoChecklist; }},
+  {id:"expedicao", rotulo:"Expedição", permissao:PERM.KDS_VER, render:renderExpedicaoConteudo}
+];
 
 function renderCaixa(){
   if(!state.caixaSessao || state.caixaSessao.status==="FECHADA"){
@@ -697,8 +967,40 @@ function renderMarketingInativos(){
           '<div class="main"><div class="nome">'+escapeHtml(c.nome)+'</div>'+
           '<div class="sub">'+(c.telefone?escapeHtml(c.telefone)+' · ':'')+(c.ultima_compra ? (c.dias_sem_comprar+' dias sem comprar') : 'nunca comprou')+'</div></div>'+
           '<div class="num">'+(c.pontos_fidelidade||0)+' pts</div>'+
+        (c.telefone ? '<a class="btn btn-sm" href="'+linkWhatsapp(c.telefone, "Olá "+c.nome+"! Faz tempo que você não vem aqui no "+(state.config.empresaNome||"nosso restaurante")+", sentimos sua falta! Esperamos te ver em breve.")+'" target="_blank" rel="noopener">'+icon("check",14)+' WhatsApp</a>' : '')+
         '</div>';
       }).join("")+'</div>');
+}
+// PRIORIDADE 9 — Campanhas: listas que o banco já filtra sozinho (quem
+// faz aniversário hoje, quem tem reserva confirmada hoje) com um botão
+// wa.me pronto pra cada um — nenhum envio automático de verdade, sempre
+// um clique humano (mesma régua do wa.me de Reservas, 0073).
+function renderMarketingCampanhas(){
+  var c = state.campanhasHoje;
+  if(state.campanhasCarregando) return '<div class="empty-hint">Carregando...</div>';
+  if(!c) return '<div class="empty-hint">Carregando...</div>';
+  var empresaNome = state.config.empresaNome || "nosso restaurante";
+  var blocoAniversario = '<div class="section-label">Aniversariantes de hoje</div>'+
+    '<div class="card" style="margin-bottom:14px;">'+
+    (c.aniversariantes.length ? c.aniversariantes.map(function(a){
+      var msg = "Olá "+a.nome+"! A equipe do "+empresaNome+" deseja um feliz aniversário! Venha comemorar com a gente.";
+      return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(a.nome)+'</div>'+
+        '<div class="sub">'+(a.pontos_fidelidade?a.pontos_fidelidade+' ponto(s)':'')+'</div></div>'+
+        '<a class="btn btn-sm" href="'+linkWhatsapp(a.telefone, msg)+'" target="_blank" rel="noopener">'+icon("check",14)+' WhatsApp</a>'+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Ninguém faz aniversário hoje.</div>')+
+    '</div>';
+  var blocoReservas = '<div class="section-label">Reservas confirmadas de hoje</div>'+
+    '<div class="card">'+
+    (c.reservas_confirmadas.length ? c.reservas_confirmadas.map(function(r){
+      var msg = "Olá "+r.nome+"! Só lembrando da sua reserva hoje às "+formatarHoraMin(new Date(r.data_hora))+" pra "+r.pessoas+" pessoa(s). Te esperamos!";
+      return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(r.nome)+' · '+r.pessoas+' pessoa(s)</div>'+
+        '<div class="sub">'+formatarHoraMin(new Date(r.data_hora))+'</div></div>'+
+        '<a class="btn btn-sm" href="'+linkWhatsapp(r.telefone, msg)+'" target="_blank" rel="noopener">'+icon("check",14)+' WhatsApp</a>'+
+      '</div>';
+    }).join("") : '<div class="empty-hint">Nenhuma reserva confirmada pra hoje.</div>')+
+    '</div>';
+  return blocoAniversario + blocoReservas;
 }
 function renderMarketingBanner(podeEditar){
   var mk = state.config.marketing || {bannerAtivo:false, bannerTexto:"", produtoDestaqueId:""};
@@ -724,6 +1026,9 @@ function renderMarketingBanner(podeEditar){
 // config já carregada — "dado só busca ao abrir a aba" fica satisfeito
 // trivialmente aqui.
 SUB_ABAS.marketing = [
+  {id:"campanhas", rotulo:"Campanhas", permissao:PERM.MARKETING, render:renderMarketingCampanhas,
+    carregar:function(){ carregarCampanhasHoje(); },
+    carregado:function(){ return !!state.campanhasHoje; }},
   {id:"cupons", rotulo:"Cupons", permissao:PERM.MARKETING, render:function(){ return renderMarketingCupons(can(PERM.MARKETING)); }},
   {id:"inativos", rotulo:"Clientes inativos", permissao:PERM.MARKETING, render:renderMarketingInativos},
   {id:"banner", rotulo:"Banner do cardápio", permissao:PERM.MARKETING, render:function(){ return renderMarketingBanner(can(PERM.MARKETING)); }}
@@ -743,7 +1048,19 @@ function estoqueStatus(i){
   if(i.estoqueAtual <= i.estoqueMinimo*1.2) return {lbl:"Repor", cls:"badge-status-atencao"};
   return {lbl:"OK", cls:"badge-status-ok"};
 }
+// PRIORIDADE 3 — Estoque ganhou sub-abas (mesmo componente da 0.11):
+// Estoque (de sempre) e Perdas (registro + relatório de desperdício).
 function renderEstoque(){
+  var podeEditar = can(PERM.ESTOQUE);
+  var baixos = state.insumos.filter(function(i){ return i.estoqueAtual<i.estoqueMinimo; });
+  return renderPageHeader("package", "Estoque", state.insumos.length+" insumos · "+baixos.length+" abaixo do mínimo",
+      (podeEditar ? '<div class="action-row" style="flex:0 0 auto;">'+
+        '<button class="btn" data-action="inventario-abrir">'+icon("edit",15)+' Fazer inventário</button>'+
+        '<button class="btn btn-primary" data-action="insumo-mov-abrir" data-tipo="ENTRADA">'+icon("plus",15)+' Nova entrada</button>'+
+      '</div>' : ''))+
+    renderSubAbas("estoque");
+}
+function renderEstoqueConteudo(){
   var podeEditar = can(PERM.ESTOQUE);
   var baixos = state.insumos.filter(function(i){ return i.estoqueAtual<i.estoqueMinimo; });
   var furos = state.insumos.filter(function(i){ return i.estoqueAtual<0; });
@@ -751,12 +1068,7 @@ function renderEstoque(){
   var hoje = diasA(0);
   var emSeteDias = diasA(7);
   var vencendo = state.insumos.filter(function(i){ return i.validade && i.validade<=emSeteDias; });
-  return renderPageHeader("package", "Estoque", state.insumos.length+" insumos · "+baixos.length+" abaixo do mínimo",
-      (podeEditar ? '<div class="action-row" style="flex:0 0 auto;">'+
-        '<button class="btn" data-action="inventario-abrir">'+icon("edit",15)+' Fazer inventário</button>'+
-        '<button class="btn btn-primary" data-action="insumo-mov-abrir" data-tipo="ENTRADA">'+icon("plus",15)+' Nova entrada</button>'+
-      '</div>' : ''))+
-    '<div class="metric-grid">'+
+  return '<div class="metric-grid">'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("package",20)+'</div><div class="kpi-body"><div class="kpi-label">Insumos cadastrados</div><div class="kpi-value">'+state.insumos.length+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("alert",20)+'</div><div class="kpi-body"><div class="kpi-label">Abaixo do mínimo</div><div class="kpi-value">'+baixos.length+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Valor em estoque</div><div class="kpi-value">'+brl(valorEstoque)+'</div></div></div>'+
@@ -776,8 +1088,15 @@ function renderEstoque(){
     state.insumos.map(function(i){
       var st = estoqueStatus(i);
       var rend = state.insumoRendimentos.find(function(r){ return r.insumoId===i.id; });
-      return '<tr><td><div style="font-weight:700;">'+escapeHtml(i.nome)+'</div>'+
-          '<div style="font-size:10.5px; color:var(--text-muted);">custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+(rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div></td>'+
+      return '<tr><td><div style="font-weight:700;">'+escapeHtml(i.nome)+(i.ehSubReceita?' <span class="badge badge-status-info">Sub-receita</span>':'')+'</div>'+
+          '<div style="font-size:10.5px; color:var(--text-muted);">custo médio '+brl(i.custoMedioCentavos)+'/'+i.unidade+(rend ? ' · rendimento '+Math.round(rend.fator*100)+'%' : '')+'</div>'+
+          (podeEditar ? '<label style="font-size:10.5px; color:var(--text-muted); display:flex; align-items:center; gap:5px; margin-top:4px; cursor:pointer;">'+
+            '<input type="checkbox" data-action="insumo-sub-receita-toggle" data-insumo="'+i.id+'" '+(i.ehSubReceita?"checked":"")+'> produzida internamente (sub-receita)</label>' : '')+
+          (podeEditar ? '<select style="font-size:10.5px; margin-top:4px; padding:2px 4px;" data-action="insumo-fornecedor-padrao" data-insumo="'+i.id+'">'+
+            '<option value="">Sem fornecedor padrão</option>'+
+            state.fornecedores.filter(function(f){ return f.ativo; }).map(function(f){ return '<option value="'+f.id+'" '+(i.fornecedorPadraoId===f.id?"selected":"")+'>'+escapeHtml(f.nome)+'</option>'; }).join("")+
+          '</select>' : '')+
+        '</td>'+
         '<td'+(i.estoqueAtual<0?' style="color:var(--danger); font-weight:800;"':'')+'>'+i.estoqueAtual+'</td><td>'+i.unidade+'</td><td>'+i.estoqueMinimo+'</td>'+
         '<td>'+(podeEditar ? '<input type="date" style="width:140px;" value="'+(i.validade||"")+'" data-action="insumo-validade" data-insumo="'+i.id+'">' : (i.validade?new Date(i.validade+"T00:00:00").toLocaleDateString("pt-BR"):"—"))+'</td>'+
         '<td><span class="badge '+st.cls+'">'+st.lbl+'</span></td>'+
@@ -785,6 +1104,8 @@ function renderEstoque(){
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="ENTRADA" data-insumo="'+i.id+'">Entrada</button>'+
           '<button class="btn btn-sm" data-action="insumo-mov-abrir" data-tipo="SAIDA" data-insumo="'+i.id+'">Saída</button>'+
           '<button class="btn btn-sm" data-action="rendimento-abrir" data-insumo="'+i.id+'">Rendimento</button>'+
+          (i.ehSubReceita ? '<button class="btn btn-sm" data-action="receita-abrir" data-insumo="'+i.id+'">Receita</button>'+
+            '<button class="btn btn-sm btn-primary" data-action="produzir-lote-abrir" data-insumo="'+i.id+'">Produzir lote</button>' : '')+
         '</div></td>' : '')+
       '</tr>';
     }).join("")+
@@ -798,17 +1119,133 @@ function renderEstoque(){
     }).join("") : '<div class="empty-hint">Nenhuma movimentação ainda.</div>')+'</div>';
 }
 
+// PRIORIDADE 3 — Perdas e Desperdícios: registro manual (insumo ou prato,
+// valor pelo custo médio/CMV calculado no servidor) + o que entra sozinho
+// (cancelado após preparo, diferença de inventário) + relatório agregado
+// no banco (relatorio_perdas) — nunca somado aqui no navegador.
+var MOTIVO_PERDA_LABEL = {
+  VENCEU:"Venceu", ESTRAGOU:"Estragou", QUEIMOU:"Queimou", CAIU:"Caiu", DEVOLVIDO:"Devolvido",
+  ERRO_PEDIDO:"Erro de pedido", SOBRA:"Sobra",
+  CANCELADO_APOS_PREPARO:"Cancelado após preparo", AJUSTE_INVENTARIO:"Perda não identificada (inventário)"
+};
+function renderPerdasConteudo(){
+  var podeEditar = can(PERM.ESTOQUE);
+  var periodo = state.perdasPeriodo || "HOJE";
+  var periodos = [["HOJE","Hoje"],["7D","7 dias"],["30D","30 dias"],["MES","Escolher mês"]];
+  var cabecalho = '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="perdas-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
+    (periodo==="MES" ? '<div class="field" style="max-width:220px;"><input type="month" id="perdasMesInput" value="'+escapeHtml(state.perdasMes||"")+'" data-action="perdas-mes"></div>' : '')+
+    (podeEditar ? '<div class="action-row"><button class="btn btn-primary" data-action="perda-abrir">'+icon("plus",15)+' Registrar perda</button></div>' : '');
+
+  if(state.perdasCarregando || !state.perdasRelatorio){
+    return cabecalho+'<div class="empty-hint">Carregando período...</div>';
+  }
+  var r = state.perdasRelatorio;
+  var porMotivo = r.por_motivo||[];
+  var porSemana = r.por_semana||[];
+  var top5 = r.top5||[];
+  var maxMotivo = porMotivo.length ? Math.max.apply(null, porMotivo.map(function(m){ return m.valor; })) : 0;
+  var maxTop5 = top5.length ? top5[0].valor : 0;
+  var maxSemana = porSemana.length ? Math.max.apply(null, porSemana.map(function(s){ return s.valor; })) : 1;
+
+  return cabecalho+
+    '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("alert",20)+'</div><div class="kpi-body"><div class="kpi-label">Perdido no período</div><div class="kpi-value">'+brl(r.total_centavos)+'</div></div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("chart",20)+'</div><div class="kpi-body"><div class="kpi-label">% do faturamento</div><div class="kpi-value">'+(r.pct_faturamento!=null?r.pct_faturamento+"%":"—")+'</div></div></div>'+
+    '</div>'+
+    '<div class="grid-2">'+
+      '<div class="card"><div class="card-title">Top 5 — onde o dinheiro está sumindo</div>'+
+        (top5.length ? top5.map(function(t){
+          var pct = Math.max(4, Math.round(t.valor/maxTop5*100));
+          return '<div class="ranking-row"><div class="main"><div class="nome">'+escapeHtml(t.nome)+'</div>'+
+            '<div class="stock-bar" style="max-width:none;"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--danger);"></div></div></div>'+
+            '<div class="num">'+brl(t.valor)+'</div></div>';
+        }).join("") : '<div class="empty-hint">Nenhuma perda no período.</div>')+
+      '</div>'+
+      '<div class="card"><div class="card-title">Por motivo</div>'+
+        (porMotivo.length ? porMotivo.map(function(m){
+          var pct = Math.max(4, Math.round(m.valor/maxMotivo*100));
+          return '<div class="ranking-row"><div class="main"><div class="nome">'+(MOTIVO_PERDA_LABEL[m.motivo]||m.motivo)+'</div><div class="sub">'+m.qtd+' registro(s)</div>'+
+            '<div class="stock-bar" style="max-width:none;"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--warning);"></div></div></div>'+
+            '<div class="num">'+brl(m.valor)+'</div></div>';
+        }).join("") : '<div class="empty-hint">Nenhuma perda no período.</div>')+
+      '</div>'+
+    '</div>'+
+    (porSemana.length ? '<div class="section-label">Por semana</div><div class="card">'+
+      '<div class="chart-bars">'+porSemana.map(function(s){
+        var pct = Math.max(2, Math.round(s.valor/maxSemana*100));
+        return '<div class="chart-bar has" style="height:'+pct+'%" title="semana de '+new Date(s.semana+"T00:00:00").toLocaleDateString("pt-BR")+' · '+brl(s.valor)+'"></div>';
+      }).join("")+'</div>'+
+      '<div class="chart-labels">'+porSemana.map(function(s){ return '<span>'+new Date(s.semana+"T00:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+'</span>'; }).join("")+'</div>'+
+    '</div>' : '')+
+    '<div class="section-label">Registros recentes</div>'+
+    '<div class="card">'+(state.perdasLista.length ? state.perdasLista.map(function(p){
+      var nome = p.tipo==="INSUMO" ? (state.insumos.find(function(i){ return i.id===p.insumoId; })||{}).nome : (state.produtos.find(function(x){ return x.id===p.produtoId; })||{}).nome;
+      var responsavel = state.usuarios.find(function(u){ return u.id===p.usuarioId; });
+      return '<div class="mov-row"><span><span class="mov-tipo SAIDA">'+(MOTIVO_PERDA_LABEL[p.motivo]||p.motivo)+'</span>'+escapeHtml(nome||"?")+
+        '<div class="tag">'+p.quantidade+' · '+(responsavel?escapeHtml(responsavel.nome):"—")+' · '+new Date(p.createdAt).toLocaleString("pt-BR")+'</div></span>'+
+        '<span>'+brl(p.valorCentavos)+'</span></div>';
+    }).join("") : '<div class="empty-hint">Nenhuma perda registrada no período.</div>')+'</div>';
+}
+SUB_ABAS.estoque = [
+  {id:"estoque", rotulo:"Estoque", permissao:PERM.ESTOQUE, render:renderEstoqueConteudo},
+  {id:"perdas", rotulo:"Perdas", permissao:PERM.ESTOQUE, render:renderPerdasConteudo,
+    carregar:function(){ carregarPerdas(state.perdasPeriodo||"HOJE"); },
+    carregado:function(){ return !!state.perdasRelatorio; }}
+];
+
+// PRIORIDADE 4 — Compras ganhou 4 sub-abas (mesmo componente da 0.11):
+// Lista de compras (sugestão automática), Pedidos (fornecedores + pedidos
+// de compra, tela de sempre), Cotação (comparar até 3 fornecedores,
+// preço digitado à mão) e Preços (histórico, alerta de aumento, pratos
+// que perderam margem).
 function renderCompras(){
   var podeEditar = can(PERM.ESTOQUE);
-  var statusLbl = {RASCUNHO:"Rascunho", PEDIDO_REALIZADO:"Pedido realizado", RECEBIDO:"Recebido"};
-  var contagem = {RASCUNHO:0, PEDIDO_REALIZADO:0, RECEBIDO:0};
-  state.pedidosCompra.forEach(function(p){ contagem[p.status] = (contagem[p.status]||0)+1; });
   return renderPageHeader("truck", "Compras", state.fornecedores.length+" fornecedores · "+state.pedidosCompra.length+" pedidos",
       (podeEditar ? '<div class="action-row" style="flex:0 0 auto;">'+
         '<button class="btn" data-action="fornecedor-novo">'+icon("plus",15)+' Fornecedor</button>'+
         (state.fornecedores.length ? '<button class="btn btn-primary" data-action="pedido-compra-novo">'+icon("plus",15)+' Pedido de compra</button>' : '')+
       '</div>' : ''))+
-    '<div class="metric-grid">'+
+    renderSubAbas("compras");
+}
+var DIAS_SEMANA_ENTREGA = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
+function renderListaComprasConteudo(){
+  if(state.listaComprasCarregando || !state.listaComprasSugerida) return '<div class="empty-hint">Carregando...</div>';
+  var grupos = state.listaComprasSugerida;
+  if(!grupos.length) return '<div class="empty-hint">Nenhum insumo precisando de compra agora, pelo consumo dos últimos 28 dias.</div>';
+  return grupos.map(function(g, grupoIdx){
+    var podeEditar = can(PERM.ESTOQUE);
+    return '<div class="card" style="margin-bottom:14px;">'+
+      '<div class="card-title">'+
+        '<span>'+(g.fornecedor_nome ? escapeHtml(g.fornecedor_nome) : "Sem fornecedor definido")+
+          (g.dia_entrega_semana!=null ? ' <span style="color:var(--text-muted); font-weight:400; text-transform:none;">· entrega '+DIAS_SEMANA_ENTREGA[g.dia_entrega_semana]+'</span>' : '')+
+          (g.prazo_entrega_dias ? ' <span style="color:var(--text-muted); font-weight:400; text-transform:none;">· prazo '+g.prazo_entrega_dias+'d</span>' : '')+
+        '</span>'+
+        (podeEditar ? '<button class="btn btn-sm btn-primary" data-action="lista-compras-gerar-pedido" data-grupo-idx="'+grupoIdx+'">Criar pedido</button>' : '')+
+      '</div>'+
+      g.itens.map(function(it){
+        return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(it.nome)+'</div>'+
+          '<div class="sub">estoque '+it.estoque_atual+' / mínimo '+it.estoque_minimo+' '+escapeHtml(it.unidade)+' · consumo previsto até a entrega: '+it.consumo_previsto+'</div></div>'+
+          '<div class="num" style="font-weight:800;">'+it.quantidade_sugerida+' '+escapeHtml(it.unidade)+'</div></div>';
+      }).join("")+
+    '</div>';
+  }).join("");
+}
+SUB_ABAS.compras = [
+  {id:"lista", rotulo:"Lista de compras", permissao:PERM.ESTOQUE, render:renderListaComprasConteudo,
+    carregar:function(){ carregarListaComprasSugerida(); },
+    carregado:function(){ return !!state.listaComprasSugerida; }},
+  {id:"pedidos", rotulo:"Pedidos", permissao:PERM.ESTOQUE, render:renderPedidosComprasConteudo},
+  {id:"cotacao", rotulo:"Cotação", permissao:PERM.ESTOQUE, render:renderCotacaoConteudo},
+  {id:"precos", rotulo:"Preços", permissao:PERM.ESTOQUE, render:renderPrecosConteudo,
+    carregar:function(){ carregarRelatorioPrecos(); },
+    carregado:function(){ return !!state.precosRelatorio; }}
+];
+function renderPedidosComprasConteudo(){
+  var podeEditar = can(PERM.ESTOQUE);
+  var statusLbl = {RASCUNHO:"Rascunho", PEDIDO_REALIZADO:"Pedido realizado", RECEBIDO:"Recebido"};
+  var contagem = {RASCUNHO:0, PEDIDO_REALIZADO:0, RECEBIDO:0};
+  state.pedidosCompra.forEach(function(p){ contagem[p.status] = (contagem[p.status]||0)+1; });
+  return '<div class="metric-grid">'+
       '<div class="kpi-card"><div class="kpi-icon">'+icon("truck",20)+'</div><div class="kpi-body"><div class="kpi-label">Fornecedores</div><div class="kpi-value">'+state.fornecedores.length+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon" style="background:var(--surface-03); color:var(--text-muted);">'+icon("package",20)+'</div><div class="kpi-body"><div class="kpi-label">Em rascunho</div><div class="kpi-value">'+contagem.RASCUNHO+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(245,176,20,.14); color:var(--warning);">'+icon("clock",20)+'</div><div class="kpi-body"><div class="kpi-label">Pedido realizado</div><div class="kpi-value">'+contagem.PEDIDO_REALIZADO+'</div></div></div>'+
@@ -819,8 +1256,12 @@ function renderCompras(){
     (state.fornecedores.length ? state.fornecedores.map(function(f){
       return '<div class="data-row">'+
         '<div class="main"><div class="nome">'+escapeHtml(f.nome)+(!f.ativo?' <span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
-        '<div class="sub">'+(f.contato?escapeHtml(f.contato)+' · ':'')+escapeHtml(f.telefone||"")+'</div></div>'+
-        (podeEditar ? '<div class="acts"><button class="btn btn-sm" data-action="fornecedor-toggle-ativo" data-fornecedor="'+f.id+'">'+(f.ativo?"Desativar":"Reativar")+'</button></div>' : '')+
+        '<div class="sub">'+(f.contato?escapeHtml(f.contato)+' · ':'')+escapeHtml(f.telefone||"")+
+          (f.prazoEntregaDias?' · prazo '+f.prazoEntregaDias+'d':'')+(f.diaEntregaSemana!=null?' · entrega '+DIAS_SEMANA_ENTREGA[f.diaEntregaSemana]:'')+'</div></div>'+
+        (podeEditar ? '<div class="acts">'+
+          '<button class="btn btn-sm" data-action="fornecedor-editar" data-fornecedor="'+f.id+'">Editar</button>'+
+          '<button class="btn btn-sm" data-action="fornecedor-toggle-ativo" data-fornecedor="'+f.id+'">'+(f.ativo?"Desativar":"Reativar")+'</button>'+
+        '</div>' : '')+
       '</div>';
     }).join("") : '<div class="empty-hint">Nenhum fornecedor cadastrado.</div>')+
     '</div>'+
@@ -838,6 +1279,85 @@ function renderCompras(){
         '</div>';
     }).join("") : '<div class="empty-hint">Nenhum pedido de compra ainda.</div>')+
     '</div>';
+}
+
+// PRIORIDADE 4 — Cotação: comparar até 3 fornecedores com preço digitado
+// à mão (nenhum valor calculado aqui — é cotação manual de verdade),
+// destaca o menor preço por linha, e "Gerar pedidos" cria um
+// restaurante.criar_pedido_compra por fornecedor vencedor (0040, já
+// existia) — sem tabela nem RPC novas só pra comparação.
+function renderCotacaoConteudo(){
+  var cot = state.cotacao;
+  var fornecedoresAtivos = state.fornecedores.filter(function(f){ return f.ativo; });
+  var selecionados = cot.fornecedorIds.map(function(id){ return state.fornecedores.find(function(f){ return f.id===id; }); }).filter(Boolean);
+
+  var escolhaFornecedores = '<div class="card" style="margin-bottom:14px;">'+
+    '<div class="card-title">Fornecedores a comparar (até 3)</div>'+
+    (fornecedoresAtivos.length ? fornecedoresAtivos.map(function(f){
+      var marcado = cot.fornecedorIds.indexOf(f.id)!==-1;
+      return '<label style="display:flex; align-items:center; gap:8px; padding:6px 0; cursor:pointer;">'+
+        '<input type="checkbox" data-action="cotacao-toggle-fornecedor" data-fornecedor="'+f.id+'" '+(marcado?"checked":"")+(!marcado&&cot.fornecedorIds.length>=3?"disabled":"")+'> '+escapeHtml(f.nome)+
+      '</label>';
+    }).join("") : '<div class="empty-hint">Cadastre fornecedores na aba Pedidos primeiro.</div>')+
+  '</div>';
+
+  if(!selecionados.length) return escolhaFornecedores+'<div class="empty-hint">Escolha pelo menos 1 fornecedor pra começar a cotação.</div>';
+
+  var linhasHtml = cot.linhas.map(function(l, idx){
+    var precosValidos = selecionados.map(function(f){ return l.precos[f.id]; }).filter(function(v){ return v>0; });
+    var menor = precosValidos.length ? Math.min.apply(null, precosValidos) : null;
+    return '<tr><td>'+
+        '<select data-action="cotacao-linha-insumo" data-idx="'+idx+'">'+
+          state.insumos.map(function(i){ return '<option value="'+i.id+'" '+(l.insumoId===i.id?"selected":"")+'>'+escapeHtml(i.nome)+' ('+i.unidade+')</option>'; }).join("")+
+        '</select>'+
+      '</td>'+
+      '<td><input type="number" min="0" step="0.01" style="width:70px;" value="'+l.quantidade+'" data-action="cotacao-linha-qtd" data-idx="'+idx+'"></td>'+
+      selecionados.map(function(f){
+        var v = l.precos[f.id];
+        var venceu = v>0 && v===menor;
+        return '<td><input type="number" id="cotPreco-'+idx+'-'+f.id+'" min="0" step="0.01" style="'+(venceu?"border-color:var(--success); color:var(--success); font-weight:800;":"")+'" value="'+(v>0?(v/100).toFixed(2):"")+'" data-action="cotacao-linha-preco" data-idx="'+idx+'" data-fornecedor="'+f.id+'" placeholder="R$"></td>';
+      }).join("")+
+      '<td><button class="icon-btn" data-action="cotacao-linha-remover" data-idx="'+idx+'" style="color:var(--danger);">'+icon("x",14)+'</button></td>'+
+    '</tr>';
+  }).join("");
+
+  return escolhaFornecedores+
+    '<div class="action-row" style="margin-bottom:10px;">'+
+      '<button class="btn btn-sm" data-action="cotacao-importar-lista">Importar da lista de compras</button>'+
+    '</div>'+
+    '<div class="card"><div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Insumo</th><th>Qtd.</th>'+
+      selecionados.map(function(f){ return '<th>'+escapeHtml(f.nome)+'</th>'; }).join("")+
+      '<th></th></tr></thead><tbody>'+
+      (linhasHtml || '<tr><td colspan="'+(selecionados.length+3)+'" class="empty-hint">Nenhum insumo adicionado ainda.</td></tr>')+
+    '</tbody></table></div>'+
+    '<button class="btn btn-sm" style="margin-top:10px;" data-action="cotacao-linha-adicionar">'+icon("plus",14)+' Adicionar insumo</button>'+
+    '</div>'+
+    (cot.linhas.length ? '<button class="btn btn-primary btn-lg" style="margin-top:14px;" data-action="cotacao-gerar-pedidos">Gerar pedidos com os preços vencedores</button>' : '');
+}
+
+function renderPrecosConteudo(){
+  if(state.precosCarregando || !state.precosRelatorio) return '<div class="empty-hint">Carregando...</div>';
+  var r = state.precosRelatorio;
+  var insumos = r.insumos||[];
+  if(!insumos.length) return '<div class="empty-hint">Ainda não há histórico de preço — recebimentos de pedido com preço informado alimentam este relatório.</div>';
+  return '<p style="font-size:12px; color:var(--text-muted); margin:0 0 14px;">Alerta quando o preço sobe mais de '+r.limite_pct+'% do recebimento anterior pro mesmo recebimento seguinte (configurável em Configurações).</p>'+
+    insumos.map(function(i){
+      return '<div class="card" style="margin-bottom:10px;'+(i.alerta?' border-color:var(--danger);':'')+'">'+
+        '<div class="data-row" style="padding:0;">'+
+          '<div class="main"><div class="nome">'+escapeHtml(i.nome)+(i.alerta?' <span class="badge badge-status-critico">Subiu '+i.variacao_pct+'%</span>':'')+'</div>'+
+            '<div class="sub">'+brl(i.preco_atual_centavos)+'/'+escapeHtml(i.unidade)+(i.preco_anterior_centavos!=null?' · era '+brl(i.preco_anterior_centavos):' · primeiro preço registrado')+' · '+new Date(i.data_atual).toLocaleDateString("pt-BR")+'</div></div>'+
+        '</div>'+
+        (i.alerta && (i.pratos_afetados||[]).length ? '<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">'+
+          '<div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Pratos que perderam margem</div>'+
+          i.pratos_afetados.map(function(p){
+            return '<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0;">'+
+              '<span>'+escapeHtml(p.nome)+'</span>'+
+              '<span>margem agora '+brl(p.margem_atual_centavos)+' <span style="color:var(--danger);">(−'+brl(Math.abs(p.impacto_centavos))+'/unidade)</span></span>'+
+            '</div>';
+          }).join("")+
+        '</div>' : '')+
+      '</div>';
+    }).join("");
 }
 
 function contaBucket(c, hoje, fimSemana){
@@ -868,7 +1388,16 @@ function renderResumoContas(titulo, iconName, cor, contasDoTipo, hoje, fimSemana
     }).join("")+
   '</div>';
 }
+// PRIORIDADE 7 — Financeiro ganhou sub-abas (mesmo componente da 0.11):
+// Resumo (nova, linguagem simples — "entrou/saiu/sobrou" do mês) e
+// Contas (tela de sempre).
 function renderFinanceiro(){
+  var podeEditar = can(PERM.FINANCEIRO);
+  return renderPageHeader("landmark", "Financeiro", "Resumo simples, contas a pagar e a receber",
+      (podeEditar ? '<button class="btn btn-primary" data-action="conta-nova">'+icon("plus",15)+' Nova conta</button>' : ''))+
+    renderSubAbas("financeiro");
+}
+function renderContasConteudo(){
   var podeEditar = can(PERM.FINANCEIRO);
   var filtro = state.financeiroFiltro || "TODAS";
   var tabs = [["TODAS","Todas"],["PAGAR","A pagar"],["RECEBER","A receber"]];
@@ -879,9 +1408,7 @@ function renderFinanceiro(){
   var contasPagar = state.contas.filter(function(c){ return c.tipo==="PAGAR"; });
   var contasReceber = state.contas.filter(function(c){ return c.tipo==="RECEBER"; });
 
-  return renderPageHeader("landmark", "Financeiro", "Contas a pagar e a receber",
-      (podeEditar ? '<button class="btn btn-primary" data-action="conta-nova">'+icon("plus",15)+' Nova conta</button>' : ''))+
-    (can(PERM.FINANCEIRO) ? '<div class="card" style="margin-bottom:14px;"><div class="card-title">Exportar pro contador</div>'+
+  return (can(PERM.FINANCEIRO) ? '<div class="card" style="margin-bottom:14px;"><div class="card-title">Exportar pro contador</div>'+
       '<div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">'+
         '<div class="field" style="margin-bottom:0;"><label>Mês</label><input type="month" id="exportMesInput" value="'+hojeOperacionalStr().slice(0,7)+'"></div>'+
         '<button class="btn" data-action="exportar-contador">'+icon("book",15)+' Baixar CSVs</button>'+
@@ -910,6 +1437,66 @@ function renderFinanceiro(){
     }).join("") : '<tr><td colspan="7"><div class="empty-hint">Nenhuma conta neste filtro.</div></td></tr>')+
     '</tbody></table></div></div>';
 }
+
+// PRIORIDADE 7 — "sem saber contabilidade, consigo responder quanto
+// sobrou este mês e por quê": entrou/saiu/sobrou + pra onde foi o
+// dinheiro (5 linhas) + comparação com o mês anterior + fluxo projetado
+// dos próximos 30 dias, tudo agregado no banco (relatorio_financeiro_resumo).
+function renderResumoFinanceiroConteudo(){
+  var podeEditar = can(PERM.FINANCEIRO_EDITAR);
+  if(state.financeiroResumoCarregando || !state.financeiroResumoResultado){
+    return '<div class="empty-hint">Carregando...</div>';
+  }
+  var r = state.financeiroResumoResultado;
+  var ant = r.mes_anterior;
+  function variacaoTxt(atual, anterior){
+    if(!anterior) return "";
+    var pct = Math.round((atual-anterior)/Math.abs(anterior)*100);
+    var cor = pct>=0 ? "var(--success)" : "var(--danger)";
+    return '<span style="color:'+cor+'; font-size:11px; font-weight:700;">'+(pct>=0?"▲":"▼")+' '+Math.abs(pct)+'% vs mês passado</span>';
+  }
+  var maxLinha = Math.max.apply(null, r.linhas.map(function(l){ return l.valor_centavos; }).concat([1]));
+  var maxSaldoAbs = Math.max.apply(null, r.fluxo_30_dias.map(function(d){ return Math.abs(d.saldo_acumulado_centavos); }).concat([1]));
+  var primeiroNegativo = r.fluxo_30_dias.find(function(d){ return d.saldo_acumulado_centavos<0; });
+
+  return '<div class="metric-grid">'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(34,197,94,.14); color:var(--success);">'+icon("trendingUp",20)+'</div><div class="kpi-body"><div class="kpi-label">Entrou</div><div class="kpi-value">'+brl(r.entrou_centavos)+'</div>'+variacaoTxt(r.entrou_centavos, ant.entrou_centavos)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(239,68,68,.14); color:var(--danger);">'+icon("trendingUp",20)+'</div><div class="kpi-body"><div class="kpi-label">Saiu</div><div class="kpi-value">'+brl(r.saiu_centavos)+'</div>'+variacaoTxt(r.saiu_centavos, ant.saiu_centavos)+'</div></div>'+
+      '<div class="kpi-card"><div class="kpi-icon">'+icon("wallet",20)+'</div><div class="kpi-body"><div class="kpi-label">Sobrou</div><div class="kpi-value" style="color:'+(r.sobrou_centavos>=0?"var(--success)":"var(--danger)")+';">'+brl(r.sobrou_centavos)+'</div>'+variacaoTxt(r.sobrou_centavos, ant.sobrou_centavos)+'</div></div>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:14px;"><div class="card-title">Para onde foi o dinheiro</div>'+
+    r.linhas.map(function(l){
+      var pct = Math.max(2, Math.round(l.valor_centavos/maxLinha*100));
+      return '<div style="margin-bottom:10px;">'+
+        '<div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;"><span>'+l.label+'</span><span style="font-weight:700;">'+brl(l.valor_centavos)+'</span></div>'+
+        '<div class="stock-bar"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--danger);"></div></div>'+
+      '</div>';
+    }).join("")+
+    '</div>'+
+    '<div class="section-label">Despesas fixas (lançam a conta do mês sozinhas)</div>'+
+    '<div class="card" style="margin-bottom:14px;">'+
+      (state.despesasRecorrentes.length ? state.despesasRecorrentes.map(function(d){
+        return '<div class="data-row"><div class="main"><div class="nome">'+escapeHtml(d.descricao)+(!d.ativo?' <span class="badge badge-inativo">Inativa</span>':'')+'</div>'+
+          '<div class="sub">'+escapeHtml(d.categoria)+' · todo dia '+d.diaVencimento+' · '+brl(d.valorCentavos)+'</div></div>'+
+          (podeEditar ? '<button class="btn btn-sm" data-action="despesa-recorrente-editar" data-despesa="'+d.id+'">Editar</button>' : '')+
+        '</div>';
+      }).join("") : '<div class="empty-hint">Nenhuma despesa fixa cadastrada.</div>')+
+      (podeEditar ? '<button class="btn btn-sm" style="margin-top:8px;" data-action="despesa-recorrente-nova">'+icon("plus",14)+' Despesa fixa</button>' : '')+
+    '</div>'+
+    '<div class="section-label">Fluxo projetado — próximos 30 dias</div>'+
+    (primeiroNegativo ? '<div class="alert-row danger">'+icon("alert",16)+'<div><span class="t">SALDO PROJETADO FICA NEGATIVO</span><span class="d">a partir de '+new Date(primeiroNegativo.data+"T00:00:00").toLocaleDateString("pt-BR")+'</span></div></div>' : '')+
+    '<div class="card"><div class="chart-bars">'+r.fluxo_30_dias.map(function(d){
+      var pct = Math.max(2, Math.round(Math.abs(d.saldo_acumulado_centavos)/maxSaldoAbs*100));
+      var negativo = d.saldo_acumulado_centavos<0;
+      return '<div class="chart-bar '+(pct>2?"has":"")+'" style="height:'+pct+'%; background:'+(negativo?"var(--danger)":"var(--success)")+';" title="'+new Date(d.data+"T00:00:00").toLocaleDateString("pt-BR")+' · '+brl(d.saldo_acumulado_centavos)+'"></div>';
+    }).join("")+'</div></div>';
+}
+SUB_ABAS.financeiro = [
+  {id:"resumo", rotulo:"Resumo", permissao:PERM.FINANCEIRO, render:renderResumoFinanceiroConteudo,
+    carregar:function(){ carregarFinanceiroResumo(); },
+    carregado:function(){ return !!state.financeiroResumoResultado; }},
+  {id:"contas", rotulo:"Contas", permissao:PERM.FINANCEIRO, render:renderContasConteudo}
+];
 
 function renderClientes(){
   var podeEditar = can(PERM.CLIENTES);
@@ -1119,7 +1706,16 @@ function renderDre(){
     '</div>';
 }
 
+// PRIORIDADE 5 — Equipe ganhou 5 sub-abas (mesmo componente da 0.11):
+// Funcionários (tela de sempre), Escala, Ponto, Desempenho e Custo
+// (salário/diária/rateio/vales — só ADMIN, admin.equipe.custos.ver).
 function renderEquipe(){
+  var podeEditar = can(PERM.EQUIPE);
+  return renderPageHeader("users", "Equipe", state.usuarios.length+" usuários cadastrados",
+      (podeEditar ? '<button class="btn btn-primary" data-action="usuario-novo">'+icon("plus",15)+' Novo usuário</button>' : ''))+
+    renderSubAbas("equipe");
+}
+function renderFuncionariosConteudo(){
   var podeEditar = can(PERM.EQUIPE);
   var ativos = state.usuarios.filter(function(u){ return u.ativo; }).length;
   var inativos = state.usuarios.length - ativos;
@@ -1127,9 +1723,7 @@ function renderEquipe(){
   state.usuarios.forEach(function(u){ porPapel[u.papel] = (porPapel[u.papel]||0)+1; });
   var papeis = Object.keys(porPapel).sort();
 
-  return renderPageHeader("users", "Equipe", state.usuarios.length+" usuários cadastrados",
-      (podeEditar ? '<button class="btn btn-primary" data-action="usuario-novo">'+icon("plus",15)+' Novo usuário</button>' : ''))+
-    '<div class="metric-grid">'+
+  return '<div class="metric-grid">'+
       '<div class="kpi-card"><div class="kpi-icon" style="background:rgba(34,197,94,.14); color:var(--success);">'+icon("check",20)+'</div><div class="kpi-body"><div class="kpi-label">Ativos</div><div class="kpi-value">'+ativos+'</div></div></div>'+
       '<div class="kpi-card"><div class="kpi-icon" style="background:var(--surface-03); color:var(--text-muted);">'+icon("x",20)+'</div><div class="kpi-body"><div class="kpi-label">Inativos</div><div class="kpi-value">'+inativos+'</div></div></div>'+
     '</div>'+
@@ -1145,7 +1739,9 @@ function renderEquipe(){
       return '<div class="data-row">'+
         '<div class="avatar-sm">'+escapeHtml(u.nome.charAt(0))+'</div>'+
         '<div class="main"><div class="nome">'+escapeHtml(u.nome)+' '+(!u.ativo?'<span class="badge badge-inativo">Inativo</span>':'')+'</div>'+
-        '<div class="sub"><span class="badge" style="background:rgba(255,255,255,.08); color:'+(PAPEL_COR[u.papel]||"var(--text-secondary)")+';">'+u.papel+'</span></div></div>'+
+        '<div class="sub"><span class="badge" style="background:rgba(255,255,255,.08); color:'+(PAPEL_COR[u.papel]||"var(--text-secondary)")+';">'+u.papel+'</span>'+
+          (podeEditar ? ' · peso rateio <input type="number" min="0.1" step="0.1" style="width:56px; padding:2px 4px; font-size:11px;" value="'+u.pesoRateioTaxa+'" data-action="usuario-peso-rateio" data-usuario="'+u.id+'">' : '')+
+        '</div></div>'+
         (podeEditar ? '<div class="acts">'+
           '<button class="btn btn-sm" data-action="usuario-trocar-pin" data-usuario="'+u.id+'">Trocar PIN</button>'+
           '<button class="btn btn-sm" data-action="usuario-toggle-ativo" data-usuario="'+u.id+'">'+(u.ativo?"Desativar":"Reativar")+'</button>'+
@@ -1154,6 +1750,148 @@ function renderEquipe(){
     }).join("")+
     '</div>';
 }
+
+var DIAS_SEMANA_ESCALA = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+function renderEscalaConteudo(){
+  var podeEditar = can(PERM.EQUIPE);
+  var ativos = state.usuarios.filter(function(u){ return u.ativo; });
+  var hoje = state.escalaHoje||[];
+  var naoBateram = hoje.filter(function(h){ return !h.bateu_ponto; });
+
+  return (naoBateram.length ? '<div class="alert-row danger">'+icon("alert",16)+'<div style="flex:1;"><span class="t">ESCALADO(S) HOJE SEM BATER PONTO</span><span class="d">'+
+      naoBateram.map(function(h){ return escapeHtml(h.nome); }).join(" · ")+
+    '</span></div></div>' : '')+
+    ativos.map(function(u){
+      var escala = state.escalasPorUsuario[u.id]||[];
+      return '<div class="card" style="margin-bottom:10px;">'+
+        '<div class="card-title">'+escapeHtml(u.nome)+'</div>'+
+        '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px;">'+
+        DIAS_SEMANA_ESCALA.map(function(d, idx){
+          var linha = escala.find(function(e){ return e.diaSemana===idx; });
+          var folga = !linha || linha.tipo==="FOLGA";
+          return '<div class="field" style="margin-bottom:0;"><label>'+d+'</label>'+
+            '<select data-action="escala-tipo" data-usuario="'+u.id+'" data-dia="'+idx+'">'+
+              '<option value="FOLGA" '+(folga?"selected":"")+'>Folga</option>'+
+              '<option value="TRABALHO" '+(!folga?"selected":"")+'>Trabalho</option>'+
+            '</select>'+
+            (!folga ? '<div style="display:flex; gap:4px; margin-top:4px;">'+
+              '<input type="time" style="flex:1;" value="'+(linha&&linha.turnoInicio?linha.turnoInicio.slice(0,5):"")+'" data-action="escala-turno-inicio" data-usuario="'+u.id+'" data-dia="'+idx+'">'+
+              '<input type="time" style="flex:1;" value="'+(linha&&linha.turnoFim?linha.turnoFim.slice(0,5):"")+'" data-action="escala-turno-fim" data-usuario="'+u.id+'" data-dia="'+idx+'">'+
+            '</div>' : '')+
+          '</div>';
+        }).join("")+
+        '</div>'+
+        (podeEditar ? '<button class="btn btn-sm btn-primary" style="margin-top:10px;" data-action="escala-salvar" data-usuario="'+u.id+'">Salvar escala</button>' : '')+
+      '</div>';
+    }).join("");
+}
+
+var PONTO_TIPO_LABEL = {ENTRADA:"Entrada", SAIDA:"Saída", INICIO_INTERVALO:"Início do intervalo", FIM_INTERVALO:"Fim do intervalo"};
+function renderPontoConteudo(){
+  var podeEditar = can(PERM.EQUIPE);
+  var ativos = state.usuarios.filter(function(u){ return u.ativo; });
+  return '<div class="card" style="max-width:420px; margin-bottom:14px;">'+
+    '<div class="card-title">Bater ponto</div>'+
+    '<div class="modal-sub" style="margin-bottom:10px;">Controle interno — não substitui o registro de ponto oficial exigido pela legislação.</div>'+
+    '<div class="field"><label>Funcionário</label><select data-action="ponto-usuario">'+
+      ativos.map(function(u){ return '<option value="'+u.id+'" '+(state.pontoUsuarioId===u.id?"selected":"")+'>'+escapeHtml(u.nome)+'</option>'; }).join("")+
+    '</select></div>'+
+    '<div class="field" style="margin-bottom:10px;"><label>PIN</label><input id="pontoPinInput" type="password" value="'+escapeHtml(state.pontoPin||"")+'" data-action="ponto-pin-input" placeholder="PIN"></div>'+
+    (state.pontoErro ? '<div class="pin-error">'+escapeHtml(state.pontoErro)+'</div>' : '')+
+    '<div class="action-row">'+
+      Object.keys(PONTO_TIPO_LABEL).map(function(t){
+        return '<button class="btn btn-sm" data-action="ponto-bater" data-tipo="'+t+'">'+PONTO_TIPO_LABEL[t]+'</button>';
+      }).join("")+
+    '</div>'+
+  '</div>'+
+  '<div class="section-label">Registros recentes</div>'+
+  '<div class="card">'+(state.pontosRecentes&&state.pontosRecentes.length ? state.pontosRecentes.map(function(p){
+    var u = state.usuarios.find(function(x){ return x.id===p.usuarioId; });
+    return '<div class="mov-row"><span><span class="mov-tipo ENTRADA">'+(PONTO_TIPO_LABEL[p.tipo]||p.tipo)+'</span>'+(u?escapeHtml(u.nome):"?")+
+      (p.corrigido?' <span class="badge badge-status-atencao">corrigido</span>':'')+
+      '<div class="tag">'+new Date(p.registradoEm).toLocaleString("pt-BR")+'</div></span>'+
+      (podeEditar ? '<button class="btn btn-sm" data-action="ponto-corrigir-abrir" data-ponto="'+p.id+'">Corrigir</button>' : '')+
+    '</div>';
+  }).join("") : '<div class="empty-hint">Nenhum registro ainda.</div>')+'</div>';
+}
+
+function renderDesempenhoConteudo(){
+  var periodo = state.desempenhoPeriodo||"7D";
+  var periodos = [["7D","7 dias"],["30D","30 dias"],["MES","Escolher mês"]];
+  var cabecalho = '<div class="tabs">'+periodos.map(function(p){ return '<div class="tab '+(periodo===p[0]?"active":"")+'" data-action="desempenho-periodo" data-p="'+p[0]+'">'+p[1]+'</div>'; }).join("")+'</div>'+
+    (periodo==="MES" ? '<div class="field" style="max-width:220px;"><input type="month" value="'+escapeHtml(state.desempenhoMes||"")+'" data-action="desempenho-mes"></div>' : '');
+  if(state.desempenhoCarregando || !state.desempenhoResultado) return cabecalho+'<div class="empty-hint">Carregando...</div>';
+  var r = state.desempenhoResultado;
+  var porGarcom = r.por_garcom||[];
+  var tempoPreparo = r.tempo_preparo_por_setor||[];
+  var maxVendas = porGarcom.length ? Math.max.apply(null, porGarcom.map(function(g){ return g.vendas_centavos; })) : 0;
+  return cabecalho+
+    '<div class="card"><div class="card-title">Por garçom/funcionário</div>'+
+    (porGarcom.length ? porGarcom.map(function(g){
+      var pct = maxVendas>0 ? Math.max(4, Math.round(g.vendas_centavos/maxVendas*100)) : 4;
+      return '<div class="ranking-row"><div class="main"><div class="nome">'+escapeHtml(g.nome)+'</div>'+
+        '<div class="sub">'+g.contas+' conta(s) · ticket médio '+brl(g.ticket_medio_centavos)+' · '+g.horas_trabalhadas+'h trabalhadas'+
+          (g.itens_por_hora!=null?' · '+g.itens_por_hora+' itens/h':'')+(g.cancelamentos?' · '+g.cancelamentos+' cancelamento(s)':'')+'</div>'+
+        '<div class="stock-bar" style="max-width:none;"><div class="stock-bar-fill" style="width:'+pct+'%; background:var(--primary);"></div></div></div>'+
+        '<div class="num">'+brl(g.vendas_centavos)+'</div></div>';
+    }).join("") : '<div class="empty-hint">Nenhuma venda no período.</div>')+
+    '</div>'+
+    '<div class="section-label">Tempo médio de preparo (cozinha)</div>'+
+    '<div class="metric-grid">'+
+    (tempoPreparo.length ? tempoPreparo.map(function(t){
+      return '<div class="metric-card"><div class="metric-label">'+t.setor_producao+'</div><div class="metric-value small">'+t.minutos_medio+' min</div></div>';
+    }).join("") : '<div class="empty-hint">Sem itens com tempo de preparo registrado no período.</div>')+
+    '</div>';
+}
+
+function renderCustoConteudo(){
+  if(!can(PERM.EQUIPE_CUSTOS)) return '<div class="empty-hint">Disponível só para ADMIN.</div>';
+  var ativos = state.usuarios.filter(function(u){ return u.ativo; });
+  var f = state.fechamentoResultado;
+  return '<div class="card" style="margin-bottom:14px;"><div class="card-title">Remuneração e vales por funcionário</div>'+
+    ativos.map(function(u){
+      var rem = state.remuneracoesPorUsuario[u.id];
+      var vales = state.valesPorUsuario[u.id]||[];
+      return '<div class="data-row" style="align-items:flex-start;">'+
+        '<div class="main"><div class="nome">'+escapeHtml(u.nome)+'</div>'+
+          '<div class="sub">'+(rem ? (rem.tipo==="MENSAL"?"Mensal: ":"Diária: ")+brl(rem.valorCentavos) : "Sem remuneração cadastrada")+
+            (vales.length?' · '+vales.length+' vale(s) recente(s)':'')+'</div></div>'+
+        '<div class="acts">'+
+          '<button class="btn btn-sm" data-action="remuneracao-abrir" data-usuario="'+u.id+'">Remuneração</button>'+
+          '<button class="btn btn-sm" data-action="vale-abrir" data-usuario="'+u.id+'">+ Vale</button>'+
+        '</div>'+
+      '</div>';
+    }).join("")+
+  '</div>'+
+  '<div class="card">'+
+    '<div class="card-title">Fechamento do período</div>'+
+    '<div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:12px;">'+
+      '<div class="field" style="margin-bottom:0;"><label>De</label><input type="date" value="'+(state.fechamentoDesde||"")+'" data-action="fechamento-desde"></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Até</label><input type="date" value="'+(state.fechamentoAte||"")+'" data-action="fechamento-ate"></div>'+
+      '<button class="btn" data-action="fechamento-recalcular">Recalcular</button>'+
+    '</div>'+
+    (state.fechamentoCarregando || !f ? '<div class="empty-hint">Carregando...</div>' :
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 10px;">Taxa de serviço do período: '+brl(f.taxa_total_centavos)+' · rateio '+(f.metodo_rateio==="PESO"?"por peso de função":"igualitário")+'.</p>'+
+      '<div style="overflow-x:auto;"><table class="table-dark"><thead><tr><th>Funcionário</th><th>Horas</th><th>Rateio (10%)</th><th>Vales</th>'+(f.pode_ver_remuneracao?'<th>Base</th><th>Líquido</th>':'')+'</tr></thead><tbody>'+
+      (f.funcionarios||[]).map(function(x){
+        return '<tr><td>'+escapeHtml(x.nome)+'</td><td>'+x.horas_trabalhadas+'h</td><td>'+brl(x.rateio_taxa_centavos)+'</td><td>'+brl(x.vales_centavos)+'</td>'+
+          (f.pode_ver_remuneracao ? '<td>'+brl(x.remuneracao_base_centavos)+'</td><td style="font-weight:800;">'+brl(x.liquido_centavos)+'</td>' : '')+
+        '</tr>';
+      }).join("")+
+      '</tbody></table></div>')+
+  '</div>';
+}
+SUB_ABAS.equipe = [
+  {id:"funcionarios", rotulo:"Funcionários", permissao:PERM.EQUIPE, render:renderFuncionariosConteudo},
+  {id:"escala", rotulo:"Escala", permissao:PERM.EQUIPE, render:renderEscalaConteudo,
+    carregar:function(){ carregarEscalas(); }, carregado:function(){ return !!state.escalaHoje; }},
+  {id:"ponto", rotulo:"Ponto", permissao:PERM.EQUIPE, render:renderPontoConteudo,
+    carregar:function(){ carregarPontosRecentes(); }, carregado:function(){ return !!state.pontosRecentes; }},
+  {id:"desempenho", rotulo:"Desempenho", permissao:PERM.EQUIPE, render:renderDesempenhoConteudo,
+    carregar:function(){ carregarDesempenhoEquipe(state.desempenhoPeriodo||"7D"); }, carregado:function(){ return !!state.desempenhoResultado; }},
+  {id:"custo", rotulo:"Custo", permissao:PERM.EQUIPE_CUSTOS, render:renderCustoConteudo,
+    carregar:function(){ carregarCustoEquipe(); }, carregado:function(){ return !!state.fechamentoResultado; }}
+];
 
 // 0.5 — conflitos de sincronização offline: pagamento feito sem internet
 // numa comanda que mudou em outro terminal antes de sincronizar de
@@ -1206,6 +1944,19 @@ function renderConfiguracoes(){
       '<div class="field"><label>Limite de desconto sem supervisor (%)</label><input id="cfgDesconto" type="number" min="0" max="100" step="1" value="'+c.limiteDescontoPct+'"></div>'+
       '<div class="field"><label>Limite de diferença de caixa tolerada</label><input id="cfgDiferenca" type="number" min="0" step="0.01" value="'+(c.limiteDiferencaCentavos/100).toFixed(2)+'"></div>'+
       '<div class="field" style="margin-bottom:0;"><label>Alertar sangria quando dinheiro em gaveta passar de</label><input id="cfgAlertaSangria" type="number" min="0" step="0.01" value="'+(c.limiteAlertaSangriaCentavos/100).toFixed(2)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Metas da Central do Dono</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Definem o verde/amarelo/vermelho dos semáforos na Central do Dono.</p>'+
+      '<div class="field"><label>CMV alvo (%)</label><input id="cfgMetaCmv" type="number" min="0" max="100" step="0.5" value="'+((c.metasCentralDono&&c.metasCentralDono.cmvPct)||35)+'"></div>'+
+      '<div class="field"><label>Perdas alvo (% do faturamento)</label><input id="cfgMetaPerdas" type="number" min="0" max="100" step="0.5" value="'+((c.metasCentralDono&&c.metasCentralDono.perdasPctFaturamento)||3)+'"></div>'+
+      '<div class="field"><label>Custo de equipe alvo (%)</label><input id="cfgMetaCustoEquipe" type="number" min="0" max="100" step="0.5" value="'+((c.metasCentralDono&&c.metasCentralDono.custoEquipePct)||30)+'"></div>'+
+      '<div class="field" style="margin-bottom:0;"><label>Diferença de caixa tolerada no mês (R$)</label><input id="cfgMetaDiferencaCaixaMes" type="number" min="0" step="0.01" value="'+(((c.metasCentralDono&&c.metasCentralDono.diferencaCaixaCentavosMes)||5000)/100).toFixed(2)+'"></div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div class="card-title">Compras — alerta de preço</div>'+
+      '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Aumento acima deste percentual (frente ao recebimento anterior) acende o alerta na aba Preços.</p>'+
+      '<div class="field" style="margin-bottom:0;"><label>Alerta de aumento de preço (%)</label><input id="cfgAlertaPrecoInsumo" type="number" min="0" step="0.5" value="'+(c.alertaAumentoPrecoInsumoPct||10)+'"></div>'+
     '</div>'+
     '<div class="card">'+
       '<div class="card-title">Cozinha (KDS) — atraso por setor</div>'+

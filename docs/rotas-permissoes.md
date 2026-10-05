@@ -46,7 +46,7 @@ ficar manualmente em sincronia (ver nota no README).
 | 16 | `auditoria.ver` | Ver a trilha de auditoria |
 | 17 | `admin.cardapio.editar` | CRUD de produtos/categorias/opções; gerar novo QR de mesa (0.6) |
 | 18 | `admin.estoque.editar` | Entrada/saída manual de estoque, inventário, rendimento |
-| 19 | `admin.equipe.editar` | Criar funcionário, trocar PIN, ativar/desativar |
+| 19 | `admin.equipe.editar` | Criar funcionário, trocar PIN, ativar/desativar, editar escala, bater/corrigir ponto, ver desempenho e o fechamento (sem remuneração) |
 | 20 | `admin.financeiro.ver` | Ver contas a pagar/receber e exportação pro contador |
 | 21 | `admin.financeiro.editar` | Lançar/editar contas a pagar/receber |
 | 22 | `admin.relatorios.ver` | Ver as três abas de Relatórios (Vendas/Gestão/DRE) |
@@ -54,6 +54,8 @@ ficar manualmente em sincronia (ver nota no README).
 | 24 | `admin.clientes.editar` | CRUD de clientes (CRM) |
 | 25 | `admin.marketing.editar` | CRUD de cupons, busca de clientes inativos, banner do cardápio |
 | 26 | `admin.sync_conflitos.resolver` | Aplicar/descartar um conflito de sincronização offline (0.5) |
+| 27 | `admin.central_dono.ver` | Ver a Central do Dono (PRIORIDADE 1) — resultado estimado do mês só aparece pra quem é `ADMIN` |
+| 28 | `admin.equipe.custos.ver` | Ver/editar salário-diária, vales e o fechamento completo da equipe (PRIORIDADE 5) — só `ADMIN` |
 
 ## 3. Matriz papel × permissão
 
@@ -85,12 +87,22 @@ ficar manualmente em sincronia (ver nota no README).
 | admin.clientes.editar | ✔ | ✔ | – | – | – |
 | admin.marketing.editar | ✔ | ✔ | – | – | – |
 | admin.sync_conflitos.resolver | ✔ | ✔ | – | – | – |
+| admin.central_dono.ver | ✔ | ✔ | – | – | – |
+| admin.equipe.custos.ver | ✔ | – | – | – | – |
 
 **Notas de decisão:**
 
 - `GERENTE` tem praticamente as mesmas permissões de `ADMIN`, exceto
   `admin.configuracoes.editar` — reservado ao dono/responsável técnico do
-  estabelecimento (dados fiscais, limites de alçada, 2FA).
+  estabelecimento (dados fiscais, limites de alçada, 2FA). Mesma lógica
+  na Central do Dono: `GERENTE` tem `admin.central_dono.ver`, mas a RPC
+  devolve o resultado/lucro estimado do mês como `null` pra quem não é
+  `ADMIN` — decidido no servidor, não só escondido na tela. E em Equipe:
+  `GERENTE` tem `admin.equipe.editar` (funcionário, PIN, escala, ponto,
+  desempenho) mas não `admin.equipe.custos.ver` — salário/diária fica
+  numa tabela própria (`funcionarios_remuneracao`), nunca em `usuarios`
+  (que todo funcionário lê); o fechamento da equipe devolve horas/rateio/
+  vales pra `GERENTE` mas `null` em remuneração/líquido.
 - Cancelar item e transferir/juntar comanda **sempre** passam por um
   trigger de coluna no banco (`trg_comandas_protege_colunas` /
   `trg_comanda_itens_protege_colunas`), não só pela permissão de linha —
@@ -124,16 +136,22 @@ de rota:
 
 | Tela (e sub-aba) | Permissão mínima |
 |---|---|
+| Central do Dono | `admin.central_dono.ver` |
 | Dashboard | `atendimento.salao.ver` |
-| Atendimento → Salão | `atendimento.salao.ver` |
+| Atendimento → Salão → Mapa de mesas | `atendimento.salao.ver` |
+| Atendimento → Salão → Reservas e fila | `atendimento.salao.ver` pra ver (criar reserva, entrar na fila, confirmar/sentar/não veio/chamar/desistiu exige `atendimento.comanda.abrir`) |
 | Atendimento → QR Codes das mesas | `atendimento.salao.ver` (gerar novo QR exige `admin.cardapio.editar`) |
 | Caixa | `caixa.sessao.abrir` |
-| Cozinha (KDS) | `cozinha.kds.ver` |
+| Cozinha → KDS / Produção / Expedição | `cozinha.kds.ver` (botão "Produzir lote" em Produção exige `admin.estoque.editar`) |
 | Cardápio | `admin.cardapio.editar` |
-| Estoque → Estoque / Compras | `admin.estoque.editar` |
-| Financeiro → Financeiro / Relatórios | `admin.financeiro.ver` / `admin.relatorios.ver` |
-| Pessoas → Clientes / Equipe | `admin.clientes.editar` / `admin.equipe.editar` |
-| Marketing (Cupons/Inativos/Banner) | `admin.marketing.editar` |
+| Estoque → Estoque / Perdas | `admin.estoque.editar` |
+| Compras → Lista de compras / Pedidos / Cotação / Preços | `admin.estoque.editar` |
+| Financeiro → Resumo / Contas | `admin.financeiro.ver` (despesa fixa exige `admin.financeiro.editar`) |
+| Relatórios | `admin.relatorios.ver` |
+| Pessoas → Clientes | `admin.clientes.editar` |
+| Pessoas → Equipe → Funcionários / Escala / Ponto / Desempenho | `admin.equipe.editar` |
+| Pessoas → Equipe → Custo | `admin.equipe.custos.ver` |
+| Marketing (Campanhas/Cupons/Inativos/Banner) | `admin.marketing.editar` |
 | Auditoria | `auditoria.ver` |
 | Configurações | `admin.configuracoes.editar` (conflitos de sincronização exige `admin.sync_conflitos.resolver`) |
 

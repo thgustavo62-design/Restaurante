@@ -202,7 +202,7 @@ begin
 end;
 $$;
 
-revoke all on function restaurante.calcular_totais_pagamento(uuid, uuid[], int, text) from public;
+revoke all on function restaurante.calcular_totais_pagamento(uuid, uuid[], int, text, uuid) from public;
 
 -- RPC exposta: o modal de pagamento chama isso a cada mudança (cliente,
 -- pontos, cupom) pra mostrar o total EXATO que vai ser cobrado — nunca

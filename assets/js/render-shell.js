@@ -7,6 +7,7 @@ var app = document.getElementById("app");
 // ao clicar e só então mostram os filhos — mesmo padrão de "vários assuntos
 // dentro de um só ícone" que o Cardápio já usava com suas abas de categoria.
 var NAV_ITEMS = [
+  {view:"central", label:"Central do Dono", icon:"target", perm:PERM.CENTRAL_DONO, built:true},
   {view:"dashboard", label:"Dashboard", icon:"grid", perm:PERM.SALAO_VER, built:true},
   {group:"atendimento", groupLabel:"Atendimento", groupIcon:"utensils", items:[
     {view:"salao", label:"Salão", icon:"utensils", perm:PERM.SALAO_VER, built:true},
@@ -31,7 +32,7 @@ var NAV_ITEMS = [
   {view:"auditoria", label:"Auditoria", icon:"alert", perm:PERM.AUDITORIA_VER, built:true},
   {view:"configuracoes", label:"Configurações", icon:"settings", perm:PERM.CONFIGURACOES, built:true}
 ];
-var PAGE_TITLES = {dashboard:"Dashboard", salao:"Atendimento", comanda:"Atendimento", kds:"Cozinha (KDS)", caixa:"Caixa", auditoria:"Auditoria",
+var PAGE_TITLES = {central:"Central do Dono", dashboard:"Dashboard", salao:"Atendimento", comanda:"Atendimento", kds:"Cozinha (KDS)", caixa:"Caixa", auditoria:"Auditoria",
   cardapio:"Cardápio", estoque:"Estoque", compras:"Compras", financeiro:"Financeiro", clientes:"Clientes", relatorios:"Relatórios", equipe:"Equipe",
   configuracoes:"Configurações", qrcodes:"QR Codes das Mesas", marketing:"Marketing"};
 
@@ -246,6 +247,7 @@ function renderTopbar(){
     '</div>'+
     '<div class="status-pill pill-conexao"><span class="status-dot" style="background:'+conexaoCor+';"></span>'+conexaoTexto+' <span class="pill-detail" style="color:var(--text-muted);">· '+conexaoDetalhe+'</span></div>'+
     renderSinoAlertas()+
+    renderNotificacoesToggle()+
     '<div class="user-chip">'+
       '<div class="avatar">'+escapeHtml(u.nome.charAt(0))+'</div>'+
       '<div class="meta"><div class="nome">'+escapeHtml(u.nome)+'</div><div class="papel">'+u.papel+'</div></div>'+
@@ -261,6 +263,15 @@ function renderSinoAlertas(){
   return '<button class="icon-btn" data-action="nav-goto" data-view="dashboard" title="'+n+' alerta(s)" style="position:relative;">'+
     icon("bell",17)+
     (n ? '<span style="position:absolute; top:-3px; right:-3px; background:var(--danger); color:var(--on-accent); font-size:9px; font-weight:800; min-width:16px; height:16px; line-height:16px; border-radius:999px; text-align:center; padding:0 3px;">'+(n>9?"9+":n)+'</span>' : '')+
+  '</button>';
+}
+
+// PRIORIDADE 10 — por dispositivo, não por papel: qualquer um que esteja
+// logado neste aparelho pode ligar, é quem está olhando pra ele que se
+// beneficia (ex: tablet do balcão avisando pedido pelo QR).
+function renderNotificacoesToggle(){
+  return '<button class="icon-btn" data-action="notificacoes-toggle" title="'+(state.notificacoesAtivas?"Notificações ativadas neste aparelho":"Ativar notificações neste aparelho")+'" style="'+(state.notificacoesAtivas?"color:var(--primary);":"")+'">'+
+    icon("bell",17)+
   '</button>';
 }
 
@@ -286,6 +297,7 @@ function renderToasts(){
 }
 
 function renderView(){
+  if(state.view==="central") return renderCentralDono();
   if(state.view==="comanda") return renderComanda();
   if(state.view==="kds") return renderKds();
   if(state.view==="caixa") return renderCaixa();

@@ -123,3 +123,25 @@ function rotuloComanda(comanda, mesa){
   if(comanda.tipo==="FICHA") return "Ficha "+comanda.fichaNumero;
   return "Mesa "+(mesa?mesa.numero:"?");
 }
+
+// PRIORIDADE 10 — notificação só com o app aberto (mesmo neste dispositivo,
+// mesmo em segundo plano) — opt-in explícito (botão no topbar), nunca pede
+// permissão sozinho. Via registro do service worker (showNotification)
+// quando existe — mais confiável em segundo plano/PWA instalado do que
+// `new Notification()` direto, que alguns navegadores recusam fora de um
+// gesto do usuário.
+function notificarSeAtivo(titulo, corpo, tag){
+  if(!state.notificacoesAtivas) return;
+  if(typeof Notification==="undefined" || Notification.permission!=="granted") return;
+  try{
+    if(navigator.serviceWorker && navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready.then(function(reg){
+        reg.showNotification(titulo, {body:corpo, tag:tag, icon:"assets/logo/vision-food-icon.png"});
+      }).catch(function(){
+        try{ new Notification(titulo, {body:corpo, tag:tag, icon:"assets/logo/vision-food-icon.png"}); }catch(e){}
+      });
+    } else {
+      new Notification(titulo, {body:corpo, tag:tag, icon:"assets/logo/vision-food-icon.png"});
+    }
+  }catch(e){}
+}

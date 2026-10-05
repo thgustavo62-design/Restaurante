@@ -72,6 +72,170 @@ async function carregarRelatorioGestao(periodo){
   state.relatorioTaxasResultado = resTaxas.error ? [] : resTaxas.data;
   render();
 }
+// PRIORIDADE 1 — Central do Dono: uma RPC só, agregada no banco. Chamada
+// ao entrar na tela, a cada 60s enquanto ela estiver aberta (main.js) e
+// de novo quando o Realtime avisa de uma venda nova (data.js,
+// aplicarComandaRealtime) — nunca baixa comandas/itens pra somar aqui.
+async function carregarCentralDono(){
+  var res = await sb.rpc("central_do_dono");
+  if(res.error){
+    if(!state.centralDono) toast("err","ERRO AO CARREGAR A CENTRAL DO DONO", res.error.message);
+    return;
+  }
+  state.centralDono = mapCentralDono(res.data);
+  render();
+}
+// PRIORIDADE 3 — Perdas e Desperdícios (Estoque → Produção... Perdas).
+// Lista recente (direto da tabela, só pra exibir — nunca somada aqui) +
+// relatorio_perdas (agregado no banco: total, % do faturamento, por
+// motivo, por semana, top5), mesmo período das abas de Relatórios.
+async function carregarPerdas(periodo){
+  var hoje = hojeOperacionalStr();
+  var desde, ate;
+  if(periodo==="7D"){ desde = diasA(-6); ate = hoje; }
+  else if(periodo==="30D"){ desde = diasA(-29); ate = hoje; }
+  else if(periodo==="MES"){
+    var mes = state.perdasMes || hoje.slice(0,7);
+    state.perdasMes = mes;
+    var partes = mes.split("-").map(Number);
+    var ultimoDia = new Date(partes[0], partes[1], 0).getDate();
+    desde = mes+"-01"; ate = mes+"-"+String(ultimoDia).padStart(2,"0");
+  } else { desde = hoje; ate = hoje; }
+  state.perdasCarregando = true; render();
+  var listaRes = await sb.from("perdas").select("*").gte("dia_operacional", desde).lte("dia_operacional", ate).order("created_at", {ascending:false}).limit(50);
+  var relRes = await sb.rpc("relatorio_perdas", {p_desde: desde, p_ate: ate});
+  state.perdasCarregando = false;
+  if(relRes.error){
+    toast("err","ERRO AO CARREGAR PERDAS", relRes.error.message);
+    state.perdasRelatorio = null; render(); return;
+  }
+  state.perdasLista = listaRes.error ? [] : listaRes.data.map(mapPerda);
+  state.perdasRelatorio = relRes.data;
+  render();
+}
+// PRIORIDADE 4 — lista de compras sugerida (agregada no banco: consumo
+// dos últimos 28 dias × ficha técnica, prazo de entrega do fornecedor
+// padrão de cada insumo) e relatório de preços (histórico, alerta de
+// aumento, pratos que perderam margem) — nenhuma soma feita aqui.
+async function carregarListaComprasSugerida(){
+  state.listaComprasCarregando = true; render();
+  var res = await sb.rpc("lista_compras_sugerida");
+  state.listaComprasCarregando = false;
+  if(res.error){ toast("err","ERRO AO CARREGAR A LISTA DE COMPRAS", res.error.message); state.listaComprasSugerida = null; render(); return; }
+  state.listaComprasSugerida = res.data;
+  render();
+}
+async function carregarRelatorioPrecos(){
+  state.precosCarregando = true; render();
+  var res = await sb.rpc("relatorio_precos_insumo");
+  state.precosCarregando = false;
+  if(res.error){ toast("err","ERRO AO CARREGAR PREÇOS", res.error.message); state.precosRelatorio = null; render(); return; }
+  state.precosRelatorio = res.data;
+  render();
+}
+// PRIORIDADE 5 — Controle de Equipe. Cada sub-aba carrega só o que
+// precisa, na hora que abre (0.11) — nada disto entra em carregarTudo().
+async function carregarEscalas(){
+  var res = await sb.from("escalas").select("*");
+  if(res.error){ toast("err","ERRO AO CARREGAR ESCALA", res.error.message); return; }
+  var porUsuario = {};
+  res.data.map(mapEscala).forEach(function(e){
+    if(!porUsuario[e.usuarioId]) porUsuario[e.usuarioId] = [];
+    porUsuario[e.usuarioId].push(e);
+  });
+  state.escalasPorUsuario = porUsuario;
+  var resHoje = await sb.rpc("escala_hoje");
+  state.escalaHoje = resHoje.error ? [] : resHoje.data;
+  render();
+}
+async function carregarPontosRecentes(){
+  var res = await sb.from("pontos").select("*").order("registrado_em", {ascending:false}).limit(50);
+  state.pontosRecentes = res.error ? [] : res.data.map(mapPonto);
+  render();
+}
+async function carregarDesempenhoEquipe(periodo){
+  var hoje = hojeOperacionalStr();
+  var desde, ate;
+  if(periodo==="30D"){ desde = diasA(-29); ate = hoje; }
+  else if(periodo==="MES"){
+    var mes = state.desempenhoMes || hoje.slice(0,7);
+    state.desempenhoMes = mes;
+    var partes = mes.split("-").map(Number);
+    var ultimoDia = new Date(partes[0], partes[1], 0).getDate();
+    desde = mes+"-01"; ate = mes+"-"+String(ultimoDia).padStart(2,"0");
+  } else { desde = diasA(-6); ate = hoje; }
+  state.desempenhoCarregando = true; render();
+  var res = await sb.rpc("relatorio_desempenho_equipe", {p_desde: desde, p_ate: ate});
+  state.desempenhoCarregando = false;
+  if(res.error){ toast("err","ERRO AO CARREGAR DESEMPENHO", res.error.message); state.desempenhoResultado = null; render(); return; }
+  state.desempenhoResultado = res.data;
+  render();
+}
+async function carregarCustoEquipe(){
+  var remRes = await sb.from("funcionarios_remuneracao").select("*");
+  var valesRes = await sb.from("vales_adiantamentos").select("*").order("data", {ascending:false}).limit(100);
+  if(remRes.error){ toast("err","ERRO", remRes.error.message); }
+  var porUsuarioRem = {};
+  (remRes.data||[]).map(mapRemuneracao).forEach(function(r){ porUsuarioRem[r.usuarioId] = r; });
+  state.remuneracoesPorUsuario = porUsuarioRem;
+  var porUsuarioVales = {};
+  (valesRes.data||[]).map(mapVale).forEach(function(v){
+    if(!porUsuarioVales[v.usuarioId]) porUsuarioVales[v.usuarioId] = [];
+    porUsuarioVales[v.usuarioId].push(v);
+  });
+  state.valesPorUsuario = porUsuarioVales;
+  if(!state.fechamentoDesde){ state.fechamentoDesde = diasA(-14); state.fechamentoAte = hojeOperacionalStr(); }
+  render();
+  carregarFechamentoEquipe();
+}
+// PRIORIDADE 7 — Financeiro simples: gera as despesas fixas do mês antes
+// de ler o resumo (idempotente — a RPC só lança se ainda não lançou pra
+// este mês), depois agrega tudo no banco (relatorio_financeiro_resumo).
+// PRIORIDADE 8 — fila de espera: posição e tempo estimado vêm prontos
+// do banco (listar_fila_espera, pelo tempo médio de ocupação das mesas)
+// — carregada só quando a sub-aba Reservas e fila abre (0.11).
+async function carregarFilaEspera(){
+  var res = await sb.rpc("listar_fila_espera");
+  if(res.error){ toast("err","ERRO AO CARREGAR A FILA", res.error.message); state.filaEspera = []; render(); return; }
+  state.filaEspera = res.data.map(mapFilaEntrada);
+  render();
+}
+async function carregarFinanceiroResumo(){
+  var gerou = await sb.rpc("gerar_despesas_recorrentes_do_mes");
+  if(gerou.error){ toast("err","ERRO", gerou.error.message); }
+  else if(gerou.data && gerou.data.length){
+    gerou.data.forEach(function(c){ state.contas.push(mapConta(c)); });
+  }
+  var despRes = await sb.from("despesas_recorrentes").select("*").order("descricao");
+  state.despesasRecorrentes = despRes.error ? [] : despRes.data.map(mapDespesaRecorrente);
+
+  var mes = state.financeiroResumoMes || hojeOperacionalStr().slice(0,7);
+  state.financeiroResumoMes = mes;
+  state.financeiroResumoCarregando = true; render();
+  var res = await sb.rpc("relatorio_financeiro_resumo", {p_mes: mes+"-01"});
+  state.financeiroResumoCarregando = false;
+  if(res.error){ toast("err","ERRO AO CARREGAR O RESUMO", res.error.message); state.financeiroResumoResultado = null; render(); return; }
+  state.financeiroResumoResultado = res.data;
+  render();
+}
+async function carregarFechamentoEquipe(){
+  state.fechamentoCarregando = true; render();
+  var res = await sb.rpc("relatorio_fechamento_equipe", {p_desde: state.fechamentoDesde, p_ate: state.fechamentoAte});
+  state.fechamentoCarregando = false;
+  if(res.error){ toast("err","ERRO AO CARREGAR FECHAMENTO", res.error.message); state.fechamentoResultado = null; render(); return; }
+  state.fechamentoResultado = res.data;
+  render();
+}
+// PRIORIDADE 2 — checklist de pré-preparo do dia (Cozinha → Produção).
+// abrir_checklist_pre_preparo gera (na primeira vez do dia) ou só lê as
+// linhas de hoje, já com a sugestão calculada no banco a partir das
+// últimas 4 semanas — nada é somado aqui no navegador.
+async function carregarChecklistPreProducao(ajustePct){
+  var res = await sb.rpc("abrir_checklist_pre_preparo", {p_ajuste_pct: ajustePct||0});
+  if(res.error){ toast("err","ERRO AO CARREGAR A PRODUÇÃO", res.error.message); return; }
+  state.preProducaoChecklist = {diaOperacional: res.data.dia_operacional, itens: (res.data.itens||[]).map(mapPrePreparoItem)};
+  render();
+}
 // Fase 2.7 — saldo devedor (fiado em aberto) e últimas visitas de um
 // cliente, agregado no banco (ficha_cliente, 0055).
 async function carregarFichaCliente(clienteId){
@@ -146,15 +310,21 @@ async function carregarTudo(){
   var mesasRes = await sb.from("mesas").select("*").order("numero");
   var insRes = await sb.from("insumos").select("*").order("nome");
   var fichaRes = await sb.from("ficha_tecnica").select("*");
+  var fichaInsumoRes = await sb.from("ficha_tecnica_insumo").select("*");
   var usrRes = await sb.from("usuarios").select("*").order("nome");
   var empRes = await sb.from("empresas").select("*").eq("id", state.empresaId).single();
+  // PRIORIDADE 8 — só reservas em aberto (lista pequena, pro Mapa saber
+  // quem está reservado pras próximas 2h sem depender da sub-aba
+  // Reservas e fila ter sido aberta) — fila de espera é lazy (0.11).
+  var reservasRes = await sb.from("reservas").select("*").in("status",["AGUARDANDO","CONFIRMADA"]).order("data_hora");
 
   var catData = checar(catRes,"categorias") || [];
   var catPorId = {};
-  state.categorias = catData.map(function(c){ catPorId[c.id]=c.nome; return c.nome; });
+  var catTempoPorId = {};
+  state.categorias = catData.map(function(c){ catPorId[c.id]=c.nome; catTempoPorId[c.id]=c.tempo||"PRINCIPAL"; return c.nome; });
   state.categoriaIdPorNome = {};
   catData.forEach(function(c){ state.categoriaIdPorNome[c.nome]=c.id; });
-  state.produtos = (checar(prodRes,"produtos")||[]).map(function(p){ return mapProduto(p, catPorId); });
+  state.produtos = (checar(prodRes,"produtos")||[]).map(function(p){ return mapProduto(p, catPorId, catTempoPorId); });
   var grupRes = await sb.from("grupos_opcoes").select("*").order("ordem");
   state.gruposOpcoes = (checar(grupRes,"grupos_opcoes")||[]).map(mapGrupoOpcoes);
   var opcRes = await sb.from("opcoes").select("*").order("ordem");
@@ -162,7 +332,9 @@ async function carregarTudo(){
   state.mesas = (checar(mesasRes,"mesas")||[]).map(mapMesa);
   state.insumos = (checar(insRes,"insumos")||[]).map(mapInsumo);
   state.fichaTecnica = (checar(fichaRes,"ficha_tecnica")||[]).map(function(f){ return {produtoId:f.produto_id, insumoId:f.insumo_id, quantidade:Number(f.quantidade)}; });
+  state.fichaTecnicaInsumo = (checar(fichaInsumoRes,"ficha_tecnica_insumo")||[]).map(mapFichaTecnicaInsumo);
   state.usuarios = (checar(usrRes,"usuarios")||[]).map(mapUsuario);
+  state.reservas = (checar(reservasRes,"reservas")||[]).map(mapReserva);
   var emp = checar(empRes,"empresas");
   if(emp){
     state.config = Object.assign({}, state.config, emp.config||{}, {empresaNome:emp.nome, empresaCnpj:emp.cnpj||"", totalFichas:emp.total_fichas||50, slug:emp.slug||""});
@@ -274,6 +446,10 @@ function aplicarComandaRealtime(payload){
     }
     var row = payload.new;
     var aberta = row.status==="ABERTA" || row.status==="FECHANDO";
+    // PRIORIDADE 1 — "atualizada por Realtime em vendas": uma comanda que
+    // acabou de virar PAGA é exatamente isso; só refaz a RPC se a tela
+    // estiver aberta, pra não gastar à toa em terminais olhando outra coisa.
+    if(row.status==="PAGA" && state.view==="central") carregarCentralDono();
     var idx = state.comandas.findIndex(function(c){ return c.id===row.id; });
     if(!aberta){
       if(idx!==-1){ state.comandas.splice(idx,1); render(); }
@@ -314,6 +490,25 @@ function aplicarComandaItemRealtime(payload){
     carregarKdsItensHoje().then(function(){ verificarNovosPedidosKds(); render(); });
   }catch(e){ agendarRefresh(); }
 }
+// PRIORIDADE 10 — notificação (app aberto, mesmo em segundo plano) pros
+// dois eventos que exigem um humano decidir algo e podem passar batido
+// se ninguém estiver olhando pra tela Salão/Financeiro na hora: pedido
+// pelo QR esperando aprovação e pagamento offline em conflito. Dispara na
+// hora, direto do payload do INSERT — não espera o agendarRefresh
+// (debounced e pausado com a aba em segundo plano, exatamente quando a
+// notificação mais importa).
+function aplicarPedidoQrRealtime(payload){
+  agendarRefresh();
+  if(payload.eventType==="INSERT" && payload.new.status==="PENDENTE"){
+    notificarSeAtivo("Pedido pelo QR aguardando aprovação", "Peça feita pelo celular do cliente — revise e aprove pra ir pra cozinha.", "pedido-qr-"+payload.new.id);
+  }
+}
+function aplicarSyncConflitoRealtime(payload){
+  agendarRefresh();
+  if(payload.eventType==="INSERT" && payload.new.status==="PENDENTE"){
+    notificarSeAtivo("Pagamento offline pra revisar", "Um pagamento feito sem internet está aguardando sua decisão.", "sync-conflito-"+payload.new.id);
+  }
+}
 function configurarRealtime(){
   try{
     desligarRealtime();
@@ -327,6 +522,7 @@ function configurarRealtime(){
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"caixa_movimentos"}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"produtos", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"insumos", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"ficha_tecnica_insumo"}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"contas", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"usuarios", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"insumo_rendimentos", filter:eq}, agendarRefresh)
@@ -334,7 +530,10 @@ function configurarRealtime(){
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"pedidos_compra", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"grupos_opcoes", filter:eq}, agendarRefresh)
       .on("postgres_changes", {event:"*", schema:"restaurante", table:"opcoes", filter:eq}, agendarRefresh)
-      .on("postgres_changes", {event:"*", schema:"restaurante", table:"pedidos_qr", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"pedidos_qr", filter:eq}, aplicarPedidoQrRealtime)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"reservas", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"fila_espera", filter:eq}, agendarRefresh)
+      .on("postgres_changes", {event:"*", schema:"restaurante", table:"sync_conflitos", filter:eq}, aplicarSyncConflitoRealtime)
       .subscribe(function(status){
         // reconexão depois de queda pode ter perdido eventos no meio —
         // única situação em que ainda vale recarregar tudo (fallback).

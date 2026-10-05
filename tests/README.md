@@ -85,3 +85,76 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
   acontecer), desconto empilhado acima do limite exigindo supervisor
   (0.2), e telefone escondido pra cliente sem consentimento LGPD no
   relatório de inativos (0.3).
+- `central_do_dono.test.js` — PRIORIDADE 1 (Central do Dono): faturamento
+  de "hoje até agora" bate exatamente com o que `confirmar_pagamento`
+  cobrou de verdade (nunca uma soma recalculada); ADMIN vê o resultado
+  estimado do mês e GERENTE não (vem `null` de propósito, decidido no
+  servidor — nunca só escondido no front); estoque negativo e conta a
+  pagar vencendo entram em "precisa da sua atenção"; GARCOM (sem
+  `admin.central_dono.ver`) não consegue nem chamar a RPC.
+- `producao.test.js` — PRIORIDADE 2 (Produção/Pré-preparo): a sugestão do
+  checklist bate com a média das últimas 4 semanas × ficha técnica;
+  marcar/desmarcar "feito" grava e limpa quem e quando; produzir um lote
+  de sub-receita baixa o ingrediente de verdade e dá entrada com custo
+  médio ponderado (mesma fórmula do recebimento de compras, 0040); insumo
+  comum (não marcado como sub-receita) não pode ser "produzido".
+- `financeiro_simples.test.js` — PRIORIDADE 7 (Financeiro simples):
+  despesa recorrente lança a conta do mês sozinha e é idempotente (rodar
+  de novo no mesmo mês não duplica); `salvar_despesa_recorrente` exige
+  `admin.financeiro.editar`; e o teste central do "Pronto quando" —
+  `relatorio_financeiro_resumo` sempre bate entrou − saiu = sobrou, e as
+  5 linhas de "pra onde foi o dinheiro" somam exatamente o saiu (nenhuma
+  conta escondida fora das 5 linhas).
+- `reservas_fila.test.js` — PRIORIDADE 8 (Reservas / Fila de espera): o
+  teste central do "Pronto quando" — `sentar_reserva`/`sentar_fila` criam
+  uma comanda de verdade (tipo MESA, `dia_operacional` calculado pelo
+  timezone da empresa, não o default UTC da coluna) e vinculam o cliente;
+  `listar_fila_espera` calcula posição e tempo estimado pelo tempo médio
+  de ocupação das mesas; `atualizar_status_reserva`/`atualizar_status_fila`
+  rejeitam status inválido e não deixam mexer em quem já sentou; e quem
+  não tem `atendimento.comanda.abrir` (ex: COZINHA) não cria nem senta
+  reserva/fila, nem vê a fila sem `atendimento.salao.ver`.
+- `marketing_campanhas.test.js` — PRIORIDADE 9 (Marketing automático):
+  `campanhas_hoje` só traz quem dá pra contatar de verdade — aniversariante
+  de hoje (não de outro dia) com telefone e consentimento LGPD, reserva
+  **CONFIRMADA** de hoje com telefone (nem AGUARDANDO, nem sem telefone
+  entram); exige `admin.marketing.editar`.
+- `expedicao.test.js` — PRIORIDADE 6 (Expedição da Cozinha): o único
+  pedaço novo no banco (`categorias.tempo`) aceita só
+  entrada/principal/sobremesa, com PRINCIPAL por padrão. "Liberar pro
+  salão" não tem RPC própria — reaproveita o mesmo UPDATE em lote que o
+  KDS já usava pra ticket inteiro.
+- `controle_equipe.test.js` — PRIORIDADE 5 (Controle de Equipe): bater
+  ponto confere o PIN de verdade (mesmo mecanismo da autorização de
+  supervisor) e PIN errado é recusado; corrigir ponto exige
+  `admin.equipe.editar` e fica na auditoria; `comanda_itens` grava
+  `iniciado_em`/`pronto_em`/`entregue_em` sozinho quando o status muda
+  (sem precisar tocar nos 3 lugares que escrevem status); `confirmar_pagamento`
+  agora grava `taxa_servico_centavos`, somando em pagamento parcial; o
+  fechamento rateia a taxa por peso de função e desconta vales; e só
+  ADMIN vê remuneração/líquido (GERENTE vê o resto do mesmo relatório) —
+  mesma régua na Central do Dono pro custo de equipe.
+- `compras_inteligentes.test.js` — PRIORIDADE 4 (Compras Inteligentes): a
+  lista de compras sugerida calcula pelo consumo real dos últimos 28 dias
+  × ficha técnica e pelo prazo de entrega do fornecedor padrão do insumo;
+  receber um pedido com quantidade/preço diferente do pedido usa o
+  RECEBIDO (não o pedido) pro estoque e custo médio, e grava a
+  divergência na auditoria; e o teste do "Pronto quando" do roteiro —
+  receber um insumo 15% mais caro (acima do limite configurado de 10%)
+  aparece como alerta no relatório de preços, com o impacto por unidade
+  no prato que usa esse insumo na ficha técnica.
+- `pin_alfanumerico.test.js` — PIN deixou de ser só numérico (0068):
+  `criar_funcionario`/`trocar_pin_funcionario` aceitam PIN com letra e
+  número e o login de verdade funciona com ele (não só "a RPC não deu
+  erro"); PIN fora do formato (curto, longo, com símbolo) continua
+  recusado; `verificar_pin_supervisor` (exercitado via `cancelar_item`)
+  aceita PIN alfanumérico do supervisor.
+- `perdas.test.js` — PRIORIDADE 3 (Perdas e Desperdícios): perda manual de
+  insumo baixa o estoque e vale pelo custo médio; perda manual de prato
+  vale pelo CMV e **não** baixa ingrediente (ver nota de design na
+  migration 0067); item cancelado já em preparo vira perda automática
+  **e** baixa o ingrediente (único caso em que isso é seguro: nunca vai
+  passar pela baixa de `confirmar_pagamento`); diferença negativa de
+  inventário grava "perda não identificada" e diferença positiva (sobra)
+  não grava nada; e o teste do "Pronto quando" do roteiro — registrar uma
+  perda aparece no bloco de perdas da Central do Dono.

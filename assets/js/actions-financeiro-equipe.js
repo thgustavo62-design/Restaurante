@@ -32,6 +32,35 @@ async function exportarParaContador(mes){
   toast("ok","EXPORTAÇÃO CONCLUÍDA", "3 arquivos CSV de "+d.mes+" baixados");
 }
 
+// PRIORIDADE 7 — despesas recorrentes (aluguel, luz, contador...) —
+// o cadastro só guarda o "molde"; quem lança a conta de cada mês é a
+// RPC gerar_despesas_recorrentes_do_mes (chamada ao abrir a aba Resumo).
+function abrirDespesaRecorrenteForm(despesaId){
+  var d = despesaId ? state.despesasRecorrentes.find(function(x){ return x.id===despesaId; }) : null;
+  state.modal = {type:"despesaRecorrenteForm", despesaId:despesaId||null,
+    descricao: d?d.descricao:"", categoria: d?d.categoria:"Contas fixas",
+    valor: d?(d.valorCentavos/100).toFixed(2):"", diaVencimento: d?d.diaVencimento:10,
+    ativo: d?d.ativo:true, erro:""};
+  render();
+}
+async function salvarDespesaRecorrente(despesaId, descricao, categoria, valorReais, diaVencimento, ativo){
+  var m = state.modal;
+  var valorCentavos = Math.round(parseFloat(valorReais||"0")*100);
+  if(!descricao.trim()){ m.erro = "Informe a descrição."; render(); return; }
+  if(!(valorCentavos>0)){ m.erro = "Informe um valor maior que zero."; render(); return; }
+  var res = await sb.rpc("salvar_despesa_recorrente", {
+    p_id: despesaId||null, p_descricao: descricao.trim(), p_categoria: categoria.trim()||"Contas fixas",
+    p_valor_centavos: valorCentavos, p_dia_vencimento: parseInt(diaVencimento,10)||10, p_ativo: !!ativo
+  });
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  var mapeado = mapDespesaRecorrente(res.data);
+  var idx = state.despesasRecorrentes.findIndex(function(x){ return x.id===mapeado.id; });
+  if(idx!==-1) state.despesasRecorrentes[idx] = mapeado; else state.despesasRecorrentes.push(mapeado);
+  state.modal = null;
+  render();
+  toast("ok","DESPESA FIXA SALVA", mapeado.descricao);
+}
+
 async function marcarContaPaga(contaId){
   var c = state.contas.find(function(x){ return x.id===contaId; });
   var agora = new Date().toISOString();
@@ -88,11 +117,13 @@ function abrirUsuarioForm(){
 }
 async function salvarUsuario(nome, papel, pin){
   if(!nome.trim()){ state.modal.erro = "Informe o nome."; render(); return; }
-  if(!/^[0-9]{4}$/.test(pin)){ state.modal.erro = "PIN deve ter exatamente 4 dígitos."; render(); return; }
+  // PIN virou alfanumérico (0068) — bug real que ficou: isto aqui ainda
+  // recusava letra antes mesmo de chegar no servidor (que já aceitava).
+  if(!/^[A-Za-z0-9]{4}$/.test(pin)){ state.modal.erro = "PIN deve ter exatamente 4 caracteres (letras e números)."; render(); return; }
   state.modal.salvando = true; render();
   var res = await sb.rpc("criar_funcionario", {p_nome:nome.trim(), p_papel:papel, p_pin:pin});
   if(res.error){ state.modal.erro = res.error.message; state.modal.salvando = false; render(); return; }
-  state.usuarios.push({id:res.data, nome:nome.trim(), papel:papel, ativo:true});
+  state.usuarios.push({id:res.data, nome:nome.trim(), papel:papel, ativo:true, pesoRateioTaxa:1});
   state.modal = null;
   render();
   registrarAuditoriaLocal("usuarios", res.data, "USUARIO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+papel);
@@ -106,7 +137,7 @@ function abrirTrocarPin(usuarioId){
 }
 async function confirmarTrocarPin(usuarioId, novoPin, confirmarPin){
   var m = state.modal;
-  if(!/^[0-9]{4}$/.test(novoPin||"")){ m.erro = "PIN deve ter exatamente 4 dígitos."; render(); return; }
+  if(!/^[A-Za-z0-9]{4}$/.test(novoPin||"")){ m.erro = "PIN deve ter exatamente 4 caracteres (letras e números)."; render(); return; }
   if(novoPin !== confirmarPin){ m.erro = "Os PINs digitados não coincidem."; render(); return; }
   m.erro = ""; m.salvando = true; render();
   var res = await sb.rpc("trocar_pin_funcionario", {p_usuario_id:usuarioId, p_novo_pin:novoPin});
@@ -124,6 +155,123 @@ async function toggleUsuarioAtivo(usuarioId){
   var res = await sb.from("usuarios").update({ativo:novo}).eq("id", usuarioId);
   if(res.error){ u.ativo = !novo; toast("err","ERRO", res.error.message); render(); return; }
   registrarAuditoriaLocal("usuarios", usuarioId, novo?"USUARIO_ATIVADO":"USUARIO_DESATIVADO", state.usuarioAtualId, u.nome);
+}
+
+// PRIORIDADE 5 — Controle de Equipe.
+async function salvarPesoRateioUsuario(usuarioId, peso){
+  var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
+  if(!u || !(peso>0)) return;
+  var anterior = u.pesoRateioTaxa;
+  u.pesoRateioTaxa = peso;
+  var res = await sb.from("usuarios").update({peso_rateio_taxa:peso}).eq("id", usuarioId);
+  if(res.error){ u.pesoRateioTaxa = anterior; toast("err","ERRO", res.error.message); render(); }
+}
+
+// Escala: edição fica em memória (state.escalasPorUsuario) até "Salvar
+// escala" — delete+insert da semana inteira do funcionário de uma vez
+// (mesmo padrão simples de listas pequenas editadas por inteiro).
+function escalaLinhaDoUsuario(usuarioId, diaSemana){
+  var lista = state.escalasPorUsuario[usuarioId];
+  if(!lista){ lista = []; state.escalasPorUsuario[usuarioId] = lista; }
+  var linha = lista.find(function(e){ return e.diaSemana===diaSemana; });
+  if(!linha){ linha = {diaSemana:diaSemana, tipo:"FOLGA", turnoInicio:null, turnoFim:null}; lista.push(linha); }
+  return linha;
+}
+function escalaSetTipo(usuarioId, diaSemana, tipo){
+  escalaLinhaDoUsuario(usuarioId, diaSemana).tipo = tipo;
+  render();
+}
+function escalaSetTurnoInicio(usuarioId, diaSemana, valor){
+  escalaLinhaDoUsuario(usuarioId, diaSemana).turnoInicio = valor||null;
+}
+function escalaSetTurnoFim(usuarioId, diaSemana, valor){
+  escalaLinhaDoUsuario(usuarioId, diaSemana).turnoFim = valor||null;
+}
+async function salvarEscalaUsuario(usuarioId){
+  var linhas = state.escalasPorUsuario[usuarioId]||[];
+  var res = await sb.rpc("salvar_escala", {
+    p_usuario_id: usuarioId,
+    p_linhas: linhas.map(function(l){ return {dia_semana:l.diaSemana, tipo:l.tipo, turno_inicio:l.turnoInicio||"", turno_fim:l.turnoFim||""}; })
+  });
+  if(res.error){ toast("err","ERRO AO SALVAR ESCALA", res.error.message); return; }
+  state.escalasPorUsuario[usuarioId] = res.data.map(mapEscala);
+  render();
+  toast("ok","ESCALA SALVA", "");
+}
+
+// Ponto: PIN confere a identidade de quem está batendo (mesma confiança
+// de autorização de supervisor) — qualquer um logado pode bater o PIN de
+// si mesmo ou de um colega.
+async function baterPonto(tipo){
+  if(!state.pontoUsuarioId){ state.pontoErro = "Escolha o funcionário."; render(); return; }
+  if(!state.pontoPin){ state.pontoErro = "Informe o PIN."; render(); return; }
+  var res = await sb.rpc("bater_ponto", {p_usuario_id: state.pontoUsuarioId, p_pin: state.pontoPin, p_tipo: tipo});
+  if(res.error){ state.pontoErro = res.error.message; render(); return; }
+  state.pontoPin = ""; state.pontoErro = "";
+  if(!state.pontosRecentes) state.pontosRecentes = [];
+  state.pontosRecentes.unshift(mapPonto(res.data));
+  render();
+  var u = state.usuarios.find(function(x){ return x.id===state.pontoUsuarioId; });
+  toast("ok","PONTO REGISTRADO", (u?u.nome+" — ":"")+(PONTO_TIPO_LABEL[tipo]||tipo));
+}
+function abrirCorrigirPonto(pontoId){
+  var p = (state.pontosRecentes||[]).find(function(x){ return x.id===pontoId; });
+  if(!p) return;
+  var d = new Date(p.registradoEm);
+  var local = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  state.modal = {type:"corrigirPonto", pontoId:pontoId, novoRegistradoEmInput:local, motivo:"", erro:""};
+  render();
+}
+async function confirmarCorrigirPonto(){
+  var m = state.modal;
+  if(!m.novoRegistradoEmInput){ m.erro = "Informe a data/hora."; render(); return; }
+  if(!m.motivo.trim()){ m.erro = "Motivo é obrigatório."; render(); return; }
+  var res = await sb.rpc("corrigir_ponto", {
+    p_ponto_id: m.pontoId, p_novo_registrado_em: new Date(m.novoRegistradoEmInput).toISOString(), p_motivo: m.motivo.trim()
+  });
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  var idx = (state.pontosRecentes||[]).findIndex(function(x){ return x.id===m.pontoId; });
+  if(idx!==-1) state.pontosRecentes[idx] = mapPonto(res.data);
+  state.modal = null;
+  render();
+  toast("ok","PONTO CORRIGIDO", "");
+}
+
+// Custo (ADMIN): remuneração e vales/adiantamentos.
+function abrirRemuneracaoForm(usuarioId){
+  var rem = state.remuneracoesPorUsuario[usuarioId];
+  state.modal = {type:"remuneracaoForm", usuarioId:usuarioId, tipo: rem?rem.tipo:"MENSAL",
+    valor: rem?(rem.valorCentavos/100).toFixed(2):"", erro:""};
+  render();
+}
+async function salvarRemuneracao(usuarioId, tipo, valorReais){
+  var m = state.modal;
+  var valorCentavos = Math.round(parseFloat(valorReais||"0")*100);
+  if(!(valorCentavos>=0)){ m.erro = "Informe um valor válido."; render(); return; }
+  var res = await sb.rpc("salvar_remuneracao", {p_usuario_id:usuarioId, p_tipo:tipo, p_valor_centavos:valorCentavos});
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  state.remuneracoesPorUsuario[usuarioId] = mapRemuneracao(res.data);
+  state.modal = null;
+  render();
+  toast("ok","REMUNERAÇÃO SALVA", "");
+}
+function abrirValeForm(usuarioId){
+  state.modal = {type:"valeForm", usuarioId:usuarioId, valor:"", motivo:"", data: hojeOperacionalStr(), erro:""};
+  render();
+}
+async function confirmarVale(usuarioId, valorReais, motivo, data){
+  var m = state.modal;
+  var valorCentavos = Math.round(parseFloat(valorReais||"0")*100);
+  if(!(valorCentavos>0)){ m.erro = "Informe um valor maior que zero."; render(); return; }
+  if(!motivo.trim()){ m.erro = "Informe o motivo."; render(); return; }
+  var res = await sb.rpc("registrar_vale", {p_usuario_id:usuarioId, p_valor_centavos:valorCentavos, p_motivo:motivo.trim(), p_data:data||null});
+  if(res.error){ m.erro = res.error.message; render(); return; }
+  if(!state.valesPorUsuario[usuarioId]) state.valesPorUsuario[usuarioId] = [];
+  state.valesPorUsuario[usuarioId].unshift(mapVale(res.data));
+  state.modal = null;
+  render();
+  toast("ok","VALE REGISTRADO", "");
+  carregarFechamentoEquipe();
 }
 
 async function salvarConfig(campos){
@@ -145,7 +293,9 @@ async function salvarConfig(campos){
     happyHoraFim: campos.happyHoraFim,
     fidelidade: campos.fidelidade || c.fidelidade,
     bairrosTaxaEntrega: campos.bairrosTaxaEntrega || c.bairrosTaxaEntrega,
-    aceitarQrSemTokenAte: campos.aceitarQrSemTokenAte || null
+    aceitarQrSemTokenAte: campos.aceitarQrSemTokenAte || null,
+    metasCentralDono: campos.metasCentralDono || c.metasCentralDono,
+    alertaAumentoPrecoInsumoPct: campos.alertaAumentoPrecoInsumoPct!=null ? campos.alertaAumentoPrecoInsumoPct : c.alertaAumentoPrecoInsumoPct
   });
   delete novoConfig.empresaNome; delete novoConfig.empresaCnpj; delete novoConfig.totalFichas; delete novoConfig.slug;
   var res = await sb.from("empresas").update({

@@ -1,0 +1,17 @@
+{
+  "name": "Vision Food — Gestão",
+  "short_name": "Vision Food",
+  "description": "Painel de gestão do restaurante — mesas, cozinha, caixa, estoque e financeiro.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050506",
+  "theme_color": "#050506",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "assets/logo/vision-food-favicon.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logo/vision-food-icon.png", "sizes": "300x300", "type": "image/png", "purpose": "any" }
+  ]
+}
