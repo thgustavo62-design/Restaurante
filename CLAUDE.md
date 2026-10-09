@@ -1,0 +1,160 @@
+# Vision Food — instruções permanentes do projeto
+
+Restaurante é um app de gestão para restaurantes (schema `restaurante` no
+Supabase, front-end em JS puro). Este arquivo é a política de aprovação
+combinada com o Gustavo — existe pra eu não re-perguntar nem redescobrir
+o que já foi decidido. Lido automaticamente no início de cada sessão
+neste diretório.
+
+## O que já está aprovado (não precisa perguntar de novo)
+
+- **Commit e push direto em `main`** depois de qualquer mudança de código
+  ou migration, sem pedir confirmação a cada vez — desde que a mudança em
+  si já tenha sido pedida/aprovada pelo Gustavo nesta conversa. Mensagem
+  de commit sempre explicando o "porquê", nunca `git push --force`.
+- **Escrever migrations novas** para qualquer funcionalidade já pedida,
+  seguindo as regras da seção "Regras não-negociáveis" abaixo, sem
+  precisar aprovar o SQL campo a campo antes de escrever o arquivo.
+- **Corrigir bug que eu mesmo encontrar no caminho** (ex: coluna errada,
+  `date_trunc` em índice, função de janela dentro de agregado) — conserto
+  e documento no commit, sem parar pra perguntar "posso corrigir isso
+  também?".
+- **Atualizar `README.md`/`docs/rotas-permissoes.md`/`tests/`** junto de
+  qualquer mudança funcional, sem pedir aprovação separada pra cada
+  atualização de documentação.
+- **Rodar a suíte de verificação estática** (checagem de sintaxe,
+  cross-reference de `data-action`, balanceamento de `$$`/parênteses,
+  teste de render em sandbox) antes de entregar qualquer coisa — já é
+  esperado, não é "trabalho extra" a confirmar.
+
+## O que SEMPRE exige aprovação explícita antes de mexer
+
+- Qualquer mudança que troque **como o funcionário loga** hoje (ex: PIN
+  virar senha separada, MFA obrigatório) — impacto real no dia a dia de
+  cada conta, inclusive do próprio Gustavo.
+- Qualquer item marcado `[PROPOR]` no roteiro original ou no plano de
+  melhorias — apresento opções/custo/risco primeiro, só implemento depois
+  da escolha.
+- Decisão de regra de negócio ambígua (ex: perda de prato baixar estoque
+  ou não) — documento como `[DECISÃO DE DESIGN]` se eu decidir sozinho
+  pra não travar o trabalho, mas aviso explicitamente que é uma escolha
+  minha e pode ser revertida.
+- Qualquer coisa destrutiva ou difícil de reverter: `git reset --hard`,
+  apagar dado em produção, revogar acesso de usuário, alterar
+  schema de um jeito que perca dado existente.
+- Rodar algo contra o Supabase de **produção** fora do fluxo normal
+  (colar migration no SQL Editor é o Gustavo quem faz — eu não tenho
+  credencial nem conexão com o banco neste ambiente).
+
+## Regras não-negociáveis de arquitetura (desde a ETAPA 0)
+
+- **Front-end**: JS puro, sem build/bundler/framework. `index.html` +
+  `assets/js/*.js` (scripts clássicos, `"use strict"`, `var`, render via
+  concatenação de string) + `assets/css/styles.css`. Nunca introduzir
+  React/Vue/webpack/etc.
+- **Banco**: schema `restaurante` **sempre**, nunca `public`. Segurança
+  mora no banco: RLS + triggers de proteção de coluna + RPC
+  `SECURITY DEFINER` com `set search_path = restaurante, pg_temp`,
+  validando `restaurante.jwt_empresa_id()`/`restaurante.tem_permissao()`.
+  Toda função nova leva `revoke all ... from public` +
+  `grant execute ... to authenticated` explícitos (exceção: função
+  auxiliar pura não-`SECURITY DEFINER`, tipo `restaurante.mes_competencia`,
+  que não precisa — mesmo padrão de `restaurante.rendimento_atual`).
+- **Migrations**: numeradas sequencialmente (`NNNN_descricao_restaurante.sql`),
+  com comentário no topo explicando o quê e o porquê. **De verdade
+  idempotentes**: `create table if not exists`, `create index if not
+  exists`, `drop policy if exists X; create policy X ...` antes de toda
+  policy nova, `create or replace function` sempre. O SQL Editor do
+  Supabase roda o arquivo inteiro como uma transação só — um erro no
+  meio desfaz tudo, inclusive o que já tinha funcionado antes, então
+  reaplicar o arquivo corrigido tem que ser seguro.
+- **Permissões**: `assets/js/config.js` (`PERM`/`MATRIZ`) tem que ficar
+  em sincronia com `papeis_permissoes` seedada nas migrations — qualquer
+  permissão nova precisa entrar nos dois lugares, mais uma linha em
+  `docs/rotas-permissoes.md`.
+- **Dinheiro**: sempre centavos inteiros (`int`, nunca `numeric`/`float`
+  pra valor monetário). Cálculo financeiro sempre no servidor — o client
+  nunca recalcula total/taxa/desconto pra decidir quanto cobrar.
+- **Indicadores agregados**: sempre via RPC que agrega no banco
+  (`sum`/`count`/etc. em SQL). Nunca baixar comandas/itens completos pro
+  navegador só pra somar.
+- **Visual**: reaproveita classes CSS existentes (`.card`, `.tabs`/`.tab`,
+  `.kpi-card`, `.badge-status-*`) e `renderPageHeader()`/`renderSubAbas()`
+  de `render-shell.js` — nunca inventa um componente novo se um
+  equivalente já existe.
+
+## Onde cada coisa mora (evita reexplorar o repo toda sessão)
+
+- `assets/js/state.js` — `estadoVazio()`, o único lugar que define todo
+  campo de `state`.
+- `assets/js/data.js` — `carregarTudo()` (carga inicial + Realtime),
+  `can()`/`mesaStatus()`/`totaisComanda()` e outros helpers de leitura.
+- `assets/js/events.js` — **todo** `data-action` de clique passa por um
+  `if(action===...)` gigante dentro de `app.onclick`. Campo de texto que
+  muda estado ao digitar fica num listener separado mais abaixo no mesmo
+  arquivo.
+- `assets/js/render-screens.js` — uma função `render<Tela>()` por tela,
+  registro de `SUB_ABAS.<tela>` logo depois das funções da tela.
+- `assets/js/render-modals.js` — `renderModal()` despacha por
+  `state.modal.type`; uma função por modal.
+- `assets/js/actions-*.js` — funções `async function algumaAcao(...)`
+  chamadas pelos handlers de `events.js`; cada arquivo agrupa por área
+  (atendimento, caixa, compras, gestão, financeiro-equipe, marketing).
+- `assets/js/helpers.js` — funções puras sem efeito colateral de rede
+  (formatação, cálculo local, `campoOuAtual`, etc.).
+- `supabase/migrations/` — uma migration por funcionalidade, nunca editar
+  uma já aplicada em produção sem o Gustavo confirmar que ainda não
+  rodou (ver histórico da conversa/commits antes de presumir).
+- `tests/` — `node --test`, nunca rodou contra o Supabase de verdade
+  ainda (sem projeto de homologação configurado) — ver `tests/README.md`.
+
+## Auditoria de segurança em andamento
+
+`docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,
+P0 a P3) feito por auditoria externa estática do repositório. Em
+09/10/2026 os 6 achados **P0** foram conferidos linha a linha contra o
+código real e **confirmados, não especulativos**:
+
+- **VF-001** — `comandas.status`/`fechamento` não são protegidos pelo
+  trigger `trg_comandas_protege_colunas` (só `desconto_centavos`,
+  `mesa_id`/`tipo`, e um bloco de campos somente-leitura que inclui
+  `total_centavos` mas não `status`/`fechamento`). `pagamentos`,
+  `caixa_movimentos` e `contas` aceitam `INSERT` direto de quem tem a
+  permissão certa, sem exigir passar pela RPC de negócio.
+- **VF-002** — `offlineProcessarItem()` (`assets/js/offline.js`) retorna
+  `true` (= remove da fila) em recusa definitiva de regra de negócio nos
+  3 tipos de operação offline, inclusive pagamento em dinheiro — só um
+  toast temporário, sem registro recuperável. `offlineEnfileirar()`
+  engole falha de IndexedDB só com `console.error`.
+- **VF-003** — confirmado que é **mais grave** do que o plano descreve:
+  não é só a autorização de supervisor, é o **login diário de qualquer
+  papel** (`tentarLogin` em `actions-atendimento.js` →
+  `signInWithPassword`) que usa o PIN de 4 caracteres alfanuméricos como
+  senha real da conta no Supabase Auth — inclusive a conta ADMIN do
+  dono.
+- **VF-004** — confirmado nas duas funções que usam o padrão
+  (`verificar_pin_supervisor` e `bater_ponto`): o `insert into
+  tentativas_autorizacao` acontece antes do `raise exception` dentro da
+  mesma transação — a exceção desfaz o INSERT junto, então o contador de
+  "5 tentativas/5 min" nunca acumula de verdade.
+- **VF-005** — confirmado: `usuarios_select`, `contas_select` e
+  `clientes_select` só filtram por `empresa_id`, sem checar permissão —
+  **qualquer papel logado, inclusive COZINHA**, lê e-mail interno de
+  todo mundo, todas as contas a pagar/receber e todos os dados de
+  cliente via API direta (não é só UI escondendo botão).
+- **VF-006** — confirmado (já sabido): testes em `tests/` nunca rodaram
+  contra um Supabase de homologação de verdade.
+
+**Achado combinado, mais grave que qualquer item isolado**: VF-003 +
+VF-004 + VF-005 formam uma cadeia prática de escalonamento de
+privilégio — um funcionário comum lê o e-mail de login do ADMIN
+(VF-005), a senha real dele são 4 caracteres (VF-003), e o bloqueio por
+tentativas erradas nunca ativa de verdade (VF-004).
+
+**Status de execução**: nenhum item do plano foi implementado ainda —
+só a validação P0 contra o código real foi feita. Os itens P1–P3 (VF-007
+em diante) não foram conferidos linha a linha, só herdados do documento
+original. Antes de implementar qualquer VF-XXX, perguntar ao Gustavo
+qual prioridade entrar primeiro — mudanças de autenticação (VF-003)
+afetam o login de todo mundo no restaurante e precisam de aviso/migração
+combinada, não só um PR.
