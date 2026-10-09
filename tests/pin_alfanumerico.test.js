@@ -72,8 +72,10 @@ test("verificar_pin_supervisor (via cancelar_item) aceita PIN alfanumérico do s
     comanda_id: comanda.id, produto_id: seed.produto.id, nome: "x", quantidade: 1, preco_unit_centavos: 1, status: "PENDENTE", usuario_id: seed.garcom.id, setor_producao: "COZINHA"
   }).select().single();
 
+  const tent = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.admin.id });
+  if (tent.error) throw tent.error;
   const res = await garcomCliente.rpc("cancelar_item", {
-    p_item_id: item.id, p_motivo: "Teste PIN alfanumérico", p_supervisor_id: seed.admin.id, p_supervisor_pin: "Ab12"
+    p_item_id: item.id, p_motivo: "Teste PIN alfanumérico", p_supervisor_id: seed.admin.id, p_supervisor_pin: "Ab12", p_tentativa_id: tent.data
   });
   if (res.error) throw res.error;
   assert.equal(res.data.status, "CANCELADO");

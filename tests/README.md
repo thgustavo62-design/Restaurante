@@ -149,6 +149,14 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
   erro"); PIN fora do formato (curto, longo, com símbolo) continua
   recusado; `verificar_pin_supervisor` (exercitado via `cancelar_item`)
   aceita PIN alfanumérico do supervisor.
+- `pin_contador_tentativas.test.js` — VF-004 do plano de auditoria
+  (`docs/PLANO_DE_MELHORIAS.md`): o contador de "5 tentativas/5 min" de
+  verdade bloqueia a 6ª (antes nunca acumulava — o INSERT da tentativa
+  rodava na mesma transação que o `raise exception` do PIN errado, e
+  Postgres desfazia os dois juntos); `registrar_tentativa_pin` exige
+  usuário da mesma empresa; reusar uma tentativa já marcada como sucesso
+  (replay) é recusado; tentativa registrada pra um supervisor não
+  autoriza em nome de outro.
 - `perdas.test.js` — PRIORIDADE 3 (Perdas e Desperdícios): perda manual de
   insumo baixa o estoque e vale pelo custo médio; perda manual de prato
   vale pelo CMV e **não** baixa ingrediente (ver nota de design na

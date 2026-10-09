@@ -151,10 +151,29 @@ privilégio — um funcionário comum lê o e-mail de login do ADMIN
 (VF-005), a senha real dele são 4 caracteres (VF-003), e o bloqueio por
 tentativas erradas nunca ativa de verdade (VF-004).
 
-**Status de execução**: nenhum item do plano foi implementado ainda —
-só a validação P0 contra o código real foi feita. Os itens P1–P3 (VF-007
-em diante) não foram conferidos linha a linha, só herdados do documento
-original. Antes de implementar qualquer VF-XXX, perguntar ao Gustavo
-qual prioridade entrar primeiro — mudanças de autenticação (VF-003)
-afetam o login de todo mundo no restaurante e precisam de aviso/migração
+**Status de execução**:
+
+- **VF-004 — corrigido (migration `0075`)**. Nova RPC
+  `registrar_tentativa_pin(usuario)`, chamada numa transação própria
+  ANTES da verificação (por isso sobrevive ao rollback do `raise
+  exception` quando o PIN está errado). `verificar_pin_supervisor`,
+  `cancelar_item`, `aplicar_desconto`, `confirmar_pagamento` e
+  `bater_ponto` ganharam `p_tentativa_id` — assinaturas antigas
+  derrubadas (`drop function`) pra não ficarem paralelas, ainda
+  chamáveis, no catálogo. Client atualizado em 3 arquivos
+  (`actions-atendimento.js`, `actions-caixa.js`,
+  `actions-financeiro-equipe.js`). Testes existentes que chamavam essas
+  RPCs (`supervisor.test.js`, `pin_alfanumerico.test.js`,
+  `perdas.test.js`, `controle_equipe.test.js`) atualizados pra nova
+  assinatura; teste novo `pin_contador_tentativas.test.js` cobre o
+  bloqueio de verdade. Detalhes no README, seção "Auditoria de
+  segurança — VF-004 corrigido (0075)".
+- **VF-001 e VF-005 — aprovados, ainda não implementados.** Próximos da
+  fila (mesmo lote aprovado: "backend only, zero mudança no dia a dia").
+- Os itens P1–P3 (VF-007 em diante) não foram conferidos linha a linha,
+  só herdados do documento original.
+
+Antes de implementar qualquer VF-XXX novo, perguntar ao Gustavo qual
+prioridade entrar primeiro — mudanças de autenticação (VF-003) afetam o
+login de todo mundo no restaurante e precisam de aviso/migração
 combinada, não só um PR.

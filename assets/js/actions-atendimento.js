@@ -561,13 +561,24 @@ function supervisorRpcPinInput(valor){
   state.modal.buffer = valor;
   state.modal.error = "";
 }
+// VF-004 — registra a tentativa numa chamada própria ANTES de verificar o
+// PIN de verdade: essa chamada é sua própria transação e sempre commita,
+// então sobrevive mesmo que o PIN esteja errado e a verificação (que vem
+// depois, numa transação à parte) dê raise exception. Sem isso, o INSERT
+// de tentativas_autorizacao desfazia junto com a transação que falhava —
+// o contador de "5 tentativas/5 min" nunca acumulava de verdade.
 async function confirmarSupervisorRpc(){
   var m = state.modal;
   if(pinLockoutAtivo()){ m.error = "Muitas tentativas. Aguarde "+pinLockoutSegundosRestantes()+"s."; render(); return; }
   if(!m.supervisorId){ m.error = "Nenhum supervisor disponível com essa permissão."; render(); return; }
   if(!m.buffer){ m.error = "Informe o PIN."; render(); return; }
   m.verificando = true; render();
-  var sucesso = await m.onConfirm(m.supervisorId, m.buffer);
+  var tent = await sb.rpc("registrar_tentativa_pin", {p_usuario_id: m.supervisorId});
+  if(state.modal!==m) return;
+  if(tent.error){
+    m.buffer = ""; m.error = tent.error.message; m.verificando = false; render(); return;
+  }
+  var sucesso = await m.onConfirm(m.supervisorId, m.buffer, tent.data);
   if(state.modal!==m) return;
   if(sucesso){
     limparFalhasPin();
@@ -680,7 +691,15 @@ async function confirmarCancelarItem(){
   m.error = "";
   m.verificando = true; render();
   var motivo = m.motivo.trim();
-  var res = await sb.rpc("cancelar_item", {p_item_id: m.itemId, p_motivo: motivo, p_supervisor_id: m.supervisorId, p_supervisor_pin: m.buffer});
+  // VF-004 — mesma régua de confirmarSupervisorRpc: registra a tentativa
+  // numa chamada própria antes, pra sobreviver ao rollback se o PIN
+  // estiver errado.
+  var tent = await sb.rpc("registrar_tentativa_pin", {p_usuario_id: m.supervisorId});
+  if(state.modal!==m) return;
+  if(tent.error){
+    m.buffer = ""; m.error = tent.error.message; m.verificando = false; render(); return;
+  }
+  var res = await sb.rpc("cancelar_item", {p_item_id: m.itemId, p_motivo: motivo, p_supervisor_id: m.supervisorId, p_supervisor_pin: m.buffer, p_tentativa_id: tent.data});
   if(state.modal!==m) return;
   if(!res.error){
     limparFalhasPin();
@@ -713,8 +732,8 @@ async function aplicarDescontoDireto(comandaId, percentInformado){
 }
 function aplicarDesconto(comandaId, percentInformado){
   if(percentInformado > limiteDescontoPct() || !can(PERM.DESCONTO_APLICAR)){
-    pedirSupervisorRpc(PERM.DESCONTO_APLICAR, "Desconto de "+percentInformado+"% acima do limite de "+limiteDescontoPct()+"%", async function(supervisorId, pin){
-      var res = await sb.rpc("aplicar_desconto", {p_comanda_id: comandaId, p_percentual: percentInformado, p_supervisor_id: supervisorId, p_supervisor_pin: pin});
+    pedirSupervisorRpc(PERM.DESCONTO_APLICAR, "Desconto de "+percentInformado+"% acima do limite de "+limiteDescontoPct()+"%", async function(supervisorId, pin, tentativaId){
+      var res = await sb.rpc("aplicar_desconto", {p_comanda_id: comandaId, p_percentual: percentInformado, p_supervisor_id: supervisorId, p_supervisor_pin: pin, p_tentativa_id: tentativaId});
       if(res.error){ return false; }
       var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
       if(comanda) comanda.descontoCentavos = res.data.desconto_centavos;

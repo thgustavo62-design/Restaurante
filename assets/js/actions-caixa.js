@@ -138,13 +138,13 @@ async function confirmarPagamento(){
   if(totais.pct_desconto_total > limiteDescontoPct()){
     pedirSupervisorRpc(PERM.DESCONTO_APLICAR,
       "Desconto total de "+Math.round(totais.pct_desconto_total)+"% (manual + pontos + cupom) acima do limite de "+limiteDescontoPct()+"%",
-      function(supervisorId, pin){ return executarConfirmarPagamento(supervisorId, pin); });
+      function(supervisorId, pin, tentativaId){ return executarConfirmarPagamento(supervisorId, pin, tentativaId); });
   } else {
-    await executarConfirmarPagamento(null, null);
+    await executarConfirmarPagamento(null, null, null);
   }
 }
 
-async function executarConfirmarPagamento(supervisorId, pin){
+async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
   var m = state.modal;
   if(!m || m.type!=="pagamento") return false;
   var comanda = state.comandas.find(function(c){ return c.id===m.comandaId; });
@@ -186,7 +186,8 @@ async function executarConfirmarPagamento(supervisorId, pin){
     p_pontos_resgatados: pontosResgatados,
     p_cupom_codigo: cupomCodigo,
     p_supervisor_id: supervisorId || null,
-    p_supervisor_pin: pin || null
+    p_supervisor_pin: pin || null,
+    p_tentativa_id: tentativaId || null
   });
   if(res.error){
     if(soDinheiro && !temFiado && pontosResgatados===0 && !cupomCodigo && !supervisorId && typeof erroDeRede==="function" && erroDeRede(res)){

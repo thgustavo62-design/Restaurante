@@ -205,7 +205,12 @@ async function salvarEscalaUsuario(usuarioId){
 async function baterPonto(tipo){
   if(!state.pontoUsuarioId){ state.pontoErro = "Escolha o funcionário."; render(); return; }
   if(!state.pontoPin){ state.pontoErro = "Informe o PIN."; render(); return; }
-  var res = await sb.rpc("bater_ponto", {p_usuario_id: state.pontoUsuarioId, p_pin: state.pontoPin, p_tipo: tipo});
+  // VF-004 — mesma régua de confirmarSupervisorRpc: registra a tentativa
+  // numa chamada própria antes, pra sobreviver ao rollback se o PIN
+  // estiver errado.
+  var tent = await sb.rpc("registrar_tentativa_pin", {p_usuario_id: state.pontoUsuarioId});
+  if(tent.error){ state.pontoErro = tent.error.message; render(); return; }
+  var res = await sb.rpc("bater_ponto", {p_usuario_id: state.pontoUsuarioId, p_pin: state.pontoPin, p_tipo: tipo, p_tentativa_id: tent.data});
   if(res.error){ state.pontoErro = res.error.message; render(); return; }
   state.pontoPin = ""; state.pontoErro = "";
   if(!state.pontosRecentes) state.pontosRecentes = [];

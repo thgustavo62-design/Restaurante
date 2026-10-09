@@ -40,10 +40,21 @@ test("bater_ponto confere o PIN de verdade — certo registra, errado é recusad
   t.after(() => limparEmpresaTeste(admin, seed));
   const garcomCliente = await loginComo(seed.garcom, "1234");
 
-  const errado = await garcomCliente.rpc("bater_ponto", { p_usuario_id: seed.garcom.id, p_pin: "0000", p_tipo: "ENTRADA" });
+  const tentErrada = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.garcom.id });
+  if (tentErrada.error) throw tentErrada.error;
+  const errado = await garcomCliente.rpc("bater_ponto", { p_usuario_id: seed.garcom.id, p_pin: "0000", p_tipo: "ENTRADA", p_tentativa_id: tentErrada.data });
   assert.ok(errado.error, "PIN errado deveria ser recusado");
 
-  const certo = await garcomCliente.rpc("bater_ponto", { p_usuario_id: seed.garcom.id, p_pin: "1234", p_tipo: "ENTRADA" });
+  // VF-004 — a tentativa errada tem que sobreviver ao rollback do "raise
+  // exception" de bater_ponto (mesmo bug de cancelar_item, só que aqui
+  // bater_ponto tinha seu próprio INSERT duplicado em vez de chamar
+  // verificar_pin_supervisor).
+  const { data: tentativaGravada } = await admin.from("tentativas_autorizacao").select("sucesso").eq("id", tentErrada.data).single();
+  assert.equal(tentativaGravada.sucesso, false, "a tentativa errada precisa continuar gravada como falha, não sumir com o rollback");
+
+  const tentCerta = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.garcom.id });
+  if (tentCerta.error) throw tentCerta.error;
+  const certo = await garcomCliente.rpc("bater_ponto", { p_usuario_id: seed.garcom.id, p_pin: "1234", p_tipo: "ENTRADA", p_tentativa_id: tentCerta.data });
   if (certo.error) throw certo.error;
   assert.equal(certo.data.tipo, "ENTRADA");
   assert.equal(certo.data.usuario_id, seed.garcom.id);
@@ -54,7 +65,9 @@ test("corrigir_ponto exige admin.equipe.editar e grava a correção na auditoria
   const seed = await seedEmpresaTeste(admin);
   t.after(() => limparEmpresaTeste(admin, seed));
   const garcomCliente = await loginComo(seed.garcom, "1234");
-  const bateu = await garcomCliente.rpc("bater_ponto", { p_usuario_id: seed.garcom.id, p_pin: "1234", p_tipo: "ENTRADA" });
+  const tent = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.garcom.id });
+  if (tent.error) throw tent.error;
+  const bateu = await garcomCliente.rpc("bater_ponto", { p_usuario_id: seed.garcom.id, p_pin: "1234", p_tipo: "ENTRADA", p_tentativa_id: tent.data });
   if (bateu.error) throw bateu.error;
 
   const semPermissao = await garcomCliente.rpc("corrigir_ponto", {

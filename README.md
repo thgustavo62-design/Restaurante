@@ -352,12 +352,21 @@ não parecer travada entre o clique e o próximo refresh.
 ### Pendências de segurança (ver também [Pendências conhecidas](#pendências-conhecidas))
 
 - PIN de 4 caracteres é curto por natureza (mesmo agora aceitando letras e
-  números, não só os 10 mil dígitos de antes). O app bloqueia
-  por 30s após 5 tentativas erradas na própria UI, e as RPCs de supervisor
-  têm seu próprio limite (5 tentativas / 5 min por supervisor, tabela
-  `tentativas_autorizacao`) — mas nada disso impede uma chamada direta ao
-  endpoint de Auth do Supabase fora do app; rate limit/CAPTCHA de verdade
-  precisam ser configurados em **Auth → Rate Limits** no painel.
+  números, não só os 10 mil dígitos de antes) — e é também a senha real
+  da conta no Supabase Auth (`tentarLogin`, PIN de supervisor e
+  `bater_ponto` fazem login de verdade contra `/auth/v1/token`, não uma
+  verificação própria). O app bloqueia por 30s após 5 tentativas erradas
+  na própria UI, e as RPCs de supervisor têm seu próprio limite (5
+  tentativas / 5 min por supervisor, tabela `tentativas_autorizacao`,
+  **corrigido na `0075`** — até então o `INSERT` da tentativa rodava na
+  mesma transação que o `raise exception` do PIN errado, e Postgres
+  desfazia os dois juntos: o contador nunca acumulava de verdade,
+  VF-004 do plano de auditoria). Mesmo corrigido, nada disso impede uma
+  chamada direta ao endpoint de Auth do Supabase fora do app; rate
+  limit/CAPTCHA de verdade precisam ser configurados em **Auth → Rate
+  Limits** no painel — e o PIN de 4 caracteres como senha de conta
+  continua sendo VF-003 do plano, não corrigido ainda (ver
+  `docs/PLANO_DE_MELHORIAS.md`).
 - `usuarios_login_por_empresa(slug)` não exige mais nome-derivado, mas o
   slug em si **não é secreto** — é o mesmo usado na URL pública do
   cardápio (`/cardapio/:slug`). Quem souber o slug ainda consegue listar
@@ -1298,6 +1307,46 @@ implementação, até alguém pedir explicitamente cada um:
   navegador): proposta já escrita, aguardando aprovação — ver
   [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
 
+## Auditoria de segurança — VF-004 corrigido (0075)
+
+`docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,
+P0 a P3) de uma auditoria externa estática do repositório. Os 6 achados
+**P0** foram validados linha a linha contra o código real em 09/10/2026 —
+todos confirmados, nenhum especulativo (um deles, a combinação
+VF-003+VF-004+VF-005, forma uma cadeia prática de escalonamento de
+privilégio). O primeiro corrigido foi **VF-004**:
+
+- **Causa raiz**: `verificar_pin_supervisor` e `bater_ponto` inseriam a
+  tentativa em `tentativas_autorizacao` e, logo em seguida, davam
+  `raise exception` quando o PIN estava errado — tudo na mesma
+  transação. Postgres desfaz a transação inteira quando uma exceção não
+  é capturada, INSERT junto. O contador de "5 falhas/5 min" nunca
+  acumulava de verdade.
+- **Correção**: nova RPC `registrar_tentativa_pin(usuario)`, chamada
+  **antes** da verificação, numa transação própria que sempre commita —
+  já aplica o limite de 5 falhas/5min ali (não dá nem pra registrar uma
+  6ª tentativa nesse caso). `verificar_pin_supervisor`/`bater_ponto`
+  recebem o id dessa tentativa (`p_tentativa_id`), confirmam que ela
+  existe, é do supervisor certo e ainda não foi usada, e só fazem um
+  `UPDATE` pra `sucesso = true` no caminho de sucesso — que não lança
+  exceção, então commita normal.
+- **Assinaturas mudaram**: `verificar_pin_supervisor`, `cancelar_item`,
+  `aplicar_desconto`, `confirmar_pagamento` e `bater_ponto` ganharam
+  `p_tentativa_id`. As assinaturas antigas foram derrubadas
+  explicitamente (`drop function`) — senão ficariam paralelas no
+  catálogo, ainda chamáveis, e a correção não valeria nada.
+- **Zero mudança visível pro usuário** — PIN errado continua mostrando o
+  mesmo erro, PIN certo continua funcionando igual. A mudança é só no
+  número de chamadas RPC que o client faz por baixo.
+- Testes: `tests/pin_contador_tentativas.test.js` (novo — bloqueio de
+  verdade na 6ª tentativa, replay de tentativa já usada, tentativa de
+  outro supervisor, tentativa de outra empresa) + `supervisor.test.js`,
+  `pin_alfanumerico.test.js`, `perdas.test.js`, `controle_equipe.test.js`
+  atualizados pra nova assinatura.
+
+VF-001 e VF-005 (ambos aprovados no mesmo lote) ainda não foram
+implementados.
+
 ## Onboarding de novo restaurante (Fase 4.2)
 
 `restaurante.onboarding_criar_empresa(...)` (migration `0061`) cria
@@ -1378,6 +1427,10 @@ de rodar `npm test` pela primeira vez.
 - **Força-bruta de PIN via API do Supabase / slug do restaurante não é
   secreto**: ver
   [Pendências de segurança](#pendências-de-segurança-ver-também-pendências-conhecidas) acima.
+  O contador de tentativas (VF-004) foi corrigido na `0075` — o que
+  continua pendente é VF-003 (PIN de 4 caracteres como senha real da
+  conta) e o rate limit do próprio Supabase Auth, nenhum dos dois
+  resolvido ainda.
 - **Testes automatizados existem mas nunca rodaram de verdade**: ver
   [Testes automatizados](#testes-automatizados-fase-44) acima — escritos e
   revisados, faltando só um projeto Supabase de teste pra confirmar.

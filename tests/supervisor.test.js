@@ -29,9 +29,11 @@ test("cancelar_item — GARCOM sem permissão própria consegue com PIN do ADMIN
 
   const { item } = await abrirComandaComItem(garcomCliente, seed);
 
+  const tent = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.admin.id });
+  if (tent.error) throw tent.error;
   const res = await garcomCliente.rpc("cancelar_item", {
     p_item_id: item.id, p_motivo: "Pedido em duplicidade",
-    p_supervisor_id: seed.admin.id, p_supervisor_pin: "1234"
+    p_supervisor_id: seed.admin.id, p_supervisor_pin: "1234", p_tentativa_id: tent.data
   });
   if (res.error) throw res.error;
   assert.equal(res.data.status, "CANCELADO");
@@ -47,11 +49,20 @@ test("cancelar_item — PIN errado do supervisor é recusado", async (t) => {
   const garcomCliente = await loginComo(seed.garcom, "1234");
 
   const { item } = await abrirComandaComItem(garcomCliente, seed);
+  const tent = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.admin.id });
+  if (tent.error) throw tent.error;
   const res = await garcomCliente.rpc("cancelar_item", {
     p_item_id: item.id, p_motivo: "Teste",
-    p_supervisor_id: seed.admin.id, p_supervisor_pin: "0000"
+    p_supervisor_id: seed.admin.id, p_supervisor_pin: "0000", p_tentativa_id: tent.data
   });
   assert.ok(res.error, "PIN errado deveria ser recusado");
+
+  // VF-004 — a tentativa errada tem que sobreviver ao rollback do "raise
+  // exception" de cancelar_item: é exatamente esse registro durável que
+  // antes desaparecia (o INSERT acontecia na MESMA transação que falhava
+  // logo em seguida, e Postgres desfazia os dois juntos).
+  const { data: tentativa } = await admin.from("tentativas_autorizacao").select("sucesso").eq("id", tent.data).single();
+  assert.equal(tentativa.sucesso, false, "a tentativa errada precisa continuar gravada como falha, não sumir com o rollback");
 });
 
 test("cancelar_item — supervisor renomeado depois de criado continua autorizando (regressão da 0060)", async (t) => {
@@ -67,9 +78,11 @@ test("cancelar_item — supervisor renomeado depois de criado continua autorizan
   const garcomCliente = await loginComo(seed.garcom, "1234");
   const { item } = await abrirComandaComItem(garcomCliente, seed);
 
+  const tent = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.admin.id });
+  if (tent.error) throw tent.error;
   const res = await garcomCliente.rpc("cancelar_item", {
     p_item_id: item.id, p_motivo: "Teste pós-renomeação",
-    p_supervisor_id: seed.admin.id, p_supervisor_pin: "1234"
+    p_supervisor_id: seed.admin.id, p_supervisor_pin: "1234", p_tentativa_id: tent.data
   });
   if (res.error) throw res.error;
   assert.equal(res.data.status, "CANCELADO", "renomear o supervisor não deveria quebrar a autorização de PIN dele");

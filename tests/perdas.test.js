@@ -64,9 +64,11 @@ test("cancelar_item já em preparo vira perda automática e baixa o ingrediente"
   const garcomCliente = await loginComo(seed.garcom, "1234");
   const { item } = await abrirComandaComItem(garcomCliente, seed, "PREPARANDO");
 
+  const tent = await garcomCliente.rpc("registrar_tentativa_pin", { p_usuario_id: seed.admin.id });
+  if (tent.error) throw tent.error;
   const res = await garcomCliente.rpc("cancelar_item", {
     p_item_id: item.id, p_motivo: "Erro da cozinha",
-    p_supervisor_id: seed.admin.id, p_supervisor_pin: "1234"
+    p_supervisor_id: seed.admin.id, p_supervisor_pin: "1234", p_tentativa_id: tent.data
   });
   if (res.error) throw res.error;
   assert.equal(res.data.cancelado_apos_preparo, true);
