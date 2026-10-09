@@ -19,6 +19,11 @@ de produção do Rancho Netto, e rodar os testes ali seria exatamente o que
 a Fase 4.4 pede pra nunca fazer. Antes de confiar neles, rode pelo menos
 uma vez com um projeto de teste de verdade e confira se passam.
 
+**Exceção**: `offline_pendencias.test.js` não toca em Supabase (é lógica
+pura do client, `sb` mockado em sandbox de VM) — esse **já rodou de
+verdade** nesta sessão e os 3 casos passaram (`node --test
+tests/offline_pendencias.test.js`).
+
 ## Setup (uma vez)
 
 1. Crie um projeto Supabase **novo, só pra teste** (plano free serve).
@@ -149,6 +154,18 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
   erro"); PIN fora do formato (curto, longo, com símbolo) continua
   recusado; `verificar_pin_supervisor` (exercitado via `cancelar_item`)
   aceita PIN alfanumérico do supervisor.
+- `offline_pendencias.test.js` — VF-002 do plano de auditoria
+  (`docs/PLANO_DE_MELHORIAS.md`). **Diferente dos outros: não precisa de
+  `TEST_SUPABASE_URL`** — é lógica pura do client
+  (`assets/js/offline.js`), carregada num sandbox de VM com `sb`
+  mockado, sem rede nem IndexedDB real, por isso roda e passa de
+  verdade mesmo sem projeto de teste configurado (`node --test
+  tests/offline_pendencias.test.js`). Cobre `offlineProcessarItem`
+  devolvendo `ENVIADO`/`RECUSADO`/`PENDENTE_REDE` conforme o tipo de
+  erro (antes, recusa de negócio e sucesso eram o mesmo `true`), e
+  `offlineSincronizar` só removendo da fila o que foi `ENVIADO` —
+  `RECUSADO` fica marcado (`recusado`/`erroRecusa`), nunca mais tenta
+  sozinho.
 - `vazamento_dados_leitura.test.js` — VF-005 do plano de auditoria
   (`docs/PLANO_DE_MELHORIAS.md`): `usuarios.email_interno` não é mais
   legível por nenhum papel via select direto (coluna revogada —

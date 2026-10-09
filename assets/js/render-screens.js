@@ -1918,6 +1918,48 @@ function renderSyncConflitos(){
     }).join("")+
   '</div>';
 }
+// VF-002 — pendências de sincronização offline: pedido/pagamento/status
+// que o SERVIDOR recusou de verdade (não erro de rede) quando a fila
+// tentou mandar sozinha. Fica guardado neste aparelho (IndexedDB) até
+// alguém decidir — nunca mais tenta sozinho depois de recusado uma vez.
+var PENDENCIA_OFFLINE_TIPO_LABEL = {lancar_item:"Pedido lançado offline", kds_status:"Mudança de status (KDS)", pagamento_dinheiro:"Pagamento em dinheiro offline"};
+function descricaoPendenciaOffline(p){
+  if(p.tipo==="lancar_item"){
+    var nomes = (p.payload||[]).map(function(it){ return it.quantidade+"x "+it.nome; });
+    return nomes.join(", ");
+  }
+  if(p.tipo==="kds_status"){
+    var itemAchado = null;
+    state.comandas.forEach(function(c){
+      var it = c.itens.find(function(x){ return x.id===p.itemId; });
+      if(it) itemAchado = it;
+    });
+    return (itemAchado ? itemAchado.nome : "Item "+p.itemId) + " → "+p.status;
+  }
+  if(p.tipo==="pagamento_dinheiro"){
+    var comanda = state.comandas.find(function(c){ return c.id===p.payload.p_comanda_id; });
+    var total = (p.payload.p_linhas||[]).reduce(function(s,l){ return s+(l.valor_centavos||0); },0);
+    return (comanda?comanda.codigo:"Comanda") + " · "+brl(total);
+  }
+  return "";
+}
+function renderPendenciasOfflineRecusadas(){
+  if(!can(PERM.SYNC_CONFLITOS) || !state.pendenciasOfflineRecusadas.length) return "";
+  return '<div class="card" style="margin-bottom:20px; border-left:4px solid var(--danger);">'+
+    '<div class="card-title">Pendências de sincronização ('+state.pendenciasOfflineRecusadas.length+')</div>'+
+    '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Lançado neste aparelho enquanto offline — o servidor recusou ao tentar sincronizar (não é erro de rede, é mesmo uma regra de negócio). Revise e decida: tentar de novo ou descartar.</p>'+
+    state.pendenciasOfflineRecusadas.map(function(p){
+      return '<div class="data-row">'+
+        '<div class="main"><div class="nome">'+escapeHtml(PENDENCIA_OFFLINE_TIPO_LABEL[p.tipo]||p.tipo)+'</div>'+
+        '<div class="sub">'+escapeHtml(descricaoPendenciaOffline(p))+' · '+escapeHtml(p.erroRecusa||"")+' · recusado '+new Date(p.recusadoEm).toLocaleString("pt-BR")+'</div></div>'+
+        '<div class="acts">'+
+          '<button class="btn btn-sm" data-action="pendencia-offline-descartar" data-pendencia="'+p.id+'">Descartar</button>'+
+          '<button class="btn btn-sm btn-primary" data-action="pendencia-offline-tentar-de-novo" data-pendencia="'+p.id+'">Tentar de novo</button>'+
+        '</div>'+
+      '</div>';
+    }).join("")+
+  '</div>';
+}
 // ETAPA pós-10 — Configurações virou sub-abas (mesmo componente genérico
 // de sempre, ETAPA 0.11): uma tela só com 13 cards empilhados exigia
 // rolar demais pra achar qualquer coisa. Um único botão "Salvar
@@ -2081,6 +2123,7 @@ SUB_ABAS.configuracoes = [
 function renderConfiguracoes(){
   return renderPageHeader("settings", "Configurações", "Dados fiscais, limites, impressão e funcionamento")+
     renderSyncConflitos()+
+    renderPendenciasOfflineRecusadas()+
     renderSubAbas("configuracoes")+
     '<button class="btn btn-primary btn-lg" style="margin-top:16px;" data-action="config-salvar">Salvar configurações</button>';
 }

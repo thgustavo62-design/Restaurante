@@ -1307,7 +1307,7 @@ implementação, até alguém pedir explicitamente cada um:
   navegador): proposta já escrita, aguardando aprovação — ver
   [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
 
-## Auditoria de segurança — VF-001, VF-004 e VF-005 corrigidos (0075–0077)
+## Auditoria de segurança — VF-001, VF-002, VF-004 e VF-005 corrigidos (0075–0077)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,
 P0 a P3) de uma auditoria externa estática do repositório. Os 6 achados
@@ -1413,14 +1413,44 @@ privilégio). O primeiro corrigido foi **VF-004**:
   `docs/PLANO_DE_MELHORIAS.md`, não resolvido ainda.
 - Testes: `tests/vazamento_dados_leitura.test.js` (novo).
 
-Dos 6 achados **P0** do plano, 3 estão corrigidos (VF-001, VF-004,
-VF-005). Faltam: **VF-002** (fila offline descartando pendência em
-silêncio — código, ainda não começado), **VF-003** (PIN de 4 caracteres
-como senha real da conta — decisão de produto que muda o login de todo
-mundo, precisa de aprovação explícita antes de mexer, ver `CLAUDE.md`) e
-**VF-006** (staging real + suíte rodada de verdade — depende de um
-projeto Supabase separado do de produção, ação de conta que só o
-Gustavo consegue fazer).
+**VF-002** (fila offline) fechou o lote dos P0 acionáveis sem decisão de
+produto nem ambiente novo:
+
+- **Achado confirmado**: `offlineProcessarItem()` devolvia só
+  `true`/`false` — sucesso de verdade e recusa definitiva do servidor
+  (ex: "comanda já paga", "faltam R$5 pra cobrir o total") eram o mesmo
+  `true`, e `offlineSincronizar()` **removia o item da fila nos dois
+  casos**. Um pedido ou pagamento em dinheiro recusado desaparecia pra
+  sempre depois de um toast que passa em segundos, sem nenhum jeito de
+  revisar depois. `offlineEnfileirar()` também engolia falha de
+  gravação no IndexedDB só com `console.error`, enquanto quem chamou
+  mostrava "guardado" mesmo sem ter guardado nada.
+- **Correção**: `offlineProcessarItem` devolve um status explícito —
+  `ENVIADO` (sai da fila), `PENDENTE_REDE` (sem internet, mantém a
+  ordem, tenta de novo depois) ou `RECUSADO` (o servidor disse não —
+  fica marcado na própria fila, `recusado`/`erroRecusa`/`recusadoEm`,
+  **nunca mais tenta sozinho**). `offlineEnfileirar` devolve
+  `true`/`false` de verdade; os 3 pontos que enfileiram
+  (`enviarPedidoOffline`, `confirmarPagamentoOffline`, `kdsSetStatus`)
+  passaram a enfileirar **antes** de mexer no `state` — se o IndexedDB
+  falhar, nada na tela finge que foi guardado, e o item (pedido/
+  pagamento) não entra na comanda como se tivesse ido pro servidor.
+- **Nova área "Pendências de sincronização"** (Configurações, mesmo
+  card/permissão de "Conflitos de sincronização offline", `admin.
+  sync_conflitos.resolver`): lista o que foi recusado, com tipo,
+  descrição (produto/valor/comanda quando dá pra identificar),
+  mensagem de erro do servidor e quando — com **Descartar** (remove de
+  vez) e **Tentar de novo** (volta pra fila normal).
+- Testes: `tests/offline_pendencias.test.js` (novo — **esse já rodou de
+  verdade e passou**, é lógica pura do client, não precisa de Supabase;
+  ver `tests/README.md`).
+
+Dos 6 achados **P0** do plano, 4 estão corrigidos (VF-001, VF-002,
+VF-004, VF-005). Faltam: **VF-003** (PIN de 4 caracteres como senha real
+da conta — decisão de produto que muda o login de todo mundo, precisa de
+aprovação explícita antes de mexer, ver `CLAUDE.md`) e **VF-006**
+(staging real + suíte rodada de verdade — depende de um projeto Supabase
+separado do de produção, ação de conta que só o Gustavo consegue fazer).
 
 ## Onboarding de novo restaurante (Fase 4.2)
 

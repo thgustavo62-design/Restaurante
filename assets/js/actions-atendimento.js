@@ -78,6 +78,10 @@ async function tentarLogin(nomeDigitado, senha){
       state.view = (claims.papel==="COZINHA") ? "kds" : (claims.papel==="GARCOM"||claims.papel==="CAIXA") ? "salao" : "central";
     }
     configurarRealtime();
+    // VF-002 — pendências offline recusadas ficam no IndexedDB deste
+    // aparelho, sobrevivem a logout/login; carrega sempre que alguém
+    // entra, pra não depender de passar pela aba Configurações.
+    if(typeof atualizarPendenciasOfflineRecusadas==="function") atualizarPendenciasOfflineRecusadas();
   } catch(e){
     state.loginSenhaInput = "";
     var bloqueado = registrarFalhaPin();
@@ -469,7 +473,19 @@ async function enviarPedido(){
 // Fase 3.5 — aplica os itens do pedido no state igual se tivessem vindo
 // do servidor (marcados _pendingSync) e guarda na fila offline pra
 // mandar de verdade quando a conexão voltar.
+//
+// VF-002 — enfileira ANTES de mexer no state: se o IndexedDB falhar (ex:
+// modo anônimo, armazenamento cheio/bloqueado), o pedido não pode somar
+// na comanda nem fechar o draft como se tivesse sido guardado — isso
+// seria exatamente o "diz que guardou sem ter guardado" que o achado
+// aponta. Falhando, o draft continua aberto e o garçom sabe que precisa
+// tentar de novo (ou anotar na mão).
 async function enviarPedidoOffline(comanda, payload, displayExtra){
+  var guardou = await offlineEnfileirar({id: uid("fila"), tipo:"lancar_item", payload: payload, criadoEm: Date.now()});
+  if(!guardou){
+    toast("err","NÃO DEU PRA GUARDAR OFFLINE", "Sem internet e não consegui guardar no aparelho (armazenamento cheio/bloqueado?) — o pedido NÃO foi registrado. Anota na mão ou tenta de novo.");
+    return;
+  }
   var agora = new Date().toISOString();
   var novos = payload.map(function(p){
     return {
@@ -486,7 +502,6 @@ async function enviarPedidoOffline(comanda, payload, displayExtra){
   state.draft.mobileCatalog = false;
   state.modal = null;
   render();
-  await offlineEnfileirar({id: uid("fila"), tipo:"lancar_item", payload: payload, criadoEm: Date.now()});
   toast("err","SEM INTERNET", payload.length+" ite"+(payload.length===1?"m":"ns")+" guardado(s) — envia sozinho quando a conexão voltar");
 }
 

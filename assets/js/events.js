@@ -545,6 +545,8 @@ function bindEvents(){
     }
     if(action==="syncconflito-aplicar"){ resolverSyncConflito(el.dataset.conflito, true); return; }
     if(action==="syncconflito-descartar"){ resolverSyncConflito(el.dataset.conflito, false); return; }
+    if(action==="pendencia-offline-descartar"){ offlineDescartarPendencia(el.dataset.pendencia); return; }
+    if(action==="pendencia-offline-tentar-de-novo"){ offlineTentarPendenciaDeNovo(el.dataset.pendencia); return; }
     if(action==="mfa-ativar-abrir"){ iniciarConfigMfa(); return; }
     if(action==="mfa-setup-cancelar"){ state.modal=null; render(); return; }
     if(action==="mfa-setup-confirmar"){ confirmarConfigMfa(document.getElementById("mfaCodigoInput").value); return; }

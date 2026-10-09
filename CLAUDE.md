@@ -189,10 +189,21 @@ tentativas erradas nunca ativa de verdade (VF-004).
   jeito quebraria; resolver direito precisa de uma projeção de colunas
   separada (escopo maior, registrado mas não feito). Teste novo:
   `tests/vazamento_dados_leitura.test.js`.
-- **Lote "VF-001+004+005, backend only" está completo.** Dos 6 P0, faltam
-  VF-002 (fila offline — código, não começado), VF-003 (PIN como senha —
-  decisão de produto, muda login de todo mundo, PEDIR APROVAÇÃO antes) e
-  VF-006 (staging real — ação de conta do Gustavo, não só código).
+- **VF-002 — corrigido (sem migration, só client)**.
+  `offlineProcessarItem` (`assets/js/offline.js`) devolve status
+  explícito (`ENVIADO`/`PENDENTE_REDE`/`RECUSADO`) em vez de
+  `true`/`false` — antes, recusa definitiva do servidor e sucesso real
+  eram o mesmo `true`, e o item sumia da fila nos dois casos.
+  `offlineEnfileirar` devolve `true`/`false` de verdade; os 3 pontos que
+  enfileiram (`enviarPedidoOffline`, `confirmarPagamentoOffline`,
+  `kdsSetStatus`) enfileiram ANTES de mexer no `state`. Nova área
+  "Pendências de sincronização" em Configurações (mesmo gate de
+  `sync_conflitos`) com Descartar/Tentar de novo. Teste
+  `tests/offline_pendencias.test.js` **já rodou de verdade e passou**
+  (lógica pura do client, sandbox de VM, não precisa de Supabase).
+- **Dos 6 P0, faltam VF-003** (PIN como senha — decisão de produto, muda
+  login de todo mundo, PEDIR APROVAÇÃO antes de mexer) **e VF-006**
+  (staging real — ação de conta do Gustavo, não só código).
 - Os itens P1–P3 (VF-007 em diante) não foram conferidos linha a linha,
   só herdados do documento original.
 

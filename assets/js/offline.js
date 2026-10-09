@@ -10,6 +10,16 @@
 // de verdade — fechar olhando só o que o navegador tinha em cache podia
 // cobrar errado), e qualquer leitura (a tela sempre mostra o que já
 // tinha carregado antes de cair a conexão, nunca inventa dado novo).
+//
+// VF-002 do plano de auditoria (docs/PLANO_DE_MELHORIAS.md) —
+// [ACHADO CONFIRMADO] offlineProcessarItem() devolvia só true/false:
+// "true" significava tanto "enviou de verdade" quanto "o banco recusou,
+// mas não trava a fila" — e offlineSincronizar() REMOVIA o item nos dois
+// casos. Resultado: um pedido ou pagamento recusado pelo servidor
+// desaparecia pra sempre depois de um toast que passa em alguns
+// segundos, sem nenhum jeito de revisar depois. offlineEnfileirar()
+// também engolia falha de gravação no IndexedDB só com console.error,
+// enquanto o caller mostrava "guardado" mesmo sem ter guardado nada.
 
 var OFFLINE_DB_NAME = "vision_food_offline";
 var OFFLINE_STORE = "fila";
@@ -26,16 +36,19 @@ function offlineDb(){
   });
   return offlineDbPromise;
 }
+// VF-002 — devolve true/false de verdade (nunca lança) em vez de engolir
+// a falha só no console; quem chama precisa saber se "guardou" é mentira
+// antes de dizer isso pro usuário.
 async function offlineEnfileirar(item){
   try{
     var db = await offlineDb();
-    return new Promise(function(resolve, reject){
+    return await new Promise(function(resolve){
       var tx = db.transaction(OFFLINE_STORE, "readwrite");
       tx.objectStore(OFFLINE_STORE).put(item);
-      tx.oncomplete = function(){ resolve(); };
-      tx.onerror = function(){ reject(tx.error); };
+      tx.oncomplete = function(){ resolve(true); };
+      tx.onerror = function(){ console.error("offlineEnfileirar falhou:", tx.error && tx.error.message); resolve(false); };
     });
-  }catch(e){ console.error("offlineEnfileirar falhou:", e.message); }
+  }catch(e){ console.error("offlineEnfileirar falhou:", e.message); return false; }
 }
 async function offlineListar(){
   try{
@@ -91,18 +104,40 @@ function erroDeRede(res){
 }
 
 var offlineSincronizando = false;
+// VF-002 — três desfechos possíveis por item, não dois: ENVIADO (some da
+// fila de verdade), PENDENTE_REDE (continua tentando, sem tocar no resto
+// da fila pra manter a ordem) e RECUSADO (o banco disse não — fica
+// guardado como pendência de revisão humana, nunca mais tenta sozinho,
+// só quando alguém decidir "tentar de novo" ou "descartar" na tela de
+// Pendências de sincronização).
 async function offlineSincronizar(){
   if(offlineSincronizando || !navigator.onLine || !state || !state.usuarioAtualId) return;
   offlineSincronizando = true;
   try{
     var fila = (await offlineListar()).sort(function(a,b){ return a.criadoEm - b.criadoEm; });
     var sincronizados = 0;
+    var recusados = 0;
     for(var i=0;i<fila.length;i++){
-      var ok = await offlineProcessarItem(fila[i]);
-      if(ok){ await offlineRemover(fila[i].id); sincronizados++; }
-      else break; // mantém a ordem — para no primeiro que ainda não deu pra mandar
+      if(fila[i].recusado) continue; // já é pendência de revisão — não tenta sozinho de novo
+      var resultado = await offlineProcessarItem(fila[i]);
+      if(resultado.status==="ENVIADO"){
+        await offlineRemover(fila[i].id);
+        sincronizados++;
+      } else if(resultado.status==="RECUSADO"){
+        fila[i].recusado = true;
+        fila[i].erroRecusa = resultado.erro;
+        fila[i].recusadoEm = Date.now();
+        await offlineSalvar(fila[i]);
+        recusados++;
+        // não dá break — um item recusado (ex: comanda já cancelada) não
+        // deveria travar outros pendentes válidos atrás dele na fila.
+      } else {
+        break; // PENDENTE_REDE — mantém a ordem, para no primeiro que ainda não deu pra mandar
+      }
     }
     if(sincronizados>0) toast("ok","SINCRONIZADO", sincronizados+" pendência(s) offline enviada(s)");
+    if(recusados>0) toast("err","PENDÊNCIAS PRA REVISAR", recusados+" item(ns) recusado(s) pelo servidor — veja em Configurações > Pendências de sincronização");
+    if(typeof atualizarPendenciasOfflineRecusadas==="function") atualizarPendenciasOfflineRecusadas();
     // reconectar sempre busca o estado de verdade do servidor, com ou
     // sem fila pendente — mesmo comportamento de antes desta fase.
     await carregarTudo();
@@ -115,33 +150,60 @@ async function offlineProcessarItem(item){
     if(item.tipo==="lancar_item"){
       var res = await sb.from("comanda_itens").insert(item.payload).select();
       if(res.error){
-        if(res.error.code==="23505") return true; // client_uuid já existia: sincronizou numa tentativa anterior
-        if(erroDeRede(res)) return false;
-        toast("err","PEDIDO OFFLINE NÃO FOI ACEITO", res.error.message);
-        return true; // erro de regra de negócio não trava o resto da fila; fica avisado
+        if(res.error.code==="23505") return {status:"ENVIADO"}; // client_uuid já existia: sincronizou numa tentativa anterior
+        if(erroDeRede(res)) return {status:"PENDENTE_REDE"};
+        return {status:"RECUSADO", erro:res.error.message};
       }
-      return true;
+      return {status:"ENVIADO"};
     }
     if(item.tipo==="kds_status"){
       var res2 = await sb.from("comanda_itens").update({status:item.status}).eq("id", item.itemId);
-      if(res2.error && erroDeRede(res2)) return false;
-      return true;
+      if(res2.error){
+        if(erroDeRede(res2)) return {status:"PENDENTE_REDE"};
+        return {status:"RECUSADO", erro:res2.error.message};
+      }
+      return {status:"ENVIADO"};
     }
     if(item.tipo==="pagamento_dinheiro"){
       var res3 = await sb.rpc("confirmar_pagamento", item.payload);
       if(res3.error){
-        if(erroDeRede(res3)) return false;
-        toast("err","PAGAMENTO OFFLINE PRECISA DE ATENÇÃO", item.payload.p_comanda_id+": "+res3.error.message);
-        return true;
+        if(erroDeRede(res3)) return {status:"PENDENTE_REDE"};
+        return {status:"RECUSADO", erro:res3.error.message};
       }
       // 0.5 — a comanda mudou entre o pagamento offline e agora: o
       // servidor não aplicou nada, só registrou o conflito pra um
-      // GERENTE/ADMIN decidir (ver sync_conflitos em Configurações).
+      // GERENTE/ADMIN decidir — isso já tem fluxo de resolução próprio
+      // (sync_conflitos em Configurações), não precisa virar pendência
+      // offline também.
       if(res3.data && res3.data.conflito){
         toast("err","PAGAMENTO OFFLINE EM CONFLITO", "A comanda foi alterada por outro terminal — um GERENTE/ADMIN precisa revisar em Configurações.");
       }
-      return true;
+      return {status:"ENVIADO"};
     }
-  }catch(e){ return false; }
-  return true;
+  }catch(e){ return {status:"PENDENTE_REDE"}; }
+  return {status:"ENVIADO"};
+}
+
+// VF-002 — área de Pendências de sincronização (Configurações): lista o
+// que o servidor recusou de verdade, pra revisão humana. Carregada no
+// boot (main.js) e depois de toda tentativa de sincronização.
+async function atualizarPendenciasOfflineRecusadas(){
+  var fila = await offlineListar();
+  state.pendenciasOfflineRecusadas = fila.filter(function(it){ return it.recusado; });
+  render();
+}
+async function offlineDescartarPendencia(id){
+  await offlineRemover(id);
+  await atualizarPendenciasOfflineRecusadas();
+  toast("ok","PENDÊNCIA DESCARTADA", "");
+}
+async function offlineTentarPendenciaDeNovo(id){
+  var fila = await offlineListar();
+  var item = fila.find(function(it){ return it.id===id; });
+  if(!item) return;
+  delete item.recusado; delete item.erroRecusa; delete item.recusadoEm;
+  await offlineSalvar(item);
+  await atualizarPendenciasOfflineRecusadas();
+  toast("ok","VAI TENTAR DE NOVO", "Entra na fila de sincronização normal.");
+  if(navigator.onLine) offlineSincronizar();
 }

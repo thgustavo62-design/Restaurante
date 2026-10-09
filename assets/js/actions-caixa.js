@@ -247,19 +247,15 @@ async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
 // que a comanda tinha NESTE momento; se outro terminal mexer nela antes
 // da sincronização de verdade, o servidor detecta a divergência e vira
 // conflito (sync_conflitos) em vez de aplicar por cima de estado velho.
+//
+// VF-002 — é dinheiro de verdade: enfileira ANTES de tocar no state. Se
+// o IndexedDB falhar, a comanda não pode ser marcada como paga/com troco
+// dado sem NENHUM registro de que isso aconteceu — essa é exatamente a
+// falha que some com um pagamento em dinheiro sem deixar rastro.
 async function confirmarPagamentoOffline(comanda, itemIds, totalFinal){
   var agora = new Date().toISOString();
   var updatedAtNoEnfileiramento = comanda.updatedAt;
-  var idsLiquidados = itemIds || itensNaoPagos(comanda).map(function(it){ return it.id; });
-  comanda.itens.forEach(function(it){ if(idsLiquidados.indexOf(it.id)!==-1) it.pagoEm = agora; });
-  comanda.pagamentos = (comanda.pagamentos||[]).concat([{forma:"DINHEIRO", valorCentavos:totalFinal}]);
-  var fechouTudo = itensNaoPagos(comanda).length===0;
-  if(fechouTudo){
-    comanda.status = "PAGA"; comanda.fechamento = agora; comanda._pendingSync = true;
-  }
-  comanda.totalCentavos = (comanda.totalCentavos||0) + totalFinal;
-
-  await offlineEnfileirar({
+  var guardou = await offlineEnfileirar({
     id: uid("fila"), tipo:"pagamento_dinheiro", criadoEm: Date.now(),
     payload: {
       p_comanda_id: comanda.id,
@@ -268,6 +264,19 @@ async function confirmarPagamentoOffline(comanda, itemIds, totalFinal){
       p_cliente_id: null, p_item_ids: itemIds, p_sessao_id: state.caixaSessao.id, p_pontos_resgatados: 0
     }
   });
+  if(!guardou){
+    toast("err","NÃO DEU PRA GUARDAR OFFLINE", "Sem internet e não consegui guardar no aparelho (armazenamento cheio/bloqueado?) — o pagamento NÃO foi registrado. Anota o valor recebido na mão.");
+    return;
+  }
+
+  var idsLiquidados = itemIds || itensNaoPagos(comanda).map(function(it){ return it.id; });
+  comanda.itens.forEach(function(it){ if(idsLiquidados.indexOf(it.id)!==-1) it.pagoEm = agora; });
+  comanda.pagamentos = (comanda.pagamentos||[]).concat([{forma:"DINHEIRO", valorCentavos:totalFinal}]);
+  var fechouTudo = itensNaoPagos(comanda).length===0;
+  if(fechouTudo){
+    comanda.status = "PAGA"; comanda.fechamento = agora; comanda._pendingSync = true;
+  }
+  comanda.totalCentavos = (comanda.totalCentavos||0) + totalFinal;
 
   if(fechouTudo){ state.view = "salao"; state.viewParams = {}; }
   state.modal = null;
@@ -290,14 +299,19 @@ async function kdsSetStatus(comandaId, itemId, novoStatus){
     await offlineAtualizarStatusNaFila(itemId, novoStatus);
     return;
   }
+  // VF-002 — se não conseguir nem guardar offline, desfaz o status
+  // otimista: sem fila e sem servidor, a mudança não ia pra lugar
+  // nenhum, só ficaria mentindo na tela até o próximo recarregamento.
   if(!navigator.onLine){
-    await offlineEnfileirar({id: uid("fila"), tipo:"kds_status", itemId:itemId, status:novoStatus, criadoEm: Date.now()});
+    var guardouOffline = await offlineEnfileirar({id: uid("fila"), tipo:"kds_status", itemId:itemId, status:novoStatus, criadoEm: Date.now()});
+    if(!guardouOffline){ item.status = anterior; toast("err","NÃO DEU PRA GUARDAR OFFLINE", "Sem internet e não consegui guardar no aparelho — tenta de novo."); render(); }
     return;
   }
   var res = await sb.from("comanda_itens").update({status:novoStatus}).eq("id", itemId);
   if(res.error){
     if(typeof erroDeRede==="function" && erroDeRede(res)){
-      await offlineEnfileirar({id: uid("fila"), tipo:"kds_status", itemId:itemId, status:novoStatus, criadoEm: Date.now()});
+      var guardouOffline2 = await offlineEnfileirar({id: uid("fila"), tipo:"kds_status", itemId:itemId, status:novoStatus, criadoEm: Date.now()});
+      if(!guardouOffline2){ item.status = anterior; toast("err","NÃO DEU PRA GUARDAR OFFLINE", "Sem internet e não consegui guardar no aparelho — tenta de novo."); render(); }
       return;
     }
     item.status = anterior; toast("err","ERRO", res.error.message); render();
