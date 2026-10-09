@@ -357,13 +357,16 @@ async function rejeitarPedidoQr(pedidoId, motivo){
   toast("ok","PEDIDO REJEITADO", "");
 }
 
+// VF-001 — status/fechamento da comanda são somente leitura pra UPDATE
+// direto desde a 0076 (trigger trg_comandas_protege_colunas); cancelar
+// uma comanda vazia agora passa pela RPC, que repete a checagem "zero
+// item" no servidor em vez de confiar só no client.
 async function cancelarComanda(comandaId){
   var comanda = state.comandas.find(function(c){ return c.id===comandaId; });
   if(!comanda || comanda.itens.length>0) return;
-  var res = await sb.from("comandas").update({status:"CANCELADA", fechamento:new Date().toISOString()}).eq("id", comandaId);
+  var res = await sb.rpc("cancelar_comanda_vazia", {p_comanda_id: comandaId});
   if(res.error){ toast("err","ERRO AO CANCELAR COMANDA", res.error.message); return; }
   comanda.status = "CANCELADA";
-  registrarAuditoriaLocal("comanda", comandaId, "CANCELAR_COMANDA_VAZIA", state.usuarioAtualId, comanda.codigo);
   state.view = "salao"; state.viewParams = {};
   render();
   toast("ok","COMANDA CANCELADA", "Mesa liberada.");

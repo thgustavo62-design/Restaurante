@@ -1307,7 +1307,7 @@ implementação, até alguém pedir explicitamente cada um:
   navegador): proposta já escrita, aguardando aprovação — ver
   [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
 
-## Auditoria de segurança — VF-004 corrigido (0075)
+## Auditoria de segurança — VF-001 e VF-004 corrigidos (0075, 0076)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,
 P0 a P3) de uma auditoria externa estática do repositório. Os 6 achados
@@ -1344,8 +1344,42 @@ privilégio). O primeiro corrigido foi **VF-004**:
   `pin_alfanumerico.test.js`, `perdas.test.js`, `controle_equipe.test.js`
   atualizados pra nova assinatura.
 
-VF-001 e VF-005 (ambos aprovados no mesmo lote) ainda não foram
-implementados.
+**VF-001** foi o segundo corrigido:
+
+- **Achado confirmado, mais sério do que parecia no texto original do
+  plano**: o CLIENT já fazia `UPDATE` direto em `comandas.status`/
+  `fechamento` em 3 lugares reais — `cancelarComanda()`
+  (`status='CANCELADA'`, confiando só no navegador que a comanda estava
+  vazia, nada no servidor conferia) e os dois lados do toggle
+  `ABERTA<->FECHANDO` (`abrirFecharConta`/`fecharModalAtual`/pagamento
+  parcial, esses sem risco financeiro — só coordenação de UI). E a
+  policy de `INSERT` de `caixa_movimentos` deixava qualquer um com
+  `caixa.pagamento.registrar` (ex: CAIXA) gravar `tipo='VENDA'` direto
+  na tabela — fabricando uma venda que nunca aconteceu pra fechar a
+  conferência de caixa artificialmente.
+- **Correção cirúrgica, não um bloqueio geral**: o trigger
+  `trg_comandas_protege_colunas` passou a recusar `UPDATE` direto só
+  quando `status` muda **para** `PAGA` ou `CANCELADA` (os dois estados
+  que têm efeito financeiro de verdade) — `ABERTA<->FECHANDO` continua
+  livre, exatamente como o client já usa. `fechamento` e
+  `troco_centavos` entraram na lista de campos somente-leitura (junto de
+  `total_centavos`). Nova RPC `cancelar_comanda_vazia` substitui o
+  `UPDATE` direto do cancelamento, repetindo a checagem "zero item" no
+  **servidor** (antes só existia no client).
+- **`pagamentos`**: `INSERT` direto fechado de vez — nenhum código do
+  client nunca usou essa porta, só `confirmar_pagamento` grava.
+- **`caixa_movimentos`**: `INSERT` direto agora só aceita
+  `tipo in ('SANGRIA','SUPRIMENTO')` (uso real do client,
+  `registrarMovimento`) — `VENDA`/`ESTORNO`/`AJUSTE` só pela RPC
+  (`SECURITY DEFINER`, ignora RLS).
+- **`contas`**: `INSERT` direto exige `admin.financeiro.ver` (mesmo gate
+  do botão "Nova conta" no client) — a cláusula extra de
+  `caixa.pagamento.registrar` foi removida (só existia pra
+  `confirmar_pagamento`, que já ignora RLS; na prática só deixava CAIXA
+  inserir conta manual sem acesso à tela Financeiro).
+- Testes: `tests/blindagem_financeira.test.js` (novo).
+
+VF-005 (aprovado no mesmo lote) ainda não foi implementado.
 
 ## Onboarding de novo restaurante (Fase 4.2)
 

@@ -149,6 +149,18 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
   erro"); PIN fora do formato (curto, longo, com símbolo) continua
   recusado; `verificar_pin_supervisor` (exercitado via `cancelar_item`)
   aceita PIN alfanumérico do supervisor.
+- `blindagem_financeira.test.js` — VF-001 do plano de auditoria
+  (`docs/PLANO_DE_MELHORIAS.md`): `UPDATE` direto pra `status=PAGA` ou
+  `CANCELADA` é recusado pelo trigger (só `confirmar_pagamento`/
+  `cancelar_comanda_vazia` conseguem, via bypass interno); `ABERTA<->
+  FECHANDO` continua liberado (sem efeito financeiro); `cancelar_comanda_
+  vazia` recusa comanda com item mesmo que o client minta que está
+  vazia; `INSERT` direto em `pagamentos` é recusado (só
+  `confirmar_pagamento` grava); `caixa_movimentos` só aceita
+  `SANGRIA`/`SUPRIMENTO` por insert direto, `VENDA` fabricado é
+  recusado; `contas` exige `admin.financeiro.ver` pra insert direto
+  (a cláusula extra de `caixa.pagamento.registrar`, que só existia pra
+  uma RPC que já ignora RLS, foi removida).
 - `pin_contador_tentativas.test.js` — VF-004 do plano de auditoria
   (`docs/PLANO_DE_MELHORIAS.md`): o contador de "5 tentativas/5 min" de
   verdade bloqueia a 6ª (antes nunca acumulava — o INSERT da tentativa

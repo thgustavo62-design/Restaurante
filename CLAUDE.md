@@ -168,8 +168,19 @@ tentativas erradas nunca ativa de verdade (VF-004).
   assinatura; teste novo `pin_contador_tentativas.test.js` cobre o
   bloqueio de verdade. Detalhes no README, seção "Auditoria de
   segurança — VF-004 corrigido (0075)".
-- **VF-001 e VF-005 — aprovados, ainda não implementados.** Próximos da
-  fila (mesmo lote aprovado: "backend only, zero mudança no dia a dia").
+- **VF-001 — corrigido (migration `0076`)**. Trigger
+  `trg_comandas_protege_colunas` recusa `UPDATE` direto pra
+  `status IN ('PAGA','CANCELADA')` (ABERTA<->FECHANDO continua livre,
+  sem efeito financeiro) + `fechamento`/`troco_centavos` viram somente
+  leitura. Nova RPC `cancelar_comanda_vazia` substitui o `UPDATE` direto
+  de `cancelarComanda()` no client, repetindo a checagem "zero item" no
+  servidor. `pagamentos_insert` derrubada (ninguém usava direto);
+  `caixa_mov_insert` só aceita `SANGRIA`/`SUPRIMENTO` (não mais `VENDA`
+  fabricado); `contas_insert` exige `admin.financeiro.ver` (tirada a
+  cláusula de `caixa.pagamento.registrar` que só existia pra uma RPC que
+  já ignora RLS). Teste novo: `tests/blindagem_financeira.test.js`.
+- **VF-005 — aprovado, ainda não implementado.** Próximo da fila (mesmo
+  lote aprovado: "backend only, zero mudança no dia a dia").
 - Os itens P1–P3 (VF-007 em diante) não foram conferidos linha a linha,
   só herdados do documento original.
 
