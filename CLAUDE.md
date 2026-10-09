@@ -179,8 +179,20 @@ tentativas erradas nunca ativa de verdade (VF-004).
   fabricado); `contas_insert` exige `admin.financeiro.ver` (tirada a
   cláusula de `caixa.pagamento.registrar` que só existia pra uma RPC que
   já ignora RLS). Teste novo: `tests/blindagem_financeira.test.js`.
-- **VF-005 — aprovado, ainda não implementado.** Próximo da fila (mesmo
-  lote aprovado: "backend only, zero mudança no dia a dia").
+- **VF-005 — corrigido (migration `0077`)**. `usuarios.email_interno`
+  revogada por coluna (`REVOKE`/`GRANT` explícito — RLS não restringe
+  coluna, só linha); `nome`/`papel`/`ativo` continuam abertos pra
+  qualquer papel (pickers de supervisor/ponto precisam). `contas_select`
+  ganhou `admin.financeiro.ver`. `clientes` ficou **de propósito** fora
+  do lote — GARCOM/CAIXA usam telefone/endereço/pontos de clientes no
+  fluxo real de pagamento (fiado/pontos/delivery), restringir do mesmo
+  jeito quebraria; resolver direito precisa de uma projeção de colunas
+  separada (escopo maior, registrado mas não feito). Teste novo:
+  `tests/vazamento_dados_leitura.test.js`.
+- **Lote "VF-001+004+005, backend only" está completo.** Dos 6 P0, faltam
+  VF-002 (fila offline — código, não começado), VF-003 (PIN como senha —
+  decisão de produto, muda login de todo mundo, PEDIR APROVAÇÃO antes) e
+  VF-006 (staging real — ação de conta do Gustavo, não só código).
 - Os itens P1–P3 (VF-007 em diante) não foram conferidos linha a linha,
   só herdados do documento original.
 

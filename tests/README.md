@@ -149,6 +149,14 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
   erro"); PIN fora do formato (curto, longo, com símbolo) continua
   recusado; `verificar_pin_supervisor` (exercitado via `cancelar_item`)
   aceita PIN alfanumérico do supervisor.
+- `vazamento_dados_leitura.test.js` — VF-005 do plano de auditoria
+  (`docs/PLANO_DE_MELHORIAS.md`): `usuarios.email_interno` não é mais
+  legível por nenhum papel via select direto (coluna revogada —
+  qualquer um conseguia ler o e-mail de login de todo mundo antes),
+  enquanto `nome`/`papel`/`ativo` continuam abertos (pickers de
+  supervisor/ponto precisam); `contas` só retorna linha pra quem tem
+  `admin.financeiro.ver` — GARCOM/CAIXA/COZINHA recebem lista vazia, não
+  erro (RLS filtra silenciosamente).
 - `blindagem_financeira.test.js` — VF-001 do plano de auditoria
   (`docs/PLANO_DE_MELHORIAS.md`): `UPDATE` direto pra `status=PAGA` ou
   `CANCELADA` é recusado pelo trigger (só `confirmar_pagamento`/

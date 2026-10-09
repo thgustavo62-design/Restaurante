@@ -311,7 +311,11 @@ async function carregarTudo(){
   var insRes = await sb.from("insumos").select("*").order("nome");
   var fichaRes = await sb.from("ficha_tecnica").select("*");
   var fichaInsumoRes = await sb.from("ficha_tecnica_insumo").select("*");
-  var usrRes = await sb.from("usuarios").select("*").order("nome");
+  // VF-005 — email_interno nunca foi usado no client (mapUsuario nem lê
+  // esse campo) e é a credencial de login (0076/CLAUDE.md); deixou de
+  // vir pro navegador. Coluna revogada de verdade pra authenticated/anon
+  // (0077), select(*) quebraria — por isso a lista explícita aqui.
+  var usrRes = await sb.from("usuarios").select("id, empresa_id, nome, papel, ativo, peso_rateio_taxa, created_at, updated_at").order("nome");
   var empRes = await sb.from("empresas").select("*").eq("id", state.empresaId).single();
   // PRIORIDADE 8 — só reservas em aberto (lista pequena, pro Mapa saber
   // quem está reservado pras próximas 2h sem depender da sub-aba

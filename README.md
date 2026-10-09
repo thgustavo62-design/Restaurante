@@ -1307,7 +1307,7 @@ implementação, até alguém pedir explicitamente cada um:
   navegador): proposta já escrita, aguardando aprovação — ver
   [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
 
-## Auditoria de segurança — VF-001 e VF-004 corrigidos (0075, 0076)
+## Auditoria de segurança — VF-001, VF-004 e VF-005 corrigidos (0075–0077)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,
 P0 a P3) de uma auditoria externa estática do repositório. Os 6 achados
@@ -1379,7 +1379,48 @@ privilégio). O primeiro corrigido foi **VF-004**:
   inserir conta manual sem acesso à tela Financeiro).
 - Testes: `tests/blindagem_financeira.test.js` (novo).
 
-VF-005 (aprovado no mesmo lote) ainda não foi implementado.
+**VF-005** fechou o lote:
+
+- **Achado confirmado**: `usuarios_select` e `contas_select` só
+  filtravam por `empresa_id`, sem checar permissão — qualquer papel
+  logado, **inclusive COZINHA**, lia `email_interno` de todo mundo e
+  todas as contas a pagar/receber via API direta. Combinado com VF-003
+  (o PIN é a senha real da conta) e VF-004 (contador de tentativas, já
+  corrigido), formava uma cadeia prática: ler o e-mail do ADMIN e tentar
+  a senha de 4 caracteres dele.
+- **`usuarios.email_interno`**: coluna revogada por `REVOKE`
+  (`anon`/`authenticated`) — RLS filtra **linha**, não dá pra restringir
+  só uma coluna por política, por isso o `GRANT`/`REVOKE` por coluna.
+  `mapUsuario` (client) nunca leu esse campo de volta — era puro resíduo
+  do `select('*')` antigo, trocado por lista explícita de colunas em
+  `carregarTudo()`. `nome`/`papel`/`ativo` continuam abertos pra
+  qualquer papel (precisam disso pro picker de supervisor na autorização
+  de PIN, pro picker de funcionário em Bater Ponto). Nenhuma RPC afetada
+  — `SECURITY DEFINER` roda com o privilégio de quem criou a função, não
+  de `authenticated`.
+- **`contas`**: ganhou o mesmo `admin.financeiro.ver` que já esconde a
+  aba Financeiro e o botão "Nova conta" no client — conferido que
+  nenhuma tela de GARCOM/CAIXA/COZINHA usa `state.contas` pra nada.
+- **[DECISÃO DE DESIGN — avise se quiser diferente] `clientes` ficou de
+  fora.** O plano também cita essa tabela, mas diferente de `usuarios`/
+  `contas`, GARCOM/CAIXA usam telefone/endereço/pontos de qualquer
+  cliente o tempo todo — é o fluxo real de escolher cliente pra
+  fiado/pontos/delivery no pagamento, não só a tela admin de cadastro
+  (`admin.clientes.editar`). Restringir do mesmo jeito quebraria esse
+  fluxo; resolver direito exigiria uma projeção de colunas separada
+  (RPC/view só com nome+id pro picker de venda, linha completa só pra
+  quem edita cadastro) — escopo maior que esta correção. Registrado em
+  `docs/PLANO_DE_MELHORIAS.md`, não resolvido ainda.
+- Testes: `tests/vazamento_dados_leitura.test.js` (novo).
+
+Dos 6 achados **P0** do plano, 3 estão corrigidos (VF-001, VF-004,
+VF-005). Faltam: **VF-002** (fila offline descartando pendência em
+silêncio — código, ainda não começado), **VF-003** (PIN de 4 caracteres
+como senha real da conta — decisão de produto que muda o login de todo
+mundo, precisa de aprovação explícita antes de mexer, ver `CLAUDE.md`) e
+**VF-006** (staging real + suíte rodada de verdade — depende de um
+projeto Supabase separado do de produção, ação de conta que só o
+Gustavo consegue fazer).
 
 ## Onboarding de novo restaurante (Fase 4.2)
 
