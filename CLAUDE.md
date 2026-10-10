@@ -42,9 +42,40 @@ neste diretório.
 - Qualquer coisa destrutiva ou difícil de reverter: `git reset --hard`,
   apagar dado em produção, revogar acesso de usuário, alterar
   schema de um jeito que perca dado existente.
-- Rodar algo contra o Supabase de **produção** fora do fluxo normal
-  (colar migration no SQL Editor é o Gustavo quem faz — eu não tenho
-  credencial nem conexão com o banco neste ambiente).
+- ~~Rodar algo contra o Supabase de produção fora do fluxo normal~~ —
+  **superado em 10/10/2026**, ver seção "Acesso direto ao banco (MCP)"
+  abaixo. O que ainda exige aprovação explícita é o *conteúdo* de uma
+  migration que mude regra de negócio visível, não o ato de aplicá-la.
+
+## Acesso direto ao banco (MCP)
+
+Em 10/10/2026 o Gustavo pediu explicitamente pra eu parar de depender
+dele colando migration no SQL Editor: *"quero que apague a regra de não
+deixar mexer direto, e começa a mexer no banco de dados"* e, na
+sequência, *"quero que vc mesmo lançe as migrations e tenha acesso ao
+banco de dados"* — decisão dele, sobre o projeto dele, contra a
+produção (`ybsyhjqtwiwomtxbloyu`), não um projeto de homologação
+separado (ele recusou essa opção de propósito).
+
+- `.mcp.json` (gitignored) configura o servidor MCP oficial
+  `@supabase/mcp-server-supabase` apontado pro projeto de produção. O
+  valor do token (`SUPABASE_ACCESS_TOKEN`) nunca é escrito literal no
+  arquivo — só a referência `${SUPABASE_ACCESS_TOKEN}`; o valor real
+  mora numa variável de ambiente da conta do Windows do Gustavo, fora do
+  que eu escrevo. Isso é prática de segurança (nunca segredo em arquivo
+  versionável/legível), não uma restrição ao acesso em si.
+- Com o MCP ativo, aplico migration direto (sem o Gustavo colar nada no
+  SQL Editor), posso ler schema/dados pra depurar, e sigo as mesmas
+  regras de idempotência/numeração/revisão já descritas neste arquivo —
+  o canal muda, o cuidado com o SQL em si não.
+- Continua exigindo aprovação explícita: qualquer coisa destrutiva
+  difícil de reverter (ver seção anterior) e qualquer mudança de regra
+  de negócio visível — a régua é a mesma, só o "como aplico depois de
+  aprovado" que mudou.
+- **VF-006** (plano de auditoria) sobre nunca ter testado contra um
+  Supabase de homologação real fica, por ora, sem solução separada — não
+  vai existir projeto de teste; se algum dia for revisitado, é outra
+  conversa com o Gustavo, não bloqueia nada do dia a dia.
 
 ## Regras não-negociáveis de arquitetura (desde a ETAPA 0)
 
