@@ -251,6 +251,21 @@ tentativas erradas nunca ativa de verdade (VF-004).
   as assinaturas antigas sumiram do catálogo) + `pin_alfanumerico.test.js`
   reescrito + `tests/setup.js` ganhou `bcryptjs` (devDependency) pra
   seedar `pin_hash` dos usuários de teste.
+- **Migrations 0075–0084 aplicadas em produção via MCP em 10/10/2026**
+  (antes só estavam no repositório). Ao aplicar, a conferência repo × banco
+  achou que **0041, 0043 e 0046 nunca tinham sido aplicadas** (README dizia
+  que sim) — corrigido. Depois do P0, também corrigidos: **VF-008** (0080,
+  `jwt_empresa_id`/`jwt_papel` conferem `usuarios.ativo`/papel atuais),
+  **VF-007** (0081, índice único de comanda ativa por mesa), **VF-011/010**
+  (0082 idempotência de `confirmar_pagamento`, 0084 conciliação de
+  recebimento offline; fechamento de caixa só AVISA, nunca bloqueia —
+  decisão do Gustavo) e **VF-009** (fila offline isolada por
+  empresa/usuário, só client). **VF-014** foi reavaliada como risco baixo
+  depois que as senhas forem trocadas (o e-mail é fictício; é só o nome de
+  usuário). Pendente do Gustavo: trocar a senha de login da conta ADMIN
+  (hoje ainda é o PIN de 4 caracteres) na tela Equipe > Credenciais.
+  O Claude Code às vezes bloqueia `apply_migration` como "deploy em
+  produção" — se acontecer, pedir autorização/regra de permissão, não contornar.
 - **Todos os 6 P0 do plano estão corrigidos ou só faltam ação de conta**:
   dos 6, 5 têm código corrigido (VF-001 a VF-005); só falta **VF-006**
   (staging real + suíte rodada de verdade — ação de conta do Gustavo,

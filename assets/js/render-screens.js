@@ -1957,18 +1957,23 @@ function descricaoPendenciaOffline(p){
   return "";
 }
 function renderPendenciasOfflineRecusadas(){
-  if(!can(PERM.SYNC_CONFLITOS) || !state.pendenciasOfflineRecusadas.length) return "";
+  var foraDeContexto = state.pendenciasOfflineOutraEmpresa||0;
+  if(!can(PERM.SYNC_CONFLITOS) || (!state.pendenciasOfflineRecusadas.length && !foraDeContexto)) return "";
   return '<div class="card" style="margin-bottom:20px; border-left:4px solid var(--danger);">'+
     '<div class="card-title">Pendências de sincronização ('+state.pendenciasOfflineRecusadas.length+')</div>'+
-    '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Lançado neste aparelho enquanto offline — o servidor recusou ao tentar sincronizar (não é erro de rede, é mesmo uma regra de negócio). Revise e decida: tentar de novo ou descartar.</p>'+
+    '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">Lançado neste aparelho enquanto offline — o servidor recusou ao tentar sincronizar (não é erro de rede, é mesmo uma regra de negócio), ou ficou parado por ser de outro usuário. Revise e decida.</p>'+
+    (foraDeContexto ? '<p style="font-size:12px; color:var(--text-muted); margin:0 0 12px;">'+foraDeContexto+' item(ns) guardado(s) neste aparelho pertence(m) a outro restaurante. Ficam intactos e só sincronizam quando alguém daquele restaurante entrar aqui.</p>' : '')+
     state.pendenciasOfflineRecusadas.map(function(p){
       return '<div class="data-row">'+
-        '<div class="main"><div class="nome">'+escapeHtml(PENDENCIA_OFFLINE_TIPO_LABEL[p.tipo]||p.tipo)+'</div>'+
-        '<div class="sub">'+escapeHtml(descricaoPendenciaOffline(p))+' · '+escapeHtml(p.erroRecusa||"")+' · recusado '+new Date(p.recusadoEm).toLocaleString("pt-BR")+
+        '<div class="main"><div class="nome">'+escapeHtml(PENDENCIA_OFFLINE_TIPO_LABEL[p.tipo]||p.tipo)+(p.deOutroUsuario?' · de outro usuário':'')+'</div>'+
+        '<div class="sub">'+escapeHtml(descricaoPendenciaOffline(p))+
+          (p.recusado ? ' · '+escapeHtml(p.erroRecusa||"")+' · recusado '+new Date(p.recusadoEm).toLocaleString("pt-BR") : ' · aguardando o usuário que lançou')+
           (p.registradoNoServidor ? ' · já registrado no servidor para conferência do gerente' : '')+'</div></div>'+
         '<div class="acts">'+
           '<button class="btn btn-sm" data-action="pendencia-offline-descartar" data-pendencia="'+p.id+'">Descartar</button>'+
-          '<button class="btn btn-sm btn-primary" data-action="pendencia-offline-tentar-de-novo" data-pendencia="'+p.id+'">Tentar de novo</button>'+
+          (p.deOutroUsuario
+            ? '<button class="btn btn-sm btn-primary" data-action="pendencia-offline-assumir" data-pendencia="'+p.id+'">Assumir e enviar</button>'
+            : '<button class="btn btn-sm btn-primary" data-action="pendencia-offline-tentar-de-novo" data-pendencia="'+p.id+'">Tentar de novo</button>')+
         '</div>'+
       '</div>';
     }).join("")+

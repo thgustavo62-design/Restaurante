@@ -39,8 +39,27 @@ function offlineDb(){
 // VF-002 — devolve true/false de verdade (nunca lança) em vez de engolir
 // a falha só no console; quem chama precisa saber se "guardou" é mentira
 // antes de dizer isso pro usuário.
+// VF-009 — a base IndexedDB é uma só por origem do navegador, então a fila
+// de um aparelho compartilhado misturava restaurantes e funcionários. Todo
+// item agora nasce com o CONTEXTO de quem o criou (empresa, usuário,
+// terminal); só esse contexto sincroniza sozinho.
+function offlineContextoAtual(){
+  return {empresaId: state.empresaId||null, usuarioId: state.usuarioAtualId||null, terminal: state.caixaTerminalNome||null};
+}
+// "meu" | "outro_usuario" (mesma empresa) | "outra_empresa". Item gravado
+// antes desta versão não tem contexto: é carimbado com o contexto de quem
+// está logado agora (aparelho compartilhado + fila antiga é o cenário raro;
+// descartar o item seria pior que atribuí-lo a quem está aqui).
+function offlineDonoDoItem(item){
+  if(!item.ctx){ item.ctx = offlineContextoAtual(); item._carimbadoAgora = true; return "meu"; }
+  if(item.ctx.empresaId !== offlineContextoAtual().empresaId) return "outra_empresa";
+  if(item.ctx.usuarioId !== offlineContextoAtual().usuarioId) return "outro_usuario";
+  return "meu";
+}
 async function offlineEnfileirar(item){
   try{
+    item.v = 2;
+    if(!item.ctx) item.ctx = offlineContextoAtual();
     var db = await offlineDb();
     return await new Promise(function(resolve){
       var tx = db.transaction(OFFLINE_STORE, "readwrite");
@@ -119,6 +138,12 @@ async function offlineSincronizar(){
     var recusados = 0;
     for(var i=0;i<fila.length;i++){
       if(fila[i].recusado) continue; // já é pendência de revisão — não tenta sozinho de novo
+      // VF-009 — só sincroniza o que é DESTE restaurante E deste usuário.
+      // O resto fica guardado intacto, esperando o dono voltar (ou um
+      // gerente da mesma empresa assumir de forma explícita).
+      var dono = offlineDonoDoItem(fila[i]);
+      if(fila[i]._carimbadoAgora){ delete fila[i]._carimbadoAgora; await offlineSalvar(fila[i]); }
+      if(dono!=="meu") continue;
       var resultado = await offlineProcessarItem(fila[i]);
       if(resultado.status==="ENVIADO"){
         await offlineRemover(fila[i].id);
@@ -208,7 +233,12 @@ async function offlineProcessarItem(item){
 // fechamento de caixa (só avisa, nunca bloqueia — decisão do Gustavo).
 async function carregarAvisoConciliacaoOffline(){
   var fila = await offlineListar();
-  var local = fila.filter(function(it){ return it.tipo==="pagamento_dinheiro"; });
+  // VF-009 — dinheiro de outro usuário da MESMA empresa neste aparelho
+  // conta (a gaveta é uma só); de outra empresa nunca entra.
+  var empresaAtual = offlineContextoAtual().empresaId;
+  var local = fila.filter(function(it){
+    return it.tipo==="pagamento_dinheiro" && (!it.ctx || it.ctx.empresaId===empresaAtual);
+  });
   var localValor = local.reduce(function(s,it){
     return s + ((it.payload.p_linhas||[]).reduce(function(t,l){ return t+(l.valor_centavos||0); },0));
   },0);
@@ -235,8 +265,34 @@ async function carregarAvisoConciliacaoOffline(){
 // boot (main.js) e depois de toda tentativa de sincronização.
 async function atualizarPendenciasOfflineRecusadas(){
   var fila = await offlineListar();
-  state.pendenciasOfflineRecusadas = fila.filter(function(it){ return it.recusado; });
+  var minhas = [];
+  var outraEmpresa = 0;
+  fila.forEach(function(it){
+    var dono = it.ctx ? offlineDonoDoItem(it) : "meu";
+    if(dono==="outra_empresa"){ outraEmpresa++; return; } // nunca mostra o conteúdo de outro restaurante
+    if(dono==="outro_usuario"){ minhas.push(Object.assign({}, it, {deOutroUsuario:true})); return; }
+    if(it.recusado) minhas.push(it);
+  });
+  state.pendenciasOfflineRecusadas = minhas;
+  state.pendenciasOfflineOutraEmpresa = outraEmpresa;
   render();
+}
+// VF-009 — um GERENTE/ADMIN da mesma empresa assume explicitamente um item
+// que ficou parado por ser de outro usuário (ex: funcionário saiu sem
+// internet voltar). Daí em diante é dele e entra na sincronização normal.
+// Item de OUTRA empresa nunca chega aqui (nem aparece na lista).
+async function offlineAssumirPendencia(id){
+  if(!can(PERM.SYNC_CONFLITOS)) return;
+  var fila = await offlineListar();
+  var item = fila.find(function(it){ return it.id===id; });
+  if(!item || !item.ctx || item.ctx.empresaId!==offlineContextoAtual().empresaId) return;
+  item.assumidoDe = item.ctx.usuarioId;
+  item.assumidoEm = Date.now();
+  item.ctx = offlineContextoAtual();
+  await offlineSalvar(item);
+  await atualizarPendenciasOfflineRecusadas();
+  toast("ok","PENDÊNCIA ASSUMIDA", "Entra na fila de sincronização com a sua sessão.");
+  if(navigator.onLine) offlineSincronizar();
 }
 async function offlineDescartarPendencia(id){
   await offlineRemover(id);

@@ -1390,6 +1390,27 @@ até então só estavam no repositório, não no banco).
   recria o resto); a conferência dos demais objetos não achou mais nada
   faltando.
 
+### VF-009 — fila offline isolada por empresa e usuário (só client, sem migration)
+
+A base IndexedDB `vision_food_offline` é uma só por origem do navegador:
+num aparelho compartilhado, quem entrava depois disparava o envio dos
+itens de outro restaurante (recusados, mostrando dado alheio na tela) ou de
+outro funcionário (gravados como se fossem do novo usuário). Agora todo
+item nasce com `ctx = {empresaId, usuarioId, terminal}` (`v: 2`) e
+`offlineSincronizar` só envia o que é **deste restaurante e deste usuário**;
+o resto fica intacto na fila.
+
+- **Outra empresa**: nunca aparece, só é contado ("N item(ns) pertence(m) a
+  outro restaurante") e sincroniza quando alguém daquele restaurante entrar.
+- **Outro usuário da mesma empresa**: aparece em Configurações > Pendências,
+  e um GERENTE/ADMIN pode "Assumir e enviar" (fica registrado `assumidoDe`).
+  O dinheiro dele conta no aviso do fechamento de caixa (a gaveta é uma só).
+- **Item antigo, sem contexto**: é carimbado com quem está logado na primeira
+  sincronização (descartá-lo seria pior que atribuí-lo).
+- Logout continua **não** apagando a fila (era o comportamento correto).
+- Testes: 4 novos em `tests/offline_pendencias.test.js` (rodam sem Supabase,
+  10/10 passando).
+
 ## Auditoria de segurança — VF-001 a VF-005 corrigidos (0075–0078)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,

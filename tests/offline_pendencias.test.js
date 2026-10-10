@@ -120,10 +120,12 @@ test("offlineSincronizar: só remove da fila o que foi ENVIADO — item RECUSADO
   await sandbox.offlineSincronizar();
 
   assert.deepEqual(removidos, ["a"], "só o item aceito deveria sumir da fila");
-  assert.equal(salvos.length, 1, "o item recusado deveria ser regravado (marcado), não removido nem ignorado");
-  assert.equal(salvos[0].id, "b");
-  assert.equal(salvos[0].recusado, true);
-  assert.equal(salvos[0].erroRecusa, "recusado");
+  // (VF-009: itens antigos, sem contexto, também são regravados uma vez com o
+  // carimbo — por isso filtra só as gravações de recusa)
+  const regravadosRecusa = salvos.filter((x) => x.recusado);
+  assert.equal(regravadosRecusa.length, 1, "o item recusado deveria ser regravado (marcado), não removido nem ignorado");
+  assert.equal(regravadosRecusa[0].id, "b");
+  assert.equal(regravadosRecusa[0].erroRecusa, "recusado");
 });
 
 // VF-010 fase 2 — recebimento em dinheiro offline recusado de verdade: o
@@ -178,4 +180,73 @@ test("carregarAvisoConciliacaoOffline: soma fila local e conflitos do servidor s
   const aviso = await sandbox.carregarAvisoConciliacaoOffline();
   assert.equal(aviso.quantidade, 2, "1 só local + 1 no servidor (o 2 é o mesmo registrado, não conta dobrado)");
   assert.equal(aviso.valorCentavos, 3000);
+});
+
+// VF-009 — fila isolada por empresa e usuário: aparelho compartilhado não
+// pode mandar o item de um restaurante/funcionário na sessão de outro.
+function sandboxComFila(filaFake, estado){
+  const enviados = [];
+  const removidos = [];
+  const salvos = [];
+  const sandbox = carregarOfflineJs({
+    from: function(){ return { insert: function(p){ enviados.push(p); return { select: async function(){ return { error: null }; } }; } }; }
+  });
+  Object.assign(sandbox.state, estado);
+  sandbox.offlineListar = async function(){ return filaFake; };
+  sandbox.offlineRemover = async function(id){ removidos.push(id); };
+  sandbox.offlineSalvar = async function(item){ salvos.push(JSON.parse(JSON.stringify(item))); };
+  return { sandbox, enviados, removidos, salvos };
+}
+
+test("VF-009: só sincroniza item do mesmo restaurante E do mesmo usuário; o resto fica intacto na fila", async (t) => {
+  const fila = [
+    { id: "meu", tipo: "lancar_item", criadoEm: 1, payload: [{}], ctx: { empresaId: "E1", usuarioId: "U1" } },
+    { id: "outro-user", tipo: "lancar_item", criadoEm: 2, payload: [{}], ctx: { empresaId: "E1", usuarioId: "U2" } },
+    { id: "outra-empresa", tipo: "lancar_item", criadoEm: 3, payload: [{}], ctx: { empresaId: "E2", usuarioId: "U9" } },
+  ];
+  const { sandbox, enviados, removidos } = sandboxComFila(fila, { empresaId: "E1", usuarioAtualId: "U1" });
+  await sandbox.offlineSincronizar();
+  assert.equal(enviados.length, 1, "só 1 item pode sair com a sessão atual");
+  assert.deepEqual(removidos, ["meu"], "os de outro usuário/empresa não podem ser removidos nem enviados");
+});
+
+test("VF-009: item antigo sem contexto é carimbado com quem está logado (não é perdido nem fica órfão)", async (t) => {
+  const fila = [{ id: "antigo", tipo: "lancar_item", criadoEm: 1, payload: [{}] }];
+  const { sandbox, enviados, removidos, salvos } = sandboxComFila(fila, { empresaId: "E1", usuarioAtualId: "U1" });
+  await sandbox.offlineSincronizar();
+  assert.equal(enviados.length, 1);
+  assert.deepEqual(removidos, ["antigo"]);
+  assert.equal(salvos[0].ctx.empresaId, "E1", "foi carimbado antes de enviar");
+});
+
+test("VF-009: lista de pendências mostra item de outro usuário da mesma empresa, mas só CONTA os de outra empresa", async (t) => {
+  const fila = [
+    { id: "a", tipo: "lancar_item", payload: [{ quantidade: 1, nome: "Suco" }], ctx: { empresaId: "E1", usuarioId: "U2" } },
+    { id: "b", tipo: "lancar_item", payload: [{ quantidade: 1, nome: "SEGREDO" }], ctx: { empresaId: "E2", usuarioId: "U9" } },
+    { id: "c", tipo: "lancar_item", payload: [{}], ctx: { empresaId: "E1", usuarioId: "U1" } },
+  ];
+  const { sandbox } = sandboxComFila(fila, { empresaId: "E1", usuarioAtualId: "U1" });
+  await sandbox.atualizarPendenciasOfflineRecusadas();
+  const ids = sandbox.state.pendenciasOfflineRecusadas.map((p) => p.id);
+  assert.equal(JSON.stringify(ids), JSON.stringify(["a"]), "o meu, não recusado, não é pendência; o de outro usuário aparece");
+  assert.equal(sandbox.state.pendenciasOfflineRecusadas[0].deOutroUsuario, true);
+  assert.equal(sandbox.state.pendenciasOfflineOutraEmpresa, 1);
+  assert.ok(!JSON.stringify(sandbox.state.pendenciasOfflineRecusadas).includes("SEGREDO"), "conteúdo de outra empresa nunca vai pra tela");
+});
+
+test("VF-009: gerente da mesma empresa assume item de outro usuário; de outra empresa não dá", async (t) => {
+  const fila = [
+    { id: "a", tipo: "lancar_item", payload: [{}], ctx: { empresaId: "E1", usuarioId: "U2" } },
+    { id: "b", tipo: "lancar_item", payload: [{}], ctx: { empresaId: "E2", usuarioId: "U9" } },
+  ];
+  const { sandbox, salvos } = sandboxComFila(fila, { empresaId: "E1", usuarioAtualId: "U1" });
+  sandbox.can = function(){ return true; };
+  sandbox.PERM = { SYNC_CONFLITOS: "x" };
+  sandbox.navigator.onLine = false; // não dispara sincronização no teste
+  await sandbox.offlineAssumirPendencia("b");
+  assert.equal(salvos.length, 0, "item de outra empresa não pode ser assumido");
+  await sandbox.offlineAssumirPendencia("a");
+  const assumido = salvos.find((s) => s.id === "a");
+  assert.equal(assumido.ctx.usuarioId, "U1");
+  assert.equal(assumido.assumidoDe, "U2", "fica registrado de quem era");
 });

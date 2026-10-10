@@ -83,6 +83,7 @@ function estadoVazio(){
     reservas:[], filaEspera:null,
     campanhasHoje:null, campanhasCarregando:false,
     notificacoesAtivas:false,
-    pendenciasOfflineRecusadas:[]
+    pendenciasOfflineRecusadas:[],
+    pendenciasOfflineOutraEmpresa:0
   };
 }
