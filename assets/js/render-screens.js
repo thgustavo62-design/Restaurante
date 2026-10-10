@@ -1743,7 +1743,7 @@ function renderFuncionariosConteudo(){
           (podeEditar ? ' · peso rateio <input type="number" min="0.1" step="0.1" style="width:56px; padding:2px 4px; font-size:11px;" value="'+u.pesoRateioTaxa+'" data-action="usuario-peso-rateio" data-usuario="'+u.id+'">' : '')+
         '</div></div>'+
         (podeEditar ? '<div class="acts">'+
-          '<button class="btn btn-sm" data-action="usuario-trocar-pin" data-usuario="'+u.id+'">Trocar PIN</button>'+
+          '<button class="btn btn-sm" data-action="usuario-trocar-pin" data-usuario="'+u.id+'">Credenciais</button>'+
           '<button class="btn btn-sm" data-action="usuario-toggle-ativo" data-usuario="'+u.id+'">'+(u.ativo?"Desativar":"Reativar")+'</button>'+
         '</div>' : '')+
       '</div>';

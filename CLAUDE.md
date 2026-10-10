@@ -201,13 +201,33 @@ tentativas erradas nunca ativa de verdade (VF-004).
   `sync_conflitos`) com Descartar/Tentar de novo. Teste
   `tests/offline_pendencias.test.js` **já rodou de verdade e passou**
   (lógica pura do client, sandbox de VM, não precisa de Supabase).
-- **Dos 6 P0, faltam VF-003** (PIN como senha — decisão de produto, muda
-  login de todo mundo, PEDIR APROVAÇÃO antes de mexer) **e VF-006**
-  (staging real — ação de conta do Gustavo, não só código).
+- **VF-003 — corrigido (migration `0078`)**. Aprovado pelo Gustavo em
+  10/10/2026: "separar PIN (operação) de senha (login)". Senha de acesso
+  (Auth, 8+ caracteres) e PIN operacional (hash local, `pgcrypto`
+  `crypt()`/`gen_salt('bf')`, `usuarios.pin_hash`) viram independentes.
+  `criar_funcionario`/`onboarding_criar_empresa` exigem os dois;
+  `trocar_pin_funcionario` virou `trocar_credenciais_funcionario`
+  (ambos opcionais, pelo menos um). `verificar_pin_supervisor`/
+  `bater_ponto` não fazem mais NENHUMA chamada ao Auth — só conferem o
+  hash local (mais simples e mais rápido que o mecanismo antigo).
+  **Migração sem interrupção**: todo funcionário já existente teve o PIN
+  atual copiado pra `pin_hash` (`auth.users.encrypted_password`, já
+  bcrypt — zero recálculo); a senha de login de cada um continua sendo
+  o PIN antigo até um ADMIN trocar pela tela Equipe (botão
+  "Credenciais"). `pin_hash` NUNCA exposta por select direto (mesmo
+  tratamento de `email_interno`, 0077). Testes:
+  `tests/vf003_separa_senha_pin.test.js` (novo — inclusive confirma que
+  as assinaturas antigas sumiram do catálogo) + `pin_alfanumerico.test.js`
+  reescrito + `tests/setup.js` ganhou `bcryptjs` (devDependency) pra
+  seedar `pin_hash` dos usuários de teste.
+- **Todos os 6 P0 do plano estão corrigidos ou só faltam ação de conta**:
+  dos 6, 5 têm código corrigido (VF-001 a VF-005); só falta **VF-006**
+  (staging real + suíte rodada de verdade — ação de conta do Gustavo,
+  não é código).
 - Os itens P1–P3 (VF-007 em diante) não foram conferidos linha a linha,
   só herdados do documento original.
 
-Antes de implementar qualquer VF-XXX novo, perguntar ao Gustavo qual
-prioridade entrar primeiro — mudanças de autenticação (VF-003) afetam o
-login de todo mundo no restaurante e precisam de aviso/migração
-combinada, não só um PR.
+Antes de implementar qualquer VF-XXX novo (P1 em diante), perguntar ao
+Gustavo qual prioridade entrar primeiro — mudança de produto/fluxo visível
+(não só correção de backend) continua exigindo aprovação explícita antes,
+mesma régua que valeu pro VF-003.

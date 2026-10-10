@@ -443,17 +443,20 @@ function bindEvents(){
     if(action==="usuario-form-salvar"){
       var uNome = document.getElementById("ufNome").value;
       var uPapel = document.getElementById("ufPapel").value;
+      var uSenha = document.getElementById("ufSenha").value;
       var uPin = document.getElementById("ufPin").value;
-      salvarUsuario(uNome, uPapel, uPin);
+      salvarUsuario(uNome, uPapel, uSenha, uPin);
       return;
     }
     if(action==="usuario-toggle-ativo"){ toggleUsuarioAtivo(el.dataset.usuario); return; }
     if(action==="usuario-trocar-pin"){ abrirTrocarPin(el.dataset.usuario); return; }
     if(action==="trocarpin-cancelar"){ state.modal=null; render(); return; }
     if(action==="trocarpin-confirmar"){
+      var tpNovaSenha = document.getElementById("tpNovaSenha").value;
+      var tpConfirmarSenha = document.getElementById("tpConfirmarSenha").value;
       var tpNovo = document.getElementById("tpNovoPin").value;
       var tpConfirmar = document.getElementById("tpConfirmarPin").value;
-      confirmarTrocarPin(el.dataset.usuario, tpNovo, tpConfirmar);
+      confirmarTrocarPin(el.dataset.usuario, tpNovaSenha, tpConfirmarSenha, tpNovo, tpConfirmar);
       return;
     }
 

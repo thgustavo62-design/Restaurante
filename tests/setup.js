@@ -9,6 +9,19 @@
 // errado por engano — ver checarNaoEhProducao() abaixo.
 
 const { createClient } = require("@supabase/supabase-js");
+const bcrypt = require("bcryptjs");
+
+// VF-003 (0078) — PIN operacional e senha de login são independentes:
+// todo funcionário de teste tem senha "1234" no Auth (login antigo,
+// continua servindo só pra simplificar o teste — a regra de 8+
+// caracteres mora dentro de criar_funcionario/trocar_credenciais_
+// funcionario, não é imposta pelo Auth em si) e PIN "1234" com hash
+// bcrypt em usuarios.pin_hash — o mesmo algoritmo que
+// restaurante.verificar_pin_supervisor/bater_ponto conferem via
+// pgcrypto crypt(), então um hash gerado aqui em JS é validado
+// corretamente pelo Postgres sem nenhuma chamada extra.
+const PIN_TESTE = "1234";
+const PIN_TESTE_HASH = bcrypt.hashSync(PIN_TESTE, 10);
 
 const PROJETO_PRODUCAO = "ybsyhjqtwiwomtxbloyu";
 
@@ -66,7 +79,8 @@ async function seedEmpresaTeste(admin){
     });
     if (eAuth) throw eAuth;
     const { error: eUsuario } = await admin.from("usuarios").insert({
-      id: authUser.user.id, empresa_id: empresa.id, nome, papel, ativo: true, email_interno: email
+      id: authUser.user.id, empresa_id: empresa.id, nome, papel, ativo: true, email_interno: email,
+      pin_hash: PIN_TESTE_HASH
     });
     if (eUsuario) throw eUsuario;
     return { id: authUser.user.id, email, nome, papel };

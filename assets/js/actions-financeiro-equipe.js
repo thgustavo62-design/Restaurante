@@ -115,13 +115,16 @@ function abrirUsuarioForm(){
   state.modal = {type:"usuarioForm", erro:""};
   render();
 }
-async function salvarUsuario(nome, papel, pin){
+// VF-003 — senha de acesso (login no Supabase Auth, 8+ caracteres) e PIN
+// operacional (autorização de supervisor/bater ponto, 4 caracteres) são
+// independentes desde a 0078. criar_funcionario exige os dois.
+async function salvarUsuario(nome, papel, senha, pin){
   if(!nome.trim()){ state.modal.erro = "Informe o nome."; render(); return; }
-  // PIN virou alfanumérico (0068) — bug real que ficou: isto aqui ainda
-  // recusava letra antes mesmo de chegar no servidor (que já aceitava).
-  if(!/^[A-Za-z0-9]{4}$/.test(pin)){ state.modal.erro = "PIN deve ter exatamente 4 caracteres (letras e números)."; render(); return; }
+  if((senha||"").length < 8){ state.modal.erro = "Senha de acesso deve ter pelo menos 8 caracteres."; render(); return; }
+  if(!/^[A-Za-z0-9]{4}$/.test(pin||"")){ state.modal.erro = "PIN operacional deve ter exatamente 4 caracteres (letras e números)."; render(); return; }
+  if(senha === pin){ state.modal.erro = "A senha de acesso não pode ser igual ao PIN operacional."; render(); return; }
   state.modal.salvando = true; render();
-  var res = await sb.rpc("criar_funcionario", {p_nome:nome.trim(), p_papel:papel, p_pin:pin});
+  var res = await sb.rpc("criar_funcionario", {p_nome:nome.trim(), p_papel:papel, p_senha:senha, p_pin:pin});
   if(res.error){ state.modal.erro = res.error.message; state.modal.salvando = false; render(); return; }
   state.usuarios.push({id:res.data, nome:nome.trim(), papel:papel, ativo:true, pesoRateioTaxa:1});
   state.modal = null;
@@ -129,23 +132,36 @@ async function salvarUsuario(nome, papel, pin){
   registrarAuditoriaLocal("usuarios", res.data, "USUARIO_CRIADO", state.usuarioAtualId, nome.trim()+" · "+papel);
   toast("ok","USUÁRIO CRIADO", nome.trim()+" · "+papel);
 }
+// VF-003 — senha e PIN são independentes e opcionais aqui (pelo menos um
+// preenchido): dá pra trocar só a senha, só o PIN, ou os dois de uma vez
+// — útil pra ir migrando funcionário por funcionário pra senha de
+// verdade sem precisar trocar o PIN de todo mundo no mesmo dia.
 function abrirTrocarPin(usuarioId){
   var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
   if(!u) return;
   state.modal = {type:"trocarPin", usuarioId:usuarioId, nome:u.nome, erro:"", salvando:false};
   render();
 }
-async function confirmarTrocarPin(usuarioId, novoPin, confirmarPin){
+async function confirmarTrocarPin(usuarioId, novaSenha, confirmarSenha, novoPin, confirmarPin){
   var m = state.modal;
-  if(!/^[A-Za-z0-9]{4}$/.test(novoPin||"")){ m.erro = "PIN deve ter exatamente 4 caracteres (letras e números)."; render(); return; }
-  if(novoPin !== confirmarPin){ m.erro = "Os PINs digitados não coincidem."; render(); return; }
+  var temSenha = !!novaSenha, temPin = !!novoPin;
+  if(!temSenha && !temPin){ m.erro = "Preencha uma senha nova, um PIN novo, ou os dois."; render(); return; }
+  if(temSenha){
+    if(novaSenha.length < 8){ m.erro = "Senha de acesso deve ter pelo menos 8 caracteres."; render(); return; }
+    if(novaSenha !== confirmarSenha){ m.erro = "As senhas digitadas não coincidem."; render(); return; }
+  }
+  if(temPin){
+    if(!/^[A-Za-z0-9]{4}$/.test(novoPin)){ m.erro = "PIN operacional deve ter exatamente 4 caracteres (letras e números)."; render(); return; }
+    if(novoPin !== confirmarPin){ m.erro = "Os PINs digitados não coincidem."; render(); return; }
+  }
+  if(temSenha && temPin && novaSenha === novoPin){ m.erro = "A senha de acesso não pode ser igual ao PIN operacional."; render(); return; }
   m.erro = ""; m.salvando = true; render();
-  var res = await sb.rpc("trocar_pin_funcionario", {p_usuario_id:usuarioId, p_novo_pin:novoPin});
+  var res = await sb.rpc("trocar_credenciais_funcionario", {p_usuario_id:usuarioId, p_nova_senha: temSenha?novaSenha:null, p_novo_pin: temPin?novoPin:null});
   if(res.error){ m.erro = res.error.message; m.salvando = false; render(); return; }
   var u = state.usuarios.find(function(x){ return x.id===usuarioId; });
   state.modal = null;
   render();
-  toast("ok","PIN ALTERADO", u ? u.nome : "");
+  toast("ok","CREDENCIAIS ALTERADAS", u ? u.nome : "");
 }
 async function toggleUsuarioAtivo(usuarioId){
   var u = state.usuarios.find(function(x){ return x.id===usuarioId; });

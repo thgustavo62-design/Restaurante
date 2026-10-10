@@ -39,8 +39,10 @@ estrutura de tabelas real, a fonte de verdade são as migrations em
   [abaixo](#banco-de-dados-schema-restaurante-num-projeto-compartilhado)),
   com RLS em toda tabela e algumas operações sensíveis feitas por função
   `SECURITY DEFINER` (RPC) em vez de escrita direta de tabela.
-- **Autenticação**: PIN de 4 caracteres (letras e números), mas é a senha
-  real de uma conta do Supabase Auth — não é mock (detalhes
+- **Autenticação**: cada funcionário é uma conta real do Supabase Auth —
+  não é mock. Senha de acesso (login, 8+ caracteres) e PIN operacional
+  (4 caracteres, autorização de supervisor/bater ponto) são
+  independentes desde a `0078` (detalhes
   [abaixo](#autenticação-e-segurança)).
 - **Sincronização**: Realtime do Supabase — qualquer mudança em um
   dispositivo aparece nos outros em menos de 1 segundo, sem precisar
@@ -115,9 +117,9 @@ mesmo padrão do nome do terminal), não reseta ao recarregar a página.
 | **Relatórios** | Três sub-abas (componente genérico de sub-abas, ETAPA 0.11 — dado busca só ao abrir a aba, link direto tipo `#relatorios/dre` abre nela). Aba **Vendas**: ranking de produtos e desempenho por garçom (por quem **lançou** o item), por período (hoje / 7 dias / 30 dias / escolher mês). Aba **Gestão**: CMV e margem por produto (alerta quando custo ≥ preço), relatório anti-fraude (cancelamentos e descontos por funcionário), taxa de serviço estimada por garçom, curva ABC, heatmap de vendas por dia×hora e taxas pagas às maquininhas. Aba **DRE mensal**: faturamento − CMV − despesas = resultado, por mês. Tudo agregado no banco — não carrega mais comandas/itens completos no navegador, e o total de cada venda é o valor travado no pagamento, não recalculado com a taxa de serviço atual. |
 | **QR Codes das mesas** | Gera o QR de cada mesa cadastrada direto no navegador (biblioteca client-side, sem nenhum serviço externo), aponta pra `/cardapio/:slug?mesa=N&t=token` — o token (ETAPA 0.6) impede trocar o número da URL e abrir pedido em outra mesa. Imprimir individual, imprimir todas numa grade, baixar PNG, ou **Gerar novo QR** (invalida o impresso na hora). Dentro do grupo **Atendimento** no menu. |
 | **Marketing** | Quatro sub-abas (mesmo componente genérico de Relatórios, ETAPA 0.11): **Campanhas** (PRIORIDADE 9 — o banco identifica sozinho quem avisar hoje: aniversariantes e reservas confirmadas, cada um com botão WhatsApp de mensagem pronta); **Cupons** (código, desconto percentual ou valor fixo, validade, limite de usos; ativar/desativar; contador de usos — aplicado direto na tela de pagamento do Caixa, empilha com desconto manual e pontos de fidelidade); **Clientes inativos** (busca por "sem comprar há N dias", com telefone e saldo de pontos, e botão WhatsApp pra reativação); **Banner do cardápio** (texto + produto em destaque, aparece no topo do `cardapio.html` público, visível a qualquer cliente que escaneie o QR). |
-| **Equipe (5 sub-abas)** | PRIORIDADE 5. **Funcionários**: criar (nome, papel, PIN), ativar/desativar, trocar PIN, peso de rateio da taxa de serviço. **Escala**: turno/folga por dia da semana, por funcionário; aviso de quem está escalado hoje e ainda não bateu ponto. **Ponto**: entrada/saída/intervalo com PIN (controle interno — não substitui o registro oficial exigido pela legislação); correção só por GERENTE/ADMIN, com motivo e auditoria. **Desempenho**: vendas/ticket/cancelamentos por garçom, itens por hora trabalhada, tempo médio de preparo por setor da cozinha. **Custo** (só ADMIN, `admin.equipe.custos.ver`): salário/diária por funcionário, vales/adiantamentos, e o fechamento do período (horas, rateio da taxa de serviço, vales, líquido a pagar) — GERENTE tem `admin.equipe.editar` mas não acessa esta sub-aba. |
+| **Equipe (5 sub-abas)** | PRIORIDADE 5. **Funcionários**: criar (nome, papel, senha de acesso + PIN operacional — independentes desde a VF-003, `0078`), ativar/desativar, botão **Credenciais** (troca senha e/ou PIN, cada um opcional), peso de rateio da taxa de serviço. **Escala**: turno/folga por dia da semana, por funcionário; aviso de quem está escalado hoje e ainda não bateu ponto. **Ponto**: entrada/saída/intervalo com PIN (controle interno — não substitui o registro oficial exigido pela legislação); correção só por GERENTE/ADMIN, com motivo e auditoria. **Desempenho**: vendas/ticket/cancelamentos por garçom, itens por hora trabalhada, tempo médio de preparo por setor da cozinha. **Custo** (só ADMIN, `admin.equipe.custos.ver`): salário/diária por funcionário, vales/adiantamentos, e o fechamento do período (horas, rateio da taxa de serviço, vales, líquido a pagar) — GERENTE tem `admin.equipe.editar` mas não acessa esta sub-aba. |
 | **Auditoria** | Trilha de ações sensíveis (desconto aprovado, item cancelado, preço alterado, caixa fechado com diferença, PIN alterado, etc.), com quem fez e quando. |
-| **Configurações** | Seis sub-abas (componente genérico da ETAPA 0.11): **Geral** (dados da empresa, horário de funcionamento), **Vendas e pagamento** (taxa de serviço, limites de desconto/diferença de caixa/sangria, taxas das maquininhas, fidelidade por pontos), **Metas e alertas** (metas da Central do Dono, alerta de preço de insumo, atraso por setor no KDS), **Atendimento** (couvert/happy hour, taxa de entrega por bairro, link do cardápio público — a tela QR Codes das mesas já gera o QR pronto pra imprimir, este link aqui é só pra referência/compartilhar manualmente —, carência de QR Code sem token da ETAPA 0.6), **Impressão** (largura da impressora, rodapé do recibo) e **Segurança** (verificação em duas etapas, ETAPA 0.7). Um único botão **Salvar configurações**, fora das sub-abas (sempre visível): cada clique só grava de novo os campos da aba aberta no momento — os das abas fechadas (fora do DOM) mantêm o valor que já estava salvo, nunca são apagados. Card **Conflitos de sincronização offline** (ETAPA 0.5, acima das sub-abas, só aparece quando tem pendência) — Aplicar mesmo assim ou Descartar. Editar config, criar funcionário e trocar PIN exigem o segundo fator (2FA) se a conta ADMIN tiver MFA ativo. |
+| **Configurações** | Seis sub-abas (componente genérico da ETAPA 0.11): **Geral** (dados da empresa, horário de funcionamento), **Vendas e pagamento** (taxa de serviço, limites de desconto/diferença de caixa/sangria, taxas das maquininhas, fidelidade por pontos), **Metas e alertas** (metas da Central do Dono, alerta de preço de insumo, atraso por setor no KDS), **Atendimento** (couvert/happy hour, taxa de entrega por bairro, link do cardápio público — a tela QR Codes das mesas já gera o QR pronto pra imprimir, este link aqui é só pra referência/compartilhar manualmente —, carência de QR Code sem token da ETAPA 0.6), **Impressão** (largura da impressora, rodapé do recibo) e **Segurança** (verificação em duas etapas, ETAPA 0.7). Um único botão **Salvar configurações**, fora das sub-abas (sempre visível): cada clique só grava de novo os campos da aba aberta no momento — os das abas fechadas (fora do DOM) mantêm o valor que já estava salvo, nunca são apagados. Card **Conflitos de sincronização offline** (ETAPA 0.5, acima das sub-abas, só aparece quando tem pendência) — Aplicar mesmo assim ou Descartar. Card **Pendências de sincronização** (VF-002, `0075`+, mesmo lugar/permissão — pedido/pagamento/status offline que o servidor recusou de verdade) — Descartar ou Tentar de novo. Editar config, criar funcionário e trocar credenciais exigem o segundo fator (2FA) se a conta ADMIN tiver MFA ativo. |
 
 ### Cardápio público (`cardapio.html`)
 
@@ -222,15 +224,42 @@ funções `SECURITY DEFINER` chamadas via RPC.
 
 ## Autenticação e segurança
 
-### PIN = senha real do Supabase Auth
+### Senha de login e PIN operacional — separados (VF-003, `0078`)
 
-Cada funcionário é uma conta real do Supabase Auth. O PIN de 4 caracteres
-(letras e números — antes era só numérico; a tela de autorização de
-supervisor trocou o teclado numérico por um campo de texto comum por
-causa disso) digitado na tela de login **é a senha**. Login agora pede
-primeiro o
-**código do restaurante** (slug, igual ao usado no cardápio público — URL
-`?r=slug` ou salvo em `localStorage`), que resolve a lista de usuários via
+Cada funcionário é uma conta real do Supabase Auth. **Até a `0078`, o PIN
+de 4 caracteres ERA a senha real dessa conta** — achado P0 confirmado do
+plano de auditoria (`docs/PLANO_DE_MELHORIAS.md`, VF-003): um PIN de 4
+caracteres como senha de uma conta de verdade, combinado com VF-005
+(e-mail de login legível por qualquer papel) e o bug do contador de
+tentativas (VF-004), formava uma cadeia prática de escalonamento de
+privilégio. Aprovado pelo Gustavo em 10/10/2026 ("separar PIN de senha"),
+agora são dois segredos independentes:
+
+- **Senha de acesso** (login diário, `tentarLogin` →
+  `signInWithPassword`, mesmo mecanismo de sempre) — 8+ caracteres,
+  definida por `criar_funcionario`/`trocar_credenciais_funcionario` via
+  Admin API do GoTrue (chave de serviço no Vault, nunca exposta ao
+  navegador).
+- **PIN operacional** (4 caracteres, letras e números — autorização de
+  supervisor, bater ponto) — hash local em `usuarios.pin_hash`
+  (`pgcrypto`, `crypt()`/`gen_salt('bf')`, mesmo algoritmo — bcrypt —
+  que o próprio Auth usa internamente). `verificar_pin_supervisor`/
+  `bater_ponto` conferem contra esse hash **sem nenhuma chamada HTTP pro
+  Auth** — mais simples e mais rápido que o mecanismo antigo
+  (login-e-logout contra `/auth/v1/token` a cada autorização).
+
+**Migração sem interromper o expediente**: toda conta já existente teve
+o PIN atual copiado pra `pin_hash` automaticamente (`auth.users.
+encrypted_password`, que já é bcrypt, copiado direto — zero
+recálculo) — ninguém perdeu acesso nem precisou trocar nada no primeiro
+dia. A senha de login de cada funcionário continua sendo o PIN antigo
+até um ADMIN/GERENTE trocar pela tela Equipe (botão **Credenciais** —
+senha e PIN são campos independentes e opcionais ali, dá pra trocar um
+sem mexer no outro).
+
+Login continua pedindo primeiro o **código do restaurante** (slug, igual
+ao usado no cardápio público — URL `?r=slug` ou salvo em `localStorage`),
+que resolve a lista de usuários via
 `restaurante.usuarios_login_por_empresa(slug)` — antes disso era uma view
 (`usuarios_login`) aberta pra `anon` **sem filtro de empresa nenhum**,
 listando funcionário de toda empresa que compartilha este projeto
@@ -239,18 +268,13 @@ Supabase. O e-mail de login deixou de ser derivado do nome
 quebrava o login); agora é um UUID aleatório + domínio da própria empresa
 (`<uuid>@<slug>.internal`), gravado em `usuarios.email_interno` e nunca
 mais recalculado a partir do nome. Funcionários criados antes dessa
-mudança foram migrados automaticamente (`0044`).
+mudança foram migrados automaticamente (`0044`). `email_interno` não é
+mais legível por `select` direto de nenhum papel desde a `0077` (VF-005).
 
 O JWT emitido no login carrega `empresa_id` e `papel` via um *Custom
 Access Token Hook* (`restaurante.custom_access_token_hook`,
 `SECURITY DEFINER`) — é esse claim que toda policy de RLS usa pra isolar
 dados por empresa e por papel.
-
-Criar funcionário (`restaurante.criar_funcionario`) e trocar PIN
-(`restaurante.trocar_pin_funcionario`) são RPCs `SECURITY DEFINER` que
-validam a permissão do chamador, leem a chave de serviço do **Supabase
-Vault** (nunca do código do cliente) e chamam a Admin API do GoTrue
-diretamente — a chave secreta nunca é exposta ao navegador.
 
 ### Autorização de supervisor (desconto acima do limite, cancelar item)
 
@@ -261,13 +285,17 @@ final rodava com a sessão de quem estava logado — que o trigger de coluna
 conseguiam de fato cancelar item nem aplicar desconto, mesmo com PIN
 correto. Agora o garçom escolhe **um** supervisor (não testa vários) e as
 RPCs `restaurante.cancelar_item(...)` / `restaurante.aplicar_desconto(...)`
-verificam o PIN dele chamando o próprio Supabase Auth de dentro da
-transação, conferem a permissão, aplicam a escrita e gravam auditoria —
-tudo atômico. Tentativas falhas por supervisor ficam em
-`tentativas_autorizacao`, com bloqueio de 5 minutos após 5 falhas (além do
-rate limit do próprio Supabase Auth). Desconto dentro do limite continua
-sem pedir supervisor pra quem já tem a permissão (mesmo comportamento de
-sempre); cancelar item sempre pede, mesmo pra ADMIN.
+verificam o PIN dele contra o hash local (`usuarios.pin_hash`, ver seção
+acima — desde a `0078`, nenhuma chamada ao Auth), conferem a permissão,
+aplicam a escrita e gravam auditoria — tudo atômico. Tentativas falhas
+por supervisor ficam em `tentativas_autorizacao`: uma RPC própria
+(`registrar_tentativa_pin`, `0075`) registra a tentativa **antes** da
+verificação, numa transação separada que sempre commita — o bloqueio de
+5 falhas/5min só passou a funcionar de verdade a partir daí (antes, o
+`INSERT` da tentativa rodava na mesma transação que a exceção do PIN
+errado, e Postgres desfazia os dois juntos). Desconto dentro do limite
+continua sem pedir supervisor pra quem já tem a permissão (mesmo
+comportamento de sempre); cancelar item sempre pede, mesmo pra ADMIN.
 
 ### RLS por linha **e** por coluna
 
@@ -352,21 +380,20 @@ não parecer travada entre o clique e o próximo refresh.
 ### Pendências de segurança (ver também [Pendências conhecidas](#pendências-conhecidas))
 
 - PIN de 4 caracteres é curto por natureza (mesmo agora aceitando letras e
-  números, não só os 10 mil dígitos de antes) — e é também a senha real
-  da conta no Supabase Auth (`tentarLogin`, PIN de supervisor e
-  `bater_ponto` fazem login de verdade contra `/auth/v1/token`, não uma
-  verificação própria). O app bloqueia por 30s após 5 tentativas erradas
-  na própria UI, e as RPCs de supervisor têm seu próprio limite (5
-  tentativas / 5 min por supervisor, tabela `tentativas_autorizacao`,
-  **corrigido na `0075`** — até então o `INSERT` da tentativa rodava na
-  mesma transação que o `raise exception` do PIN errado, e Postgres
-  desfazia os dois juntos: o contador nunca acumulava de verdade,
-  VF-004 do plano de auditoria). Mesmo corrigido, nada disso impede uma
-  chamada direta ao endpoint de Auth do Supabase fora do app; rate
-  limit/CAPTCHA de verdade precisam ser configurados em **Auth → Rate
-  Limits** no painel — e o PIN de 4 caracteres como senha de conta
-  continua sendo VF-003 do plano, não corrigido ainda (ver
-  `docs/PLANO_DE_MELHORIAS.md`).
+  números, não só os 10 mil dígitos de antes) — **mas desde a `0078` não
+  é mais a senha de nenhuma conta do Supabase Auth** (VF-003, corrigido):
+  é um segredo próprio, com hash local (`usuarios.pin_hash`), só pra
+  autorização de supervisor e bater ponto. A senha de login de verdade
+  (8+ caracteres) é outro campo, trocado independentemente. O app
+  bloqueia por 30s após 5 tentativas erradas na própria UI, e as RPCs de
+  supervisor têm seu próprio limite (5 tentativas / 5 min por
+  supervisor, tabela `tentativas_autorizacao`, **corrigido na `0075`** —
+  até então o `INSERT` da tentativa rodava na mesma transação que o
+  `raise exception` do PIN errado, e Postgres desfazia os dois juntos: o
+  contador nunca acumulava de verdade, VF-004 do plano de auditoria).
+  Rate limit/CAPTCHA do próprio Supabase Auth (**Auth → Rate Limits** no
+  painel) continua valendo só pra tentativa de LOGIN (senha), não pro
+  PIN — que agora nem passa pelo Auth.
 - `usuarios_login_por_empresa(slug)` não exige mais nome-derivado, mas o
   slug em si **não é secreto** — é o mesmo usado na URL pública do
   cardápio (`/cardapio/:slug`). Quem souber o slug ainda consegue listar
@@ -1307,7 +1334,7 @@ implementação, até alguém pedir explicitamente cada um:
   navegador): proposta já escrita, aguardando aprovação — ver
   [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
 
-## Auditoria de segurança — VF-001, VF-002, VF-004 e VF-005 corrigidos (0075–0077)
+## Auditoria de segurança — VF-001 a VF-005 corrigidos (0075–0078)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,
 P0 a P3) de uma auditoria externa estática do repositório. Os 6 achados
@@ -1445,25 +1472,43 @@ produto nem ambiente novo:
   verdade e passou**, é lógica pura do client, não precisa de Supabase;
   ver `tests/README.md`).
 
-Dos 6 achados **P0** do plano, 4 estão corrigidos (VF-001, VF-002,
-VF-004, VF-005). Faltam: **VF-003** (PIN de 4 caracteres como senha real
-da conta — decisão de produto que muda o login de todo mundo, precisa de
-aprovação explícita antes de mexer, ver `CLAUDE.md`) e **VF-006**
-(staging real + suíte rodada de verdade — depende de um projeto Supabase
-separado do de produção, ação de conta que só o Gustavo consegue fazer).
+**VF-003** (`0078`) — o mais grave do plano, e o único que exigia decisão
+do Gustavo antes de mexer (muda o login de todo mundo): aprovado em
+10/10/2026, "separar PIN (operação) de senha (login)". Ver seção
+completa em [Senha de login e PIN operacional — separados](#senha-de-login-e-pin-operacional--separados-vf-003-0078),
+acima. Resumo: senha de acesso (8+ caracteres) e PIN operacional (4
+caracteres, hash local via `pgcrypto`) viram independentes;
+`criar_funcionario`/`onboarding_criar_empresa` exigem os dois;
+`trocar_pin_funcionario` virou `trocar_credenciais_funcionario` (senha
+e/ou PIN, cada um opcional); `verificar_pin_supervisor`/`bater_ponto`
+não fazem mais nenhuma chamada ao Auth. Migração automática: todo
+funcionário já existente teve o PIN atual copiado pra `pin_hash`
+(`auth.users.encrypted_password`, já bcrypt) — ninguém perdeu acesso no
+dia da migration; a senha de login de cada um continua sendo o PIN
+antigo até um ADMIN/GERENTE trocar pela tela Equipe. Testes:
+`tests/vf003_separa_senha_pin.test.js` (novo) + `pin_alfanumerico.test.js`
+reescrito pro comportamento novo + `tests/setup.js` atualizado (usuário
+de teste ganha `pin_hash` via `bcryptjs`, nova devDependency).
+
+Dos 6 achados **P0** do plano, **5 estão corrigidos** (VF-001, VF-002,
+VF-003, VF-004, VF-005). Falta só **VF-006** (staging real + suíte
+rodada de verdade — depende de um projeto Supabase separado do de
+produção, ação de conta que só o Gustavo consegue fazer).
 
 ## Onboarding de novo restaurante (Fase 4.2)
 
-`restaurante.onboarding_criar_empresa(...)` (migration `0061`) cria
-empresa + primeiro ADMIN (login real) + mesas numeradas + categorias
-iniciais numa chamada só, no SQL Editor:
+`restaurante.onboarding_criar_empresa(...)` (migration `0061`, assinatura
+atualizada na `0078` — VF-003, senha e PIN separados) cria empresa +
+primeiro ADMIN (login real) + mesas numeradas + categorias iniciais numa
+chamada só, no SQL Editor:
 
 ```sql
 select restaurante.onboarding_criar_empresa(
   'Nome do Restaurante',       -- p_nome_empresa
   'slug-do-restaurante',       -- p_slug (só minúscula/número/hífen)
   'Nome do Primeiro Admin',    -- p_nome_admin
-  '1A2B',                      -- p_pin_admin (4 caracteres, letras e números)
+  'umaSenhaForte123',          -- p_senha_admin (8+ caracteres — senha de login de verdade)
+  '1A2B',                      -- p_pin_admin (4 caracteres, letras e números — PIN operacional, não loga mais sozinho)
   10,                          -- p_qtd_mesas (opcional, padrão 10)
   array['Entradas','Pratos Principais','Bebidas','Sobremesas'] -- p_categorias (opcional)
 );
@@ -1532,10 +1577,11 @@ de rodar `npm test` pela primeira vez.
 - **Força-bruta de PIN via API do Supabase / slug do restaurante não é
   secreto**: ver
   [Pendências de segurança](#pendências-de-segurança-ver-também-pendências-conhecidas) acima.
-  O contador de tentativas (VF-004) foi corrigido na `0075` — o que
-  continua pendente é VF-003 (PIN de 4 caracteres como senha real da
-  conta) e o rate limit do próprio Supabase Auth, nenhum dos dois
-  resolvido ainda.
+  O contador de tentativas (VF-004, `0075`) e o PIN deixar de ser a senha
+  de conta (VF-003, `0078`) já foram corrigidos — o que continua
+  pendente é o rate limit do próprio Supabase Auth (**Auth → Rate
+  Limits** no painel, configuração de conta, não código) pra senha de
+  login.
 - **Testes automatizados existem mas nunca rodaram de verdade**: ver
   [Testes automatizados](#testes-automatizados-fase-44) acima — escritos e
   revisados, faltando só um projeto Supabase de teste pra confirmar.

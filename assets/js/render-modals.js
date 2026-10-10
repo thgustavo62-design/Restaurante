@@ -756,13 +756,18 @@ function renderContaFormModal(m){
   '</div></div>';
 }
 
+// VF-003 — senha de acesso (login, 8+ caracteres) e PIN operacional
+// (autorização de supervisor/bater ponto, 4 caracteres) são campos
+// independentes desde a 0078: a senha nunca mais é curta o bastante pra
+// virar o PIN, e o PIN nunca mais é a senha de ninguém.
 function renderUsuarioFormModal(m){
   var papeis = ["ADMIN","GERENTE","CAIXA","GARCOM","COZINHA"];
   return '<div class="modal-overlay"><div class="modal-box">'+
     '<h2>Novo usuário</h2>'+
     '<div class="field"><label>Nome</label><input id="ufNome" placeholder="Nome do funcionário"></div>'+
     '<div class="field"><label>Papel</label><select id="ufPapel">'+papeis.map(function(p){ return '<option value="'+p+'">'+p+'</option>'; }).join("")+'</select></div>'+
-    '<div class="field"><label>PIN ('+PIN_LEN+' caracteres — letras e números)</label><input id="ufPin" maxlength="'+PIN_LEN+'" placeholder="Ex: 1A2B"></div>'+
+    '<div class="field"><label>Senha de acesso (mínimo 8 caracteres)</label><input id="ufSenha" type="password" placeholder="Pra entrar no sistema"></div>'+
+    '<div class="field"><label>PIN operacional ('+PIN_LEN+' caracteres — letras e números)</label><input id="ufPin" maxlength="'+PIN_LEN+'" placeholder="Ex: 1A2B — pra autorizar desconto/cancelamento e bater ponto"></div>'+
     (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="usuario-form-cancelar">Cancelar</button>'+
@@ -773,14 +778,18 @@ function renderUsuarioFormModal(m){
 
 function renderTrocarPinModal(m){
   return '<div class="modal-overlay"><div class="modal-box">'+
-    '<h2>Trocar PIN — '+escapeHtml(m.nome)+'</h2>'+
-    '<div class="modal-sub">O funcionário passa a entrar com o novo PIN imediatamente. PIN agora aceita letras e números.</div>'+
-    '<div class="field"><label>Novo PIN ('+PIN_LEN+' caracteres)</label><input id="tpNovoPin" type="password" maxlength="'+PIN_LEN+'" placeholder="Ex: 1A2B"></div>'+
+    '<h2>Credenciais — '+escapeHtml(m.nome)+'</h2>'+
+    '<div class="modal-sub">Preencha só o que quiser trocar — senha, PIN, ou os dois. O que ficar em branco continua como está.</div>'+
+    '<div class="section-label">Senha de acesso (login)</div>'+
+    '<div class="field"><label>Nova senha (mínimo 8 caracteres)</label><input id="tpNovaSenha" type="password" placeholder="Deixe em branco pra não trocar"></div>'+
+    '<div class="field"><label>Confirmar nova senha</label><input id="tpConfirmarSenha" type="password" placeholder="Repita a senha"></div>'+
+    '<div class="section-label">PIN operacional (autorização/bater ponto)</div>'+
+    '<div class="field"><label>Novo PIN ('+PIN_LEN+' caracteres)</label><input id="tpNovoPin" type="password" maxlength="'+PIN_LEN+'" placeholder="Deixe em branco pra não trocar"></div>'+
     '<div class="field"><label>Confirmar novo PIN</label><input id="tpConfirmarPin" type="password" maxlength="'+PIN_LEN+'" placeholder="Repita o PIN"></div>'+
     (m.erro ? '<div class="pin-error">'+escapeHtml(m.erro)+'</div>' : '')+
     '<div class="action-row">'+
       '<button class="btn btn-ghost" data-action="trocarpin-cancelar">Cancelar</button>'+
-      '<button class="btn btn-primary btn-block" data-action="trocarpin-confirmar" data-usuario="'+m.usuarioId+'" '+(m.salvando?"disabled":"")+'>Salvar novo PIN</button>'+
+      '<button class="btn btn-primary btn-block" data-action="trocarpin-confirmar" data-usuario="'+m.usuarioId+'" '+(m.salvando?"disabled":"")+'>Salvar</button>'+
     '</div>'+
   '</div></div>';
 }

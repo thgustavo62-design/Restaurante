@@ -39,7 +39,9 @@ tests/offline_pendencias.test.js`).
 4. No painel desse projeto de teste: `Data API → Exposed schemas` precisa
    incluir `restaurante` (mesmo passo do README principal).
 5. Instale as dependências dos testes (só valem pra esta pasta, nunca vão
-   pro front-end):
+   pro front-end — `bcryptjs` entrou na 0078/VF-003: `setup.js` usa pra
+   gerar o `pin_hash` dos usuários de teste, mesmo formato bcrypt que
+   `pgcrypto`/`crypt()` no banco confere):
    ```
    cd tests
    npm install
@@ -148,12 +150,28 @@ paralelo ou em qualquer ordem é seguro, nenhum teste depende de outro.
   receber um insumo 15% mais caro (acima do limite configurado de 10%)
   aparece como alerta no relatório de preços, com o impacto por unidade
   no prato que usa esse insumo na ficha técnica.
-- `pin_alfanumerico.test.js` — PIN deixou de ser só numérico (0068):
-  `criar_funcionario`/`trocar_pin_funcionario` aceitam PIN com letra e
-  número e o login de verdade funciona com ele (não só "a RPC não deu
-  erro"); PIN fora do formato (curto, longo, com símbolo) continua
-  recusado; `verificar_pin_supervisor` (exercitado via `cancelar_item`)
-  aceita PIN alfanumérico do supervisor.
+- `pin_alfanumerico.test.js` — PIN aceita letras e números desde a 0068
+  (isso não mudou); **reescrito pra VF-003 (0078)**: `criar_funcionario`
+  exige senha de acesso (8+ caracteres) separada do PIN, e é a **senha**
+  que loga — o PIN sozinho não funciona mais como senha de login (testa
+  isso explicitamente com `assert.rejects`); senha curta, PIN fora do
+  formato e senha igual ao PIN são recusados; `trocar_credenciais_
+  funcionario` troca senha e PIN de forma independente (trocar um não
+  mexe no outro); `verificar_pin_supervisor` (via `cancelar_item`)
+  confere contra o hash local — recusa quando `pin_hash` é nulo (conta
+  migrada sem PIN definido), sem nunca "cair" pra validar contra o Auth
+  de novo.
+- `vf003_separa_senha_pin.test.js` — VF-003 do plano de auditoria
+  (`docs/PLANO_DE_MELHORIAS.md`): as assinaturas antigas
+  (`criar_funcionario` de 3 parâmetros, `trocar_pin_funcionario`) não
+  existem mais no catálogo — `PostgREST` devolve "function not found",
+  não um erro de validação; `onboarding_criar_empresa` (primeiro ADMIN
+  de uma empresa nova) segue a mesma régua — loga com a senha, o PIN
+  sozinho não funciona, `pin_hash` fica salvo mesmo assim; recusa senha
+  curta e senha igual ao PIN; e um teste de migração confirmando que um
+  funcionário "já existente" (como a `seedEmpresaTeste` simula, com
+  `pin_hash` pré-preenchido) continua autorizando com o PIN de sempre
+  sem precisar trocar nada.
 - `offline_pendencias.test.js` — VF-002 do plano de auditoria
   (`docs/PLANO_DE_MELHORIAS.md`). **Diferente dos outros: não precisa de
   `TEST_SUPABASE_URL`** — é lógica pura do client
