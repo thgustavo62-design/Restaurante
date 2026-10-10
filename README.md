@@ -1390,6 +1390,25 @@ até então só estavam no repositório, não no banco).
   recria o resto); a conferência dos demais objetos não achou mais nada
   faltando.
 
+### VF-012 (0085) — máquina de estados do KDS no banco
+
+Antes, o trigger de `comanda_itens` só travava produto/preço/quantidade e
+checava permissão ao cancelar: quem tinha `cozinha.item.atualizar_status`
+podia ressuscitar item cancelado, voltar um entregue, cancelar por `UPDATE`
+direto (pulando PIN de supervisor e registro de perda), editar
+`iniciado_em`/`pronto_em`/`entregue_em` e zerar `estoque_baixado_em` (o item
+baixaria o estoque de novo no próximo pagamento). Agora, para `UPDATE`
+direto: `PENDENTE → PREPARANDO | PRONTO`, `PREPARANDO → PRONTO | PENDENTE`,
+`PRONTO → ENTREGUE | PREPARANDO`; `ENTREGUE` só sai de `PRONTO`; voltar só
+**um** passo (e os horários das etapas que deixaram de valer são zerados);
+`ENTREGUE`/`CANCELADO` são finais; item de comanda cancelada não muda.
+Cancelar item continua só por `cancelar_item` (que usa o bypass). Item já
+pago continua andando no KDS. **Efeito visível:** arrastar um cartão do
+KDS dois passos para trás (PRONTO → PENDENTE) agora volta com o aviso
+"Só dá pra voltar um passo". Testes: `tests/vf012_maquina_estados_kds.test.js`
+(não rodou contra Supabase real; as 11 regras e o caminho de pagamento
+foram conferidos em produção com transação desfeita).
+
 ### VF-009 — fila offline isolada por empresa e usuário (só client, sem migration)
 
 A base IndexedDB `vision_food_offline` é uma só por origem do navegador:
