@@ -1357,6 +1357,28 @@ até então só estavam no repositório, não no banco).
   (não rodou ainda contra Supabase real; a lógica foi conferida em
   produção com transação desfeita).
 
+### VF-011 / VF-010 fase 1 (0082) e deriva repo × produção (0083)
+
+- **0082** — `confirmar_pagamento` ganha `p_chave`/`p_terminal_id`/
+  `p_ocorrido_em` (opcionais, no fim). Tabela `operacoes_idempotentes`
+  `(empresa_id, chave)` única guarda o resultado da primeira execução:
+  mesma chave + mesmos valores devolve o original com `repetido: true`
+  (sem gravar nada); mesma chave com valores diferentes é erro. O client
+  gera uma chave por tentativa (`novoUuid()`), reaproveita no reenvio e na
+  fila offline (junto com terminal e o instante em que o dinheiro foi
+  recebido), e zera a chave quando o erro é definitivo. Sem chave
+  (front-end antigo em cache), comporta-se como antes — sem downtime.
+  Fase 2 (conciliação de recebimento offline recusado + aviso no
+  fechamento de caixa) aguarda decisão do Gustavo.
+- **0083 — deriva descoberta.** Cruzar tudo que as migrations 0001–0082
+  criam contra o catálogo real mostrou que **0046** (`comandas.updated_at`),
+  **0043** (tabela `tentativas_autorizacao`) e **0041** (2 índices) nunca
+  tinham sido aplicadas em produção, apesar de este README dizer que sim.
+  Efeito: depois da 0075, todo pagamento e toda autorização de PIN
+  falhavam em runtime. Corrigido no mesmo dia (0046 reaplicada, 0083
+  recria o resto); a conferência dos demais objetos não achou mais nada
+  faltando.
+
 ## Auditoria de segurança — VF-001 a VF-005 corrigidos (0075–0078)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,

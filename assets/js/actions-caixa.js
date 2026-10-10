@@ -161,12 +161,17 @@ async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
   // comanda localmente como "sincronizando" e manda de verdade quando a
   // conexão voltar.
   var soDinheiro = m.linhas.length===1 && m.linhas[0].forma==="DINHEIRO";
+  // VF-011 — uma chave por tentativa de pagamento, reaproveitada no reenvio
+  // (inclusive o que vai pra fila offline): o servidor devolve o resultado
+  // original em vez de "comanda já está paga". Zerada abaixo quando o erro
+  // é definitivo, porque aí o operador vai corrigir e tentar com outros valores.
+  if(!m.chavePagamento) m.chavePagamento = novoUuid();
   if(!navigator.onLine){
     if(!soDinheiro || temFiado || pontosResgatados>0 || cupomCodigo || supervisorId){
       m.erro = "Sem internet: só dá pra fechar em dinheiro, sem fiado, pontos, cupom ou desconto acima do limite.";
       render(); return false;
     }
-    await confirmarPagamentoOffline(comanda, itemIds, totalFinal);
+    await confirmarPagamentoOffline(comanda, itemIds, totalFinal, m.chavePagamento);
     return true;
   }
 
@@ -187,13 +192,16 @@ async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
     p_cupom_codigo: cupomCodigo,
     p_supervisor_id: supervisorId || null,
     p_supervisor_pin: pin || null,
-    p_tentativa_id: tentativaId || null
+    p_tentativa_id: tentativaId || null,
+    p_chave: m.chavePagamento,
+    p_terminal_id: state.caixaTerminalNome || null
   });
   if(res.error){
     if(soDinheiro && !temFiado && pontosResgatados===0 && !cupomCodigo && !supervisorId && typeof erroDeRede==="function" && erroDeRede(res)){
-      await confirmarPagamentoOffline(comanda, itemIds, totalFinal);
+      await confirmarPagamentoOffline(comanda, itemIds, totalFinal, m.chavePagamento);
       return true;
     }
+    m.chavePagamento = null;
     m.erro = res.error.message; m.confirmando = false; render(); return false;
   }
   var out = res.data;
@@ -252,16 +260,20 @@ async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
 // o IndexedDB falhar, a comanda não pode ser marcada como paga/com troco
 // dado sem NENHUM registro de que isso aconteceu — essa é exatamente a
 // falha que some com um pagamento em dinheiro sem deixar rastro.
-async function confirmarPagamentoOffline(comanda, itemIds, totalFinal){
+async function confirmarPagamentoOffline(comanda, itemIds, totalFinal, chave){
   var agora = new Date().toISOString();
   var updatedAtNoEnfileiramento = comanda.updatedAt;
+  // VF-010/011 — protocolo do recebimento: chave única (o servidor aceita
+  // uma vez só, mesmo com reenvio), terminal e instante em que o dinheiro
+  // foi recebido de verdade (não o da sincronização).
   var guardou = await offlineEnfileirar({
     id: uid("fila"), tipo:"pagamento_dinheiro", criadoEm: Date.now(),
     payload: {
       p_comanda_id: comanda.id,
       p_linhas: [{forma:"DINHEIRO", valor_centavos: totalFinal}],
       p_comanda_updated_at: updatedAtNoEnfileiramento,
-      p_cliente_id: null, p_item_ids: itemIds, p_sessao_id: state.caixaSessao.id, p_pontos_resgatados: 0
+      p_cliente_id: null, p_item_ids: itemIds, p_sessao_id: state.caixaSessao.id, p_pontos_resgatados: 0,
+      p_chave: chave || novoUuid(), p_terminal_id: state.caixaTerminalNome || null, p_ocorrido_em: agora
     }
   });
   if(!guardou){

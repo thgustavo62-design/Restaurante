@@ -3,6 +3,17 @@
 function uid(prefix){
   return (prefix||"id") + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,9);
 }
+// UUID v4 de verdade (uid() acima não serve: colunas uuid no banco rejeitam
+// o formato dele). Usado como chave de idempotência de pagamento (VF-011).
+function novoUuid(){
+  if(window.crypto && typeof window.crypto.randomUUID==="function") return window.crypto.randomUUID();
+  var b = new Uint8Array(16);
+  if(window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(b);
+  else for(var i=0;i<16;i++) b[i] = Math.floor(Math.random()*256);
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  var h = Array.prototype.map.call(b, function(x){ return (x<16?"0":"")+x.toString(16); }).join("");
+  return h.slice(0,8)+"-"+h.slice(8,12)+"-"+h.slice(12,16)+"-"+h.slice(16,20)+"-"+h.slice(20);
+}
 function brl(centavos){
   return (centavos/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 }
