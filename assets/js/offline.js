@@ -126,6 +126,7 @@ async function offlineSincronizar(){
       } else if(resultado.status==="RECUSADO"){
         fila[i].recusado = true;
         fila[i].erroRecusa = resultado.erro;
+        fila[i].registradoNoServidor = !!resultado.registradoNoServidor;
         fila[i].recusadoEm = Date.now();
         await offlineSalvar(fila[i]);
         recusados++;
@@ -168,6 +169,23 @@ async function offlineProcessarItem(item){
       var res3 = await sb.rpc("confirmar_pagamento", item.payload);
       if(res3.error){
         if(erroDeRede(res3)) return {status:"PENDENTE_REDE"};
+        // VF-010 — o dinheiro JÁ foi recebido fisicamente: avisa o servidor
+        // da recusa (vira um conflito PENDENTE visível ao gerente e no aviso
+        // do fechamento de caixa), em vez de depender só desta pendência
+        // local, que um "Descartar" apaga sem rastro. Se nem isso der por
+        // falta de rede, trata como pendente de rede e tenta o ciclo todo
+        // de novo na próxima sincronização.
+        var linhasPag = item.payload.p_linhas||[];
+        var valorPag = linhasPag.reduce(function(s,l){ return s+(l.valor_centavos||0); },0);
+        if(item.payload.p_chave && valorPag>0){
+          var regRes = await sb.rpc("registrar_recebimento_offline_recusado", {
+            p_chave: item.payload.p_chave, p_comanda_id: item.payload.p_comanda_id,
+            p_valor_centavos: valorPag, p_motivo: res3.error.message,
+            p_ocorrido_em: item.payload.p_ocorrido_em||null, p_terminal_id: item.payload.p_terminal_id||null
+          });
+          if(regRes.error && erroDeRede(regRes)) return {status:"PENDENTE_REDE"};
+          if(!regRes.error) return {status:"RECUSADO", erro:res3.error.message, registradoNoServidor:true};
+        }
         return {status:"RECUSADO", erro:res3.error.message};
       }
       // 0.5 — a comanda mudou entre o pagamento offline e agora: o
@@ -182,6 +200,34 @@ async function offlineProcessarItem(item){
     }
   }catch(e){ return {status:"PENDENTE_REDE"}; }
   return {status:"ENVIADO"};
+}
+
+// VF-010 — dinheiro recebido offline que ainda não virou venda de verdade:
+// o que está na fila deste aparelho (aguardando rede ou recusado) mais o
+// que o servidor já tem como conflito pendente. Alimenta o AVISO do
+// fechamento de caixa (só avisa, nunca bloqueia — decisão do Gustavo).
+async function carregarAvisoConciliacaoOffline(){
+  var fila = await offlineListar();
+  var local = fila.filter(function(it){ return it.tipo==="pagamento_dinheiro"; });
+  var localValor = local.reduce(function(s,it){
+    return s + ((it.payload.p_linhas||[]).reduce(function(t,l){ return t+(l.valor_centavos||0); },0));
+  },0);
+  var servidor = {pendentes:0, valor_centavos:0};
+  try{
+    var r = await sb.rpc("contar_conciliacao_offline");
+    if(!r.error && r.data) servidor = r.data;
+  }catch(e){}
+  // item recusado e já registrado no servidor aparece nos dois lugares —
+  // conta só uma vez (no servidor).
+  var soLocal = local.filter(function(it){ return !it.registradoNoServidor; });
+  var soLocalValor = soLocal.reduce(function(s,it){
+    return s + ((it.payload.p_linhas||[]).reduce(function(t,l){ return t+(l.valor_centavos||0); },0));
+  },0);
+  return {
+    quantidade: soLocal.length + (servidor.pendentes||0),
+    valorCentavos: soLocalValor + (servidor.valor_centavos||0),
+    local: local.length, localValorCentavos: localValor, servidor: servidor.pendentes||0
+  };
 }
 
 // VF-002 — área de Pendências de sincronização (Configurações): lista o

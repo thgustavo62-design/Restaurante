@@ -211,7 +211,7 @@ function bindEvents(){
       if(valor>0 && motivo) registrarMovimento(el.dataset.tipo, valor, motivo);
       return;
     }
-    if(action==="caixa-fechar-abrir"){ state.modal={type:"caixaFechar", stage:"contar", informados:{}}; render(); return; }
+    if(action==="caixa-fechar-abrir"){ state.modal={type:"caixaFechar", stage:"contar", informados:{}}; render(); carregarAvisoFechamento(); return; }
     if(action==="caixa-fechar-cancelar"){ state.modal=null; render(); return; }
     if(action==="caixa-fechar-informar"){
       var inputs = document.querySelectorAll('[data-action="fechar-informado"]');

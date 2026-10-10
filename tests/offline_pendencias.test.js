@@ -125,3 +125,57 @@ test("offlineSincronizar: só remove da fila o que foi ENVIADO — item RECUSADO
   assert.equal(salvos[0].recusado, true);
   assert.equal(salvos[0].erroRecusa, "recusado");
 });
+
+// VF-010 fase 2 — recebimento em dinheiro offline recusado de verdade: o
+// aparelho avisa o servidor (registrar_recebimento_offline_recusado) pra o
+// dinheiro físico não depender só da pendência local.
+test("pagamento_dinheiro recusado com chave: registra a recusa no servidor e marca registradoNoServidor", async (t) => {
+  const chamadas = [];
+  const sandbox = carregarOfflineJs({
+    rpc: async function(nome, args){
+      chamadas.push({ nome, args });
+      if (nome === "confirmar_pagamento") return { error: { code: "P0001", message: "Sessão de caixa informada não está aberta" } };
+      return { data: "id-conflito", error: null };
+    }
+  });
+  const res = await sandbox.offlineProcessarItem({
+    tipo: "pagamento_dinheiro",
+    payload: { p_comanda_id: "c1", p_linhas: [{ forma: "DINHEIRO", valor_centavos: 4500 }], p_chave: "k1", p_terminal_id: "Caixa 1", p_ocorrido_em: "2026-10-10T20:00:00Z" }
+  });
+  assert.equal(res.status, "RECUSADO");
+  assert.equal(res.registradoNoServidor, true);
+  const reg = chamadas.find((c) => c.nome === "registrar_recebimento_offline_recusado");
+  assert.ok(reg, "tem que avisar o servidor da recusa");
+  assert.equal(reg.args.p_valor_centavos, 4500);
+  assert.equal(reg.args.p_chave, "k1");
+  assert.equal(reg.args.p_terminal_id, "Caixa 1");
+});
+
+test("pagamento_dinheiro recusado, mas sem rede pra registrar a recusa: continua PENDENTE_REDE (tenta tudo de novo depois)", async (t) => {
+  const sandbox = carregarOfflineJs({
+    rpc: async function(nome){
+      if (nome === "confirmar_pagamento") return { error: { code: "P0001", message: "Sessão de caixa informada não está aberta" } };
+      return { error: { message: "Failed to fetch" } }; // sem code = erro de rede
+    }
+  });
+  const res = await sandbox.offlineProcessarItem({
+    tipo: "pagamento_dinheiro",
+    payload: { p_comanda_id: "c1", p_linhas: [{ forma: "DINHEIRO", valor_centavos: 4500 }], p_chave: "k2" }
+  });
+  assert.equal(res.status, "PENDENTE_REDE");
+});
+
+test("carregarAvisoConciliacaoOffline: soma fila local e conflitos do servidor sem contar duas vezes o que já foi registrado", async (t) => {
+  const fila = [
+    { id: "1", tipo: "pagamento_dinheiro", payload: { p_linhas: [{ valor_centavos: 1000 }] } },
+    { id: "2", tipo: "pagamento_dinheiro", registradoNoServidor: true, payload: { p_linhas: [{ valor_centavos: 2000 }] } },
+    { id: "3", tipo: "lancar_item", payload: [{}] },
+  ];
+  const sandbox = carregarOfflineJs({
+    rpc: async function(){ return { data: { pendentes: 1, valor_centavos: 2000 }, error: null }; }
+  });
+  sandbox.offlineListar = async function(){ return fila; };
+  const aviso = await sandbox.carregarAvisoConciliacaoOffline();
+  assert.equal(aviso.quantidade, 2, "1 só local + 1 no servidor (o 2 é o mesmo registrado, não conta dobrado)");
+  assert.equal(aviso.valorCentavos, 3000);
+});

@@ -405,6 +405,18 @@ function formasDaSessao(){
 // client só manda o que o operador contou; recebe de volta o resultado já
 // pronto. "Conferência cega" de verdade: o esperado não existe no browser
 // antes do operador informar o contado.
+// VF-010 — aviso (não bloqueia) de recebimento em dinheiro offline ainda
+// sem conciliar. Atualiza só o bloco do aviso, sem render() completo: um
+// render apagaria o que o operador já digitou nos campos de contagem.
+async function carregarAvisoFechamento(){
+  var m = state.modal;
+  if(!m || m.type!=="caixaFechar") return;
+  var aviso = await carregarAvisoConciliacaoOffline();
+  if(state.modal!==m) return;
+  m.aviso = aviso;
+  var el = document.getElementById("avisoConciliacaoOffline");
+  if(el) el.innerHTML = avisoConciliacaoOfflineHtml(aviso);
+}
 async function conferirFechamento(informados){
   var m = state.modal;
   m.informados = informados;

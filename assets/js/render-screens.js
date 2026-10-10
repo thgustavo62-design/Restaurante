@@ -1907,6 +1907,19 @@ function renderSyncConflitos(){
       var comanda = state.comandas.find(function(c){ return c.id===sc.comandaId; });
       var payload = sc.payload||{};
       var valorTotal = (payload.p_linhas||[]).reduce(function(s,l){ return s+(l.valor_centavos||0); },0);
+      // VF-010 — recebimento em dinheiro offline que o servidor recusou: o
+      // dinheiro já está na gaveta, não há o que "aplicar". O gerente só
+      // registra que conferiu (fica na auditoria com quem e quando).
+      if(sc.tipo==="pagamento_recusado"){
+        var quando = payload.ocorrido_em ? " · recebido em "+new Date(payload.ocorrido_em).toLocaleString("pt-BR") : "";
+        return '<div class="data-row">'+
+          '<div class="main"><div class="nome">Recebimento offline recusado · '+brl(payload.valor_centavos||0)+(comanda?' · '+escapeHtml(comanda.codigo):'')+'</div>'+
+          '<div class="sub">'+escapeHtml(payload.terminal_id||"")+quando+' · '+escapeHtml(payload.motivo_recusa||sc.motivo||"")+'</div></div>'+
+          '<div class="acts">'+
+            '<button class="btn btn-sm btn-primary" data-action="syncconflito-aplicar" data-conflito="'+sc.id+'">Marcar como conferido</button>'+
+          '</div>'+
+        '</div>';
+      }
       return '<div class="data-row">'+
         '<div class="main"><div class="nome">'+(comanda?escapeHtml(comanda.codigo):"Comanda")+' · '+brl(valorTotal)+'</div>'+
         '<div class="sub">'+escapeHtml(sc.motivo||"")+' · '+new Date(sc.createdAt).toLocaleString("pt-BR")+'</div></div>'+
@@ -1951,7 +1964,8 @@ function renderPendenciasOfflineRecusadas(){
     state.pendenciasOfflineRecusadas.map(function(p){
       return '<div class="data-row">'+
         '<div class="main"><div class="nome">'+escapeHtml(PENDENCIA_OFFLINE_TIPO_LABEL[p.tipo]||p.tipo)+'</div>'+
-        '<div class="sub">'+escapeHtml(descricaoPendenciaOffline(p))+' · '+escapeHtml(p.erroRecusa||"")+' · recusado '+new Date(p.recusadoEm).toLocaleString("pt-BR")+'</div></div>'+
+        '<div class="sub">'+escapeHtml(descricaoPendenciaOffline(p))+' · '+escapeHtml(p.erroRecusa||"")+' · recusado '+new Date(p.recusadoEm).toLocaleString("pt-BR")+
+          (p.registradoNoServidor ? ' · já registrado no servidor para conferência do gerente' : '')+'</div></div>'+
         '<div class="acts">'+
           '<button class="btn btn-sm" data-action="pendencia-offline-descartar" data-pendencia="'+p.id+'">Descartar</button>'+
           '<button class="btn btn-sm btn-primary" data-action="pendencia-offline-tentar-de-novo" data-pendencia="'+p.id+'">Tentar de novo</button>'+

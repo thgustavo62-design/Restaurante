@@ -1368,8 +1368,19 @@ até então só estavam no repositório, não no banco).
   fila offline (junto com terminal e o instante em que o dinheiro foi
   recebido), e zera a chave quando o erro é definitivo. Sem chave
   (front-end antigo em cache), comporta-se como antes — sem downtime.
-  Fase 2 (conciliação de recebimento offline recusado + aviso no
-  fechamento de caixa) aguarda decisão do Gustavo.
+  Fase 2 abaixo (0084).
+- **0084 — VF-010 fase 2 (conciliação).** Recebimento em dinheiro offline
+  que o servidor recusa de verdade (ex: caixa já fechado) agora é avisado
+  ao servidor (`registrar_recebimento_offline_recusado`, idempotente pela
+  chave) e vira um conflito `pagamento_recusado` na tela "Conflitos de
+  sincronização" (Configurações), com valor, terminal e instante em que o
+  dinheiro entrou. O gerente marca "conferido" (`resolver_sync_conflito`,
+  com auditoria de quem e quando). O fechamento de caixa **só avisa**
+  (decisão do Gustavo, 10/10/2026) quando há recebimento offline sem
+  conciliar neste aparelho ou no servidor — nunca bloqueia.
+  **[DECISÃO DE DESIGN]** o que o gerente pode fazer além de "conferido"
+  (ex: lançar como suprimento no caixa aberto) ficou sem decidir; não
+  movimenta dinheiro sozinho. Pode ser evoluído sem perda de dado.
 - **0083 — deriva descoberta.** Cruzar tudo que as migrations 0001–0082
   criam contra o catálogo real mostrou que **0046** (`comandas.updated_at`),
   **0043** (tabela `tentativas_autorizacao`) e **0041** (2 índices) nunca

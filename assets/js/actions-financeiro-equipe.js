@@ -342,7 +342,7 @@ async function resolverSyncConflito(conflitoId, aplicar){
   state.syncConflitos = state.syncConflitos.filter(function(c){ return c.id!==conflitoId; });
   render();
   await carregarTudo();
-  toast("ok", aplicar?"CONFLITO APLICADO":"CONFLITO DESCARTADO", "");
+  toast("ok", res.data && res.data.conferido ? "RECEBIMENTO CONFERIDO" : (aplicar?"CONFLITO APLICADO":"CONFLITO DESCARTADO"), "");
 }
 function estaAberto(){
   var c = state.config;

@@ -972,8 +972,17 @@ function renderCaixaMovModal(m){
   '</div></div>';
 }
 
+// VF-010 — só avisa; o fechamento nunca é bloqueado por causa disso.
+function avisoConciliacaoOfflineHtml(aviso){
+  if(!aviso || !aviso.quantidade) return "";
+  return '<div class="pin-error" style="margin:0 0 12px; text-align:left;">'+
+    '<b>Atenção:</b> há '+aviso.quantidade+' recebimento(s) em dinheiro feito(s) sem internet ainda sem conciliar ('+brl(aviso.valorCentavos)+'). '+
+    'Esse dinheiro pode estar na gaveta sem constar no caixa. Dá pra fechar mesmo assim — peça a um gerente para revisar em Configurações.'+
+  '</div>';
+}
 function renderCaixaFecharModal(m){
   var formas = formasDaSessao();
+  var blocoAviso = '<div id="avisoConciliacaoOffline">'+avisoConciliacaoOfflineHtml(m.aviso)+'</div>';
   if(m.stage==="concluido"){
     var sessao = state.caixaSessoesHistorico[state.caixaSessoesHistorico.length-1];
     var cls2 = sessao.diferencaCentavos===0 ? "zero" : (sessao.diferencaCentavos>0 ? "pos" : "neg");
@@ -989,6 +998,7 @@ function renderCaixaFecharModal(m){
   if(!m.stage || m.stage==="contar"){
     return '<div class="modal-overlay"><div class="modal-box">'+
       '<h2>Conferência de caixa</h2><div class="modal-sub">Informe os valores contados. O esperado é calculado no servidor e só aparece depois de confirmar.</div>'+
+      blocoAviso+
       formas.map(function(f){
         return '<div class="field"><label>'+f+'</label><input type="number" min="0" step="0.01" placeholder="0,00" data-action="fechar-informado" data-forma="'+f+'"></div>';
       }).join("")+
@@ -1006,6 +1016,7 @@ function renderCaixaFecharModal(m){
   var precisaJustificar = r.precisa_justificativa;
   return '<div class="modal-overlay"><div class="modal-box">'+
     '<h2>Resultado do fechamento</h2>'+
+    blocoAviso+
     '<div style="overflow-x:auto;"><table class="recon-table"><tr><th></th><th>Esperado</th><th>Informado</th><th>Diferença</th></tr>'+
     formas.map(function(f){
       var d = (r.diffs[f]||0); var dcls = d===0?"zero":(d>0?"pos":"neg");
