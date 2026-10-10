@@ -1334,6 +1334,29 @@ implementação, até alguém pedir explicitamente cada um:
   navegador): proposta já escrita, aguardando aprovação — ver
   [Impressão por setor — proposta pendente](#impressão-por-setor--proposta-pendente-fase-18).
 
+## Auditoria de segurança — VF-007 e VF-008 corrigidos (0079–0081)
+
+Aplicadas direto em produção via MCP em 10/10/2026 (0075–0078 também —
+até então só estavam no repositório, não no banco).
+
+- **0079** — derruba `confirmar_pagamento(uuid, jsonb, text)`, a
+  assinatura original da 0035 que sobrou no catálogo (parâmetros
+  diferentes = função diferente; nunca foi substituída). Era um caminho
+  paralelo, ainda chamável, sem limite de desconto nem PIN.
+- **0080 (VF-008)** — `jwt_empresa_id()`/`jwt_papel()` agora consultam
+  `usuarios` (ativo + papel atuais) em vez de confiar só no que está
+  congelado no JWT. Funcionário desativado perde acesso na hora (RLS,
+  RPCs e Realtime), e rebaixar o papel também vale na hora. Trigger
+  derruba `auth.sessions` ao desativar.
+- **0081 (VF-007)** — índice único parcial `comandas_mesa_ativa_uk`: no
+  máximo uma comanda `MESA` em `ABERTA`/`FECHANDO` por mesa.
+  `sentar_reserva`/`sentar_fila` travam a mesa (`FOR UPDATE`), recusam
+  mesa ocupada e reserva `NAO_VEIO`/fila `DESISTIU`; `transferir_comanda`
+  trava a mesa destino antes de checar. `abrirComanda()` mostra "Mesa já
+  ocupada" no erro `23505`. Testes: `tests/vf007_mesa_exclusiva.test.js`
+  (não rodou ainda contra Supabase real; a lógica foi conferida em
+  produção com transação desfeita).
+
 ## Auditoria de segurança — VF-001 a VF-005 corrigidos (0075–0078)
 
 `docs/PLANO_DE_MELHORIAS.md` é um plano de 26 itens (VF-001 a VF-026,

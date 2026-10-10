@@ -168,7 +168,13 @@ async function abrirComanda(mesaId){
     usuario_abertura: state.usuarioAtualId, taxa_servico_ativa: true, desconto_centavos: 0
   };
   var res = await sb.from("comandas").insert(payload).select().single();
-  if(res.error){ toast("err","ERRO AO ABRIR COMANDA", res.error.message); return; }
+  if(res.error){
+    // 23505 = comandas_mesa_ativa_uk (0081): outra pessoa abriu a mesma mesa
+    // um instante antes; o Realtime já vai trazer a comanda dela pra tela.
+    if(res.error.code==="23505") toast("err","MESA JÁ OCUPADA", "Outra comanda acabou de ser aberta nesta mesa");
+    else toast("err","ERRO AO ABRIR COMANDA", res.error.message);
+    return;
+  }
   var comanda = mapComanda(res.data);
   state.comandas.push(comanda);
   irParaComanda(comanda.id);
