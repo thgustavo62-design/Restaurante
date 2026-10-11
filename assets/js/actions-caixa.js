@@ -19,6 +19,16 @@ async function abrirFecharConta(comandaId){
 // base JÁ descontada, o client calculava "valor cheio − desconto").
 var totaisPagamentoDebounce = null;
 function atualizarTotaisPagamento(){
+  // VF-017 — a partir deste instante o total que está na tela JÁ está
+  // desatualizado: bloqueia o "Confirmar" na hora (sem esperar o debounce
+  // nem um render), em vez de deixar uma janela de ~300ms em que dava pra
+  // confirmar em cima do total antigo.
+  var m = state.modal;
+  if(m && m.type==="pagamento"){
+    m.totaisCarregando = true;
+    var btn = document.querySelector('[data-action="pagamento-confirmar"]');
+    if(btn) btn.disabled = true;
+  }
   if(totaisPagamentoDebounce) clearTimeout(totaisPagamentoDebounce);
   totaisPagamentoDebounce = setTimeout(executarAtualizarTotaisPagamento, 280);
 }
@@ -27,7 +37,12 @@ async function executarAtualizarTotaisPagamento(){
   if(!m || m.type!=="pagamento") return;
   var modo = m.modo||"pessoas";
   var itemIds = modo==="itens" ? Object.keys(m.itensSelecionados).filter(function(id){ return m.itensSelecionados[id]; }) : null;
-  if(modo==="itens" && !itemIds.length){ m.totaisServidor = null; render(); return; }
+  if(modo==="itens" && !itemIds.length){ m.totaisServidor = null; m.totaisCarregando = false; render(); return; }
+  // VF-017 — numera cada consulta: se duas ficarem no ar ao mesmo tempo (o
+  // operador mexeu de novo antes da primeira voltar), só a MAIS RECENTE
+  // pode gravar o resultado; a antiga, mesmo chegando depois, é descartada.
+  m.totaisSeq = (m.totaisSeq||0) + 1;
+  var minhaSeq = m.totaisSeq;
   m.totaisCarregando = true; render();
   var res = await sb.rpc("calcular_total_pagamento", {
     p_comanda_id: m.comandaId, p_item_ids: itemIds,
@@ -36,6 +51,7 @@ async function executarAtualizarTotaisPagamento(){
     p_cliente_id: modo==="pessoas" ? (m.fiadoClienteId||null) : null
   });
   if(state.modal!==m) return; // modal trocou enquanto a consulta estava no ar
+  if(m.totaisSeq!==minhaSeq) return; // chegou uma consulta mais nova — esta resposta é velha
   m.totaisCarregando = false;
   if(res.error){ m.totaisServidor = null; m.erro = res.error.message; render(); return; }
   m.totaisServidor = res.data;
@@ -194,7 +210,8 @@ async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
     p_supervisor_pin: pin || null,
     p_tentativa_id: tentativaId || null,
     p_chave: m.chavePagamento,
-    p_terminal_id: state.caixaTerminalNome || null
+    p_terminal_id: state.caixaTerminalNome || null,
+    p_total_esperado_centavos: totalFinal // VF-017: o servidor recusa se o total mudou desde a prévia
   });
   if(res.error){
     if(soDinheiro && !temFiado && pontosResgatados===0 && !cupomCodigo && !supervisorId && typeof erroDeRede==="function" && erroDeRede(res)){
@@ -202,7 +219,10 @@ async function executarConfirmarPagamento(supervisorId, pin, tentativaId){
       return true;
     }
     m.chavePagamento = null;
-    m.erro = res.error.message; m.confirmando = false; render(); return false;
+    m.erro = res.error.message; m.confirmando = false; render();
+    // total mudou no meio do caminho: já busca o novo valor pra o operador conferir
+    if(/O total da conta mudou/.test(res.error.message||"")) atualizarTotaisPagamento();
+    return false;
   }
   var out = res.data;
 
@@ -273,7 +293,8 @@ async function confirmarPagamentoOffline(comanda, itemIds, totalFinal, chave){
       p_linhas: [{forma:"DINHEIRO", valor_centavos: totalFinal}],
       p_comanda_updated_at: updatedAtNoEnfileiramento,
       p_cliente_id: null, p_item_ids: itemIds, p_sessao_id: state.caixaSessao.id, p_pontos_resgatados: 0,
-      p_chave: chave || novoUuid(), p_terminal_id: state.caixaTerminalNome || null, p_ocorrido_em: agora
+      p_chave: chave || novoUuid(), p_terminal_id: state.caixaTerminalNome || null, p_ocorrido_em: agora,
+      p_total_esperado_centavos: totalFinal
     }
   });
   if(!guardou){

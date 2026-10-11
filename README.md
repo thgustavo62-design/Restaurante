@@ -1390,6 +1390,27 @@ até então só estavam no repositório, não no banco).
   recria o resto); a conferência dos demais objetos não achou mais nada
   faltando.
 
+### VF-017 (0086) — valor mostrado == valor gravado
+
+O modal já pedia o total ao servidor (`calcular_total_pagamento`), mas
+faltavam três travas: (1) duas consultas ao mesmo tempo podiam se cruzar e
+a resposta **velha**, chegando depois, sobrescrevia a nova; (2) depois de
+mexer em cupom/pontos/itens o botão "Confirmar" só era bloqueado ~300ms
+depois, quando a nova consulta começava; (3) o servidor nunca conferia se o
+total que o operador viu era o que ia gravar. Agora: cada consulta é
+numerada e só a mais recente vale; `atualizarTotaisPagamento()` bloqueia o
+botão na hora; e `confirmar_pagamento` aceita `p_total_esperado_centavos` e
+**recusa** ("O total da conta mudou: o caixa mostrava R$ X e o servidor
+calculou R$ Y") sem gravar nada — o modal já rebusca o total novo. Vale
+também para o pagamento offline. Sem o parâmetro (front-end/fila antigos)
+nada muda. Matriz conferida em produção (desconto manual + cupom + taxa +
+pagamento misto com troco; parcial por item com formas diferentes):
+**0 centavo** de diferença entre prévia, `comandas.total_centavos` e
+`caixa_movimentos`. Não exercitado: desconto por pontos (a empresa atual
+não tem valor de ponto configurado — 20 pontos deram R$ 0 de desconto).
+Testes: `tests/vf017_totais_pagamento_client.test.js` (roda sem Supabase,
+2/2) e `tests/vf017_total_esperado.test.js` (precisa de banco).
+
 ### VF-012 (0085) — máquina de estados do KDS no banco
 
 Antes, o trigger de `comanda_itens` só travava produto/preço/quantidade e
