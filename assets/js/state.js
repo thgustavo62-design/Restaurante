@@ -72,7 +72,7 @@ function estadoVazio(){
     vendasHoje:[],
     relatorioResultado:null, relatorioCarregando:false, relatorioMes:"",
     relatorioGestaoResultado:null, relatorioGestaoCarregando:false, relatorioTaxasResultado:[],
-    relatorioDreResultado:null, relatorioDreCarregando:false, relatorioDreMes:"",
+    relatorioDreResultado:null, relatorioDreCarregando:false, relatorioDreMes:"", relatorioConciliacao:null,
     escalaHoje:null, escalasPorUsuario:{},
     pontoUsuarioId:"", pontoPin:"", pontoErro:"", pontosRecentes:null,
     desempenhoPeriodo:"7D", desempenhoMes:"", desempenhoResultado:null, desempenhoCarregando:false,

@@ -1697,13 +1697,51 @@ function renderDre(){
     return cabecalho+'<div class="empty-hint">Carregando mês...</div>';
   }
   var d = state.relatorioDreResultado;
+  var f = d.formulas||{};
+  function linha(rotulo, valor, dica){
+    return '<div class="totais-linha"><span title="'+escapeHtml(dica||"")+'">'+rotulo+'</span><span>'+valor+'</span></div>';
+  }
+  var corAntes = d.resultado_antes_equipe>=0?"var(--success)":"var(--danger)";
+  // VF-019 — mesmas linhas e mesma fórmula da Central do Dono e do Resumo
+  // financeiro (todos leem restaurante.indicadores_mes no banco).
   return cabecalho+
-    '<div class="card" style="max-width:480px;">'+
-      '<div class="totais-linha"><span>Faturamento</span><span>'+brl(d.faturamento)+'</span></div>'+
-      '<div class="totais-linha"><span>(-) CMV</span><span>-'+brl(d.cmv)+'</span></div>'+
-      '<div class="totais-linha"><span>(-) Despesas (contas a pagar do mês)</span><span>-'+brl(d.despesas)+'</span></div>'+
-      '<div class="totais-linha total" style="color:'+(d.resultado>=0?"var(--success)":"var(--danger)")+';"><span>Resultado</span><span>'+brl(d.resultado)+'</span></div>'+
-    '</div>';
+    '<div class="card" style="max-width:520px;">'+
+      linha('Faturamento', brl(d.faturamento), f.faturamento)+
+      '<div style="font-size:11px; color:var(--text-muted); margin:-2px 0 6px;">inclui '+brl(d.taxa_servico_incluida_no_faturamento||0)+' de taxa de serviço, repassada à equipe</div>'+
+      linha('(-) CMV', '-'+brl(d.cmv), f.cmv)+
+      linha('(-) Perdas', '-'+brl(d.perdas||0), f.perdas)+
+      linha('(-) Despesas (contas a pagar do mês)', '-'+brl(d.despesas), f.despesas)+
+      linha('(-) Taxas de maquininha', '-'+brl(d.taxa_maquininha||0), f.taxa_maquininha)+
+      '<div class="totais-linha total" style="color:'+corAntes+';"><span>Resultado antes do custo de equipe</span><span>'+brl(d.resultado_antes_equipe)+'</span></div>'+
+      (d.custo_equipe!==null && d.custo_equipe!==undefined
+        ? linha('(-) Custo de equipe', '-'+brl(d.custo_equipe), f.custo_equipe)+
+          '<div class="totais-linha total" style="color:'+(d.resultado>=0?"var(--success)":"var(--danger)")+';"><span>Resultado</span><span>'+brl(d.resultado)+'</span></div>'
+        : '')+
+      '<div style="font-size:11px; color:var(--text-muted); margin-top:8px;">Período: '+escapeHtml(d.periodo.desde)+' a '+escapeHtml(d.periodo.ate)+' (dia operacional). Passe o mouse sobre cada linha para ver a fórmula.</div>'+
+    '</div>'+
+    renderConciliacaoDre();
+}
+// VF-019 — o faturamento do DRE confrontado com os movimentos de origem
+// (entradas de VENDA no caixa). Se a diferença não for zero, algo está
+// fora do lugar e precisa ser investigado antes de confiar no mês.
+function renderConciliacaoDre(){
+  var c = state.relatorioConciliacao;
+  if(!c) return "";
+  var v = c.verificacoes[0];
+  var dv = c.derivados||{};
+  var porForma = dv.recebido_por_forma_centavos||{};
+  return '<div class="card" style="max-width:520px; margin-top:16px; border-left:4px solid '+(v.ok?"var(--success)":"var(--danger)")+';">'+
+    '<div class="card-title">Conciliação do mês '+(v.ok?'· fecha':'· NÃO FECHA')+'</div>'+
+    '<div class="totais-linha"><span>Faturamento (comandas pagas)</span><span>'+brl(v.valor_a_centavos)+'</span></div>'+
+    '<div class="totais-linha"><span>Entradas no caixa dessas comandas</span><span>'+brl(v.valor_b_centavos)+'</span></div>'+
+    '<div class="totais-linha total" style="color:'+(v.ok?"var(--success)":"var(--danger)")+';"><span>Diferença</span><span>'+brl(v.diferenca_centavos)+'</span></div>'+
+    '<div style="font-size:11.5px; color:var(--text-muted); margin-top:10px; line-height:1.5;">'+
+      'Itens '+brl(dv.itens_brutos_centavos||0)+' − desconto manual '+brl(dv.desconto_manual_centavos||0)+' + taxa de serviço '+brl(dv.taxa_servico_centavos||0)+
+      ' − cupom/pontos '+brl(dv.descontos_cupom_e_pontos_centavos||0)+' = faturamento.<br>'+
+      'Recebido por forma: '+Object.keys(porForma).map(function(k){ return escapeHtml(k)+' '+brl(porForma[k]); }).join(' · ')+'.<br>'+
+      'Em comandas ainda abertas (parciais, fora do faturamento até fechar): '+brl(dv.recebido_em_comandas_ainda_abertas_centavos||0)+'.'+
+    '</div>'+
+  '</div>';
 }
 
 // PRIORIDADE 5 — Equipe ganhou 5 sub-abas (mesmo componente da 0.11):

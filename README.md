@@ -1390,6 +1390,42 @@ até então só estavam no repositório, não no banco).
   recria o resto); a conferência dos demais objetos não achou mais nada
   faltando.
 
+### VF-019 (0087) — relatórios financeiros que fecham entre si
+
+Mesmo mês, mesma venda, três "resultados" diferentes: DRE (faturamento −
+CMV − despesas) = −641.894; Central do Dono (… − perdas − equipe) =
+−643.440; Resumo financeiro (… − maquininha) = −643.500. O Resumo ainda
+atribuía a taxa de maquininha pela data UTC do movimento
+(`created_at::date`) e os demais pelo dia operacional; e o relatório de
+gestão somava "total vendido" com o preço atual do cadastro em vez do
+preço do item na venda.
+
+Agora existe **uma só função de indicadores** (`restaurante.indicadores_mes`,
+interna — sem grant para o client) e DRE, Central do Dono e Resumo
+financeiro leem dela: não dá mais para divergirem. **Definições**:
+faturamento = comandas PAGAS por dia operacional (já líquido de desconto e
+**com** taxa de serviço); custo de equipe = taxa de serviço (100%
+repassada) + remuneração; taxa de maquininha = % configurado sobre
+cartão/voucher das comandas pagas do mês; **resultado = faturamento − CMV −
+perdas − despesas − maquininha − equipe**. **[DECISÃO DE DESIGN]** adotei a
+fórmula mais completa (a do Resumo) como oficial — a Central e o DRE
+passam a descontar perdas e maquininha, então o "resultado" mostrado cai um
+pouco em relação ao de antes (esses custos reais ficavam de fora). O DRE
+só mostra custo de equipe e resultado final a quem tem
+`admin.equipe.custos.ver`; os demais veem "resultado antes do custo de
+equipe". Novo `relatorio_conciliacao(mês)`, mostrado na tela do DRE:
+faturamento × entradas de VENDA no caixa das mesmas comandas (tem que dar
+diferença 0), mais derivados (itens − desconto manual + taxa de serviço −
+faturamento = descontos de cupom/pontos, que não ficam gravados
+separadamente; recebido por forma; recebido em comandas ainda abertas).
+Central e Resumo foram alterados por **patch exato** sobre a definição em
+produção (o repositório estava desatualizado nessas duas funções).
+Cenário conferido em produção (desconto + taxa + misto com troco, parcial
+por item, parcial aberta, fiado, perda, despesa, maquininha): os três deram
+**−643.500** e a conciliação fechou com 0. Testes:
+`tests/vf019_render_dre.test.js` (3/3, sem Supabase) e
+`tests/vf019_conciliacao_relatorios.test.js` (precisa de banco).
+
 ### VF-017 (0086) — valor mostrado == valor gravado
 
 O modal já pedia o total ao servidor (`calcular_total_pagamento`), mas

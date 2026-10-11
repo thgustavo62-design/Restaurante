@@ -251,13 +251,18 @@ async function carregarFichaCliente(clienteId){
 async function carregarRelatorioDre(mes){
   state.relatorioDreMes = mes;
   state.relatorioDreCarregando = true; render();
-  var res = await sb.rpc("relatorio_dre", {p_mes: mes+"-01"});
+  var resultados = await Promise.all([
+    sb.rpc("relatorio_dre", {p_mes: mes+"-01"}),
+    sb.rpc("relatorio_conciliacao", {p_mes: mes+"-01"})
+  ]);
+  var res = resultados[0], conc = resultados[1];
   state.relatorioDreCarregando = false;
   if(res.error){
     toast("err","ERRO AO CARREGAR DRE", res.error.message);
-    state.relatorioDreResultado = null; render(); return;
+    state.relatorioDreResultado = null; state.relatorioConciliacao = null; render(); return;
   }
   state.relatorioDreResultado = res.data;
+  state.relatorioConciliacao = conc.error ? null : conc.data; // a conciliação nunca derruba o DRE
   render();
 }
 
